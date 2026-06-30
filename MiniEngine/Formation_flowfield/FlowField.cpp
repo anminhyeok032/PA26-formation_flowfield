@@ -1,4 +1,4 @@
-#include "GameCore.h"
+ï»¿#include "GameCore.h"
 #include "CameraController.h"
 #include "Camera.h"				// view/proj
 #include "BufferManager.h"		// rendertarget/depthbuffer
@@ -37,7 +37,69 @@ private:
     D3D12_VIEWPORT m_MainViewport;
     D3D12_RECT m_MainScissor;
 
-    // ¸ðµ¨ ·ÎµùÀÌ ÇÊ¿äÇØÁö¸é ±×¶§ ModelInstance ¶Ç´Â Á÷Á¢ ¸¸µç ¸Þ½Ã ±¸Á¶Ã¼ Ãß°¡
+    // ëª¨ë¸ ë¡œë”©ì´ í•„ìš”í•´ì§€ë©´ ê·¸ë•Œ ModelInstance ë˜ëŠ” ì§ì ‘ ë§Œë“  ë©”ì‹œ êµ¬ì¡°ì²´ ì¶”ê°€
 };
 
-CREATE_APPLICATION(FlowField)
+CREATE_APPLICATION(FlowField);
+
+namespace CubeRenderer
+{
+    RootSignature s_RootSig;
+    GraphicsPSO s_PSO(L"Cube PSO");
+    StructuredBuffer s_VertexBuffer;
+    ByteAddressBuffer s_IndexBuffer;
+
+    void Initialize()
+    {
+        // TODO: PSO, RootSignature, ë²„í…ìŠ¤/ì¸ë±ìŠ¤ ë²„í¼ ì´ˆê¸°í™”
+    }
+}
+
+void FlowField::Startup(void)
+{
+    m_Camera.SetEyeAtUp(Vector3(0, 5, -10), Vector3(0, 0, 0), Vector3(0, 1, 0));
+    m_Camera.SetPerspectiveMatrix(
+        XM_PIDIV4, 9.0f / 16.0f,
+        1.0f, 1000.0f
+    );
+    m_CameraController.reset(new FlyingFPSCamera(m_Camera, Vector3(kYUnitVector)));
+
+    m_MainViewport.Width = (float)g_SceneColorBuffer.GetWidth();
+    m_MainViewport.Height = (float)g_SceneColorBuffer.GetHeight();
+    m_MainViewport.MinDepth = 0.0f;
+    m_MainViewport.MaxDepth = 1.0f;
+    m_MainViewport.TopLeftX = 0.0f;
+    m_MainViewport.TopLeftY = 0.0f;
+
+    m_MainScissor.left = 0;
+    m_MainScissor.top = 0;
+    m_MainScissor.right = (LONG)g_SceneColorBuffer.GetWidth();
+    m_MainScissor.bottom = (LONG)g_SceneColorBuffer.GetHeight();
+
+    CubeRenderer::Initialize();
+}
+
+void FlowField::Update(float deltaT)
+{
+    m_CameraController->Update(deltaT);
+}
+
+void FlowField::Cleanup(void)
+{
+}
+
+void FlowField::RenderScene(void)
+{
+    GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Render");
+
+    gfxContext.TransitionResource(g_SceneColorBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    gfxContext.ClearColor(g_SceneColorBuffer);
+
+    gfxContext.SetViewportAndScissor(m_MainViewport, m_MainScissor);
+    gfxContext.SetRenderTarget(g_SceneColorBuffer.GetRTV());
+
+    gfxContext.TransitionResource(g_SceneColorBuffer, D3D12_RESOURCE_STATE_PRESENT);
+    gfxContext.Finish();
+}
+
+

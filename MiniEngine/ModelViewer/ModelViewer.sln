@@ -1,13 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 16
-VisualStudioVersion = 16
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37012.4 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ModelViewer", "ModelViewer.vcxproj", "{1813BD6E-E2AF-4A3C-8C54-4E72119DA993}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Core", "..\Core\Core.vcxproj", "{86A58508-0D6A-4786-A32F-01A301FDC6F3}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Model", "..\Model\Model.vcxproj", "{5D3AEEFB-8789-48E5-9BD9-09C667052D09}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Formation_flowfield", "..\Formation_flowfield\Formation_flowfield.vcxproj", "{DD84398C-F9A7-434B-AE66-BBC88B2D319E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -34,6 +36,12 @@ Global
 		{5D3AEEFB-8789-48E5-9BD9-09C667052D09}.Profile|Windows.Build.0 = Profile|x64
 		{5D3AEEFB-8789-48E5-9BD9-09C667052D09}.Release|Windows.ActiveCfg = Release|x64
 		{5D3AEEFB-8789-48E5-9BD9-09C667052D09}.Release|Windows.Build.0 = Release|x64
+		{DD84398C-F9A7-434B-AE66-BBC88B2D319E}.Debug|Windows.ActiveCfg = Debug|x64
+		{DD84398C-F9A7-434B-AE66-BBC88B2D319E}.Debug|Windows.Build.0 = Debug|x64
+		{DD84398C-F9A7-434B-AE66-BBC88B2D319E}.Profile|Windows.ActiveCfg = Release|x64
+		{DD84398C-F9A7-434B-AE66-BBC88B2D319E}.Profile|Windows.Build.0 = Release|x64
+		{DD84398C-F9A7-434B-AE66-BBC88B2D319E}.Release|Windows.ActiveCfg = Release|x64
+		{DD84398C-F9A7-434B-AE66-BBC88B2D319E}.Release|Windows.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
