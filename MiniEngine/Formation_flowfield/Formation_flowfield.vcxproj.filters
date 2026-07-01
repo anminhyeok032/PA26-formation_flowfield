@@ -13,13 +13,22 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Shaders">
+    <Filter Include="Render">
+      <UniqueIdentifier>{7765d3c0-5eea-4c50-a26c-91f312e512ba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Render\Shaders">
       <UniqueIdentifier>{df4a0896-19f6-4b72-911b-ef6b7f6f88b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Simulation">
+      <UniqueIdentifier>{dcee7ef4-fc11-43c7-956f-d06b31d61bd0}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
       <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="VoxelRenderer.cpp">
+      <Filter>Render</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -27,10 +36,21 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="CubeVS.hlsl">
-      <Filter>Shaders</Filter>
+      <Filter>Render\Shaders</Filter>
     </CustomBuild>
     <CustomBuild Include="CubePS.hlsl">
-      <Filter>Shaders</Filter>
+      <Filter>Render\Shaders</Filter>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="VoxelRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="VoxelGrid.h">
+      <Filter>Simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="FlowFieldSolver.h">
+      <Filter>Simulation</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

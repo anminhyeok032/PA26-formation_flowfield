@@ -151,6 +151,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp" />
+    <ClCompile Include="VoxelRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Core\Core.vcxproj">
@@ -219,6 +220,11 @@
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling CubeVS.hlsl</Message>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)CompiledShaders\CubeVS.h;%(Outputs)</Outputs>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="FlowFieldSolver.h" />
+    <ClInclude Include="VoxelGrid.h" />
+    <ClInclude Include="VoxelRenderer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemDefinitionGroup>
