@@ -151,6 +151,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp" />
+    <ClCompile Include="HeightMap.cpp" />
+    <ClCompile Include="VoxelGrid.cpp" />
     <ClCompile Include="VoxelRenderer.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -223,6 +225,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FlowFieldSolver.h" />
+    <ClInclude Include="HeightMap.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClInclude Include="VoxelRenderer.h" />
   </ItemGroup>

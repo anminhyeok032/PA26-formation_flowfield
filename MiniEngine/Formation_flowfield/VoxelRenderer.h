@@ -38,5 +38,7 @@ namespace VoxelRenderer
 
     // 현재 활성 인스턴스 수 조회
     uint32_t GetInstanceCount();
+    void ToggleWireframe();
+    bool IsWireframe();
 }
 

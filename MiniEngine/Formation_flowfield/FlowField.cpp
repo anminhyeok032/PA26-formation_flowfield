@@ -20,6 +20,8 @@
 #include "GraphicsCommon.h"
 
 #include "VoxelRenderer.h"
+#include "VoxelGrid.h"
+#include "HeightMap.h"
 
 
 using namespace GameCore;
@@ -42,6 +44,9 @@ private:
     std::unique_ptr<CameraController> m_CameraController;
     D3D12_VIEWPORT m_MainViewport;
     D3D12_RECT m_MainScissor;
+
+    HeightMap m_HeightMap;
+    VoxelGrid m_VoxelGrid;
 
     // 모델 로딩이 필요해지면 그때 ModelInstance 또는 직접 만든 메시 구조체 추가
 };
@@ -79,23 +84,43 @@ void FlowField::Startup(void)
 
     VoxelRenderer::Initialize();
 
-    // 테스트용 1000x1000 그리드 인스턴스 생성
-    std::vector<VoxelRenderer::InstanceData> instances;
-    for (int x = -500; x < 500; x++)
+    // BMP 로드 → 복셀 생성 → GPU 업로드
+    // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
+    bool loaded = m_HeightMap.LoadFromBMP("Heightmap.bmp",
+        10.0f,  // 최대 높이 (월드 유닛)
+        1.0f);  // 복셀 1개 크기
+
+    if (true == loaded)
     {
-        for (int z = -500; z < 500; z++)
-        {
-            VoxelRenderer::InstanceData inst;
-            inst.position[0] = (float)x * 1.0f;
-            inst.position[1] = 0.0f;
-            inst.position[2] = (float)z * 1.0f;
-            inst.scale = 1.0f;
-            inst.colorType = ((x + z) & 1) == 0 ? 0 : 1;
-            inst.pad[0] = inst.pad[1] = inst.pad[2] = 0;
-            instances.push_back(inst);
-        }
+        m_VoxelGrid.BuildFromHeightMap(m_HeightMap);
+
+        std::vector<VoxelRenderer::InstanceData> instances;
+        m_VoxelGrid.BuildInstanceList(instances);
+        VoxelRenderer::UpdateInstances(instances);
     }
-    VoxelRenderer::UpdateInstances(instances);
+    else
+    {
+        // 테스트용 1000x1000 그리드 인스턴스 생성
+        std::vector<VoxelRenderer::InstanceData> instances;
+        instances.reserve(1000 * 1000);
+        // BMP 로드 실패 시 평면 그리드로 폴백
+        for (int x = -500; x < 500; x++)
+        {
+            for (int z = -500; z < 500; z++)
+            {
+                VoxelRenderer::InstanceData inst;
+                inst.position[0] = (float)x * 1.0f;
+                inst.position[1] = 0.0f;
+                inst.position[2] = (float)z * 1.0f;
+                inst.scale = 1.0f;
+                inst.colorType = ((x + z) & 1) == 0 ? 0 : 1;
+                inst.pad[0] = inst.pad[1] = inst.pad[2] = 0;
+                instances.push_back(inst);
+            }
+        }
+        VoxelRenderer::UpdateInstances(instances);
+    }
+
 }
 
 void FlowField::Cleanup(void) 
@@ -106,6 +131,13 @@ void FlowField::Cleanup(void)
 void FlowField::Update(float dt)
 {
     m_CameraController->Update(dt);
+
+    // F1: 솔리드 ↔ 와이어프레임 토글
+    // IsFirstPressed = 키를 막 누른 순간 한 번만 true
+    if (GameInput::IsFirstPressed(GameInput::kKey_f1))
+    {
+        VoxelRenderer::ToggleWireframe();
+    }
 }
 
 void FlowField::RenderScene(void)

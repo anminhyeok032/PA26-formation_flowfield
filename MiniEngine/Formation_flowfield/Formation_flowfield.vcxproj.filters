@@ -30,6 +30,12 @@
     <ClCompile Include="VoxelRenderer.cpp">
       <Filter>Render</Filter>
     </ClCompile>
+    <ClCompile Include="HeightMap.cpp">
+      <Filter>Simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="VoxelGrid.cpp">
+      <Filter>Simulation</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -50,6 +56,9 @@
       <Filter>Simulation</Filter>
     </ClInclude>
     <ClInclude Include="FlowFieldSolver.h">
+      <Filter>Simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="HeightMap.h">
       <Filter>Simulation</Filter>
     </ClInclude>
   </ItemGroup>
