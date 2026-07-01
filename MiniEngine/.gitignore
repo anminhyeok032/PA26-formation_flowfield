@@ -14,6 +14,6 @@
 * - Copy*.*
 Build_VS*
 Build
-Packages
+Packages/
 /ModelConverter/assimp.dll
 Packages
