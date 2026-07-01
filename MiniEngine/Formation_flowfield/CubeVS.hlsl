@@ -1,9 +1,32 @@
-cbuffer MVPConstants : register(b0)
+struct InstanceData
 {
-    float4x4 ModelViewProj;
+    float3   position;
+    float    scale;
+    uint     colorType;
+    uint3    pad;
 };
 
-float4 main(float3 pos : POSITION) : SV_Position
+cbuffer ViewProjCB : register(b0)
 {
-    return mul(ModelViewProj, float4(pos, 1.0f));
+    float4x4 ViewProj;
+};
+
+StructuredBuffer<InstanceData> g_Instances : register(t0);
+
+struct VSOutput
+{
+    float4 pos       : SV_Position;
+    uint   colorType : COLOR;
+};
+
+VSOutput main(float3 localPos : POSITION, uint instanceID : SV_InstanceID)
+{
+    InstanceData inst = g_Instances[instanceID];
+
+    float3 worldPos = localPos * inst.scale + inst.position;
+
+    VSOutput o;
+    o.pos = mul(float4(worldPos, 1.0f), ViewProj);
+    o.colorType = inst.colorType;
+    return o;
 }
