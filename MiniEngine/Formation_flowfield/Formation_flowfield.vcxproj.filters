@@ -22,6 +22,12 @@
     <Filter Include="Simulation">
       <UniqueIdentifier>{dcee7ef4-fc11-43c7-956f-d06b31d61bd0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="NPC">
+      <UniqueIdentifier>{eb01e8a5-873b-4d1c-9ad3-c2c9c319e569}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NPC\Shaders">
+      <UniqueIdentifier>{eaee7eca-4b04-4e9a-aa00-ce4bd6ef3361}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -36,6 +42,9 @@
     <ClCompile Include="VoxelGrid.cpp">
       <Filter>Simulation</Filter>
     </ClCompile>
+    <ClCompile Include="NPCRenderer.cpp">
+      <Filter>NPC</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -46,6 +55,12 @@
     </CustomBuild>
     <CustomBuild Include="CubePS.hlsl">
       <Filter>Render\Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="NpcPS.hlsl">
+      <Filter>NPC\Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="NpcVS.hlsl">
+      <Filter>NPC\Shaders</Filter>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
@@ -60,6 +75,9 @@
     </ClInclude>
     <ClInclude Include="HeightMap.h">
       <Filter>Simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="NPCRenderer.h">
+      <Filter>NPC</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

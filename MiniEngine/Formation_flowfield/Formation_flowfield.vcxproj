@@ -152,6 +152,7 @@
   <ItemGroup>
     <ClCompile Include="FlowField.cpp" />
     <ClCompile Include="HeightMap.cpp" />
+    <ClCompile Include="NPCRenderer.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
     <ClCompile Include="VoxelRenderer.cpp" />
   </ItemGroup>
@@ -226,8 +227,49 @@
   <ItemGroup>
     <ClInclude Include="FlowFieldSolver.h" />
     <ClInclude Include="HeightMap.h" />
+    <ClInclude Include="NPCRenderer.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClInclude Include="VoxelRenderer.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="NpcPS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcPS.h" /Vn g_pNpcPS "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcPS.h" /Vn g_pNpcPS "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcPS.h" /Vn g_pNpcPS "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcPS.h" /Vn g_pNpcPS "%(FullPath)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\NpcPS.h</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)CompiledShaders\NpcPS.h</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)CompiledShaders\NpcPS.h</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)CompiledShaders\NpcPS.h</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling NpcPS.hlsl</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling NpcPS.hlsl</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling NpcPS.hlsl</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling NpcPS.hlsl</Message>
+    </CustomBuild>
+    <CustomBuild Include="NpcVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcVS.h" /Vn g_pNpcVS "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcVS.h" /Vn g_pNpcVS "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcVS.h" /Vn g_pNpcVS "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\NpcVS.h" /Vn g_pNpcVS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling NpcVS.hlsl</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling NpcVS.hlsl</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling NpcVS.hlsl</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling NpcVS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\NpcVS.h</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)CompiledShaders\NpcVS.h</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)CompiledShaders\NpcVS.h</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)CompiledShaders\NpcVS.h</Outputs>
+    </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemDefinitionGroup>

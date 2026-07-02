@@ -22,6 +22,7 @@
 #include "VoxelRenderer.h"
 #include "VoxelGrid.h"
 #include "HeightMap.h"
+#include "NPCRenderer.h"
 
 
 using namespace GameCore;
@@ -29,9 +30,10 @@ using namespace Math;
 using namespace Graphics;
 using namespace std;
 
-constexpr float CAMERA_SPEED = 2500.0f;
-constexpr float MAX_HEIGHT = 1000.0f;
-constexpr float VOXEL_SIZE = 50.0f;
+constexpr float CAMERA_SPEED = 100.0f;
+constexpr float MAX_HEIGHT = 10.0f;
+constexpr float WORLD_SCALE = 1.0f;
+constexpr float VOXEL_SIZE = 0.5f;
 
 class FlowField : public GameCore::IGameApp
 {
@@ -87,7 +89,8 @@ void FlowField::Startup(void)
     // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
     bool loaded = m_HeightMap.LoadFromBMP("Heightmap02.bmp",
         MAX_HEIGHT,     // 최대 높이 (월드 유닛)
-        VOXEL_SIZE);    // 복셀 1개 크기
+        WORLD_SCALE,    // MapScale
+        VOXEL_SIZE);    // 복셀 1개 크기 -> 복셀 수 = pow( (맵 크기 * MAP_SCALE) / VOXEL_SIZE), 2 )
 
     if (true == loaded)
     {
@@ -126,6 +129,35 @@ void FlowField::Startup(void)
         -90.0f,                         // 아래를 봄
         Vector3(xz_position, MAX_HEIGHT * 2.0f, xz_position)    // 카메라 위치
     );
+
+
+    // 테스트용 NPC 배치
+    std::vector<NPCRenderer::InstanceData> npcInstances;
+    npcInstances.reserve(100);
+
+    // 지형 위에 격자 형태로 100개 배치
+    for (int i = 0; i < 10; i++)
+    {
+        for (int j = 0; j < 10; j++)
+        {
+            int gx = 10 + i * 3;
+            int gz = 10 + j * 3;
+
+            // 지형 표면 Y 위에 올리기
+            float surfY = (float)m_VoxelGrid.GetSurfaceY(gx, gz)
+                * m_HeightMap.GetVoxelSize();
+
+            NPCRenderer::InstanceData inst = {};
+            inst.position[0] = gx * m_HeightMap.GetVoxelSize();
+            inst.position[1] = surfY; // 발 기준이 아닌 중심 기준이면 + scaleY/2 필요
+            inst.position[2] = gz * m_HeightMap.GetVoxelSize();
+            inst.scaleXZ = 0.3f; // 가로 반지름
+            inst.scaleY = 0.8f; // 세로 반지름 (길쭉하게)
+            inst.colorType = 0;
+            npcInstances.push_back(inst);
+        }
+    }
+    NPCRenderer::UpdateInstances(npcInstances);
 }
 
 void FlowField::Cleanup(void) 
@@ -163,6 +195,9 @@ void FlowField::RenderScene(void)
 
     // 큐브 드로우
     VoxelRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
+
+    // NPC 드로우
+    NPCRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
 
     // Present 전이
     ctx.TransitionResource(g_SceneColorBuffer, D3D12_RESOURCE_STATE_PRESENT);

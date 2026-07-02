@@ -28,10 +28,14 @@ void VoxelGrid::BuildFromHeightMap(const HeightMap& hm)
 void VoxelGrid::BuildCells(const HeightMap& hm)
 {
     m_Cells.clear();
+    m_CellSize = hm.GetVoxelSize(); // 복셀 크기
 
-    m_SizeX = hm.GetWidth();
-    m_SizeZ = hm.GetDepth();
-    m_CellSize = hm.GetCellSize();
+    // 복셀 수를 맵 크기 / 복셀 크기로 결정
+    float worldW = hm.GetWorldWidth();  // = 픽셀수 × worldScale
+    float worldD = hm.GetWorldDepth();
+
+    m_SizeX = (int)(worldW / m_CellSize); // 복셀 수 = 맵크기 / 복셀크기
+    m_SizeZ = (int)(worldD / m_CellSize);
     m_SizeY = (int)(hm.GetMaxHeight() / m_CellSize) + 1;
 
     // 3D 그리드 전체 Empty로 초기화
@@ -43,7 +47,11 @@ void VoxelGrid::BuildCells(const HeightMap& hm)
     {
         for (int x = 0; x < m_SizeX; x++)
         {
-            float worldH = hm.GetHeight(x, z);
+            // 이 복셀의 월드 중심 좌표
+            float wx = (x + 0.5f) * m_CellSize;
+            float wz = (z + 0.5f) * m_CellSize;
+
+            float worldH = hm.SampleHeight(wx, wz);
             int   surfY = (int)(worldH / m_CellSize);
             surfY = std::max(0, std::min(surfY, m_SizeY - 1));
 
@@ -132,57 +140,62 @@ void VoxelGrid::ValidateWalkable()
         // 표면 복셀 walkable 판정 조건들
         bool walkable = true;
 
-        // 조건 1 — 이웃 4방향 표면 복셀과 높이차 검사
-        // 패스 1이 끝난 뒤라 GetSurfaceY로 정확한 이웃 높이를 알 수 있음
-        const int dx[] = { 1, -1, 0,  0 };
-        const int dz[] = { 0,  0, 1, -1 };
+        /*
+        // TODO : 해당 walkable 검증 조건들은 아직 필요가 없음
+        //        조건 1은 필요시 활성화
 
-        for (int d = 0; d < 4; d++)
-        {
-            int nx = cell.x + dx[d];
-            int nz = cell.z + dz[d];
+        //// 조건 1 — 이웃 4방향 표면 복셀과 높이차 검사
+        //// 패스 1이 끝난 뒤라 GetSurfaceY로 정확한 이웃 높이를 알 수 있음
+        //const int dx[] = { 1, -1, 0,  0 };
+        //const int dz[] = { 0,  0, 1, -1 };
 
-            // 맵 경계 밖은 Blocked
-            if (nx < 0 || nx >= m_SizeX || nz < 0 || nz >= m_SizeZ)
-            {
-                walkable = false;
-                break;
-            }
+        //for (int d = 0; d < 4; d++)
+        //{
+        //    int nx = cell.x + dx[d];
+        //    int nz = cell.z + dz[d];
 
-            int neighborSurfaceY = GetSurfaceY(nx, nz);
-            int heightDiff = std::abs(cell.y - neighborSurfaceY);
+        //    // 맵 경계 밖은 Blocked
+        //    if (nx < 0 || nx >= m_SizeX || nz < 0 || nz >= m_SizeZ)
+        //    {
+        //        walkable = false;
+        //        break;
+        //    }
 
-            // 이웃과 높이차가 복셀 2개 이상이면 경사가 너무 가파름
-            if (heightDiff > 2)
-            {
-                walkable = false;
-                break;
-            }
-        }
+        //    int neighborSurfaceY = GetSurfaceY(nx, nz);
+        //    int heightDiff = std::abs(cell.y - neighborSurfaceY);
 
-        // 조건 2 — 머리 위 공간 확인 (NPC 키 높이만큼 비어있어야 함)
-        // 지금은 2칸만 확인, 나중에 NPC 키에 따라 조절 가능
-        if (true == walkable)
-        {
-            int headY = cell.y + 2;
-            if (headY < m_SizeY)
-            {
-                // 머리 위에 복셀이 있으면 이동 불가 (천장)
-                if (m_Grid[Index(cell.x, headY, cell.z)] == CellType::Blocked)
-                {
-                    // 단, 이 경우는 내부 채우기로 생긴 Blocked인지
-                    // 진짜 지형 복셀인지 구분이 필요함
-                    // GetSurfaceY보다 높은 y의 Blocked는 진짜 지형
-                    int surfY = GetSurfaceY(cell.x, cell.z);
-                    if (headY <= surfY)
-                    {
-                        walkable = false;
-                    }
-                }
-            }
-        }
+        //    // 이웃과 높이차가 복셀 2개 이상이면 경사가 너무 가파름
+        //    if (heightDiff >= 2)
+        //    {
+        //        walkable = false;
+        //        break;
+        //    }
+        //}
+
+        //// 조건 2 — 머리 위 공간 확인 (NPC 키 높이만큼 비어있어야 함)
+        //// 지금은 2칸만 확인, 나중에 NPC 키에 따라 조절 가능
+        //if (true == walkable)
+        //{
+        //    int headY = cell.y + 2;
+        //    if (headY < m_SizeY)
+        //    {
+        //        // 머리 위에 복셀이 있으면 이동 불가 (천장)
+        //        if (m_Grid[Index(cell.x, headY, cell.z)] == CellType::Blocked)
+        //        {
+        //            // 단, 이 경우는 내부 채우기로 생긴 Blocked인지
+        //            // 진짜 지형 복셀인지 구분이 필요함
+        //            // GetSurfaceY보다 높은 y의 Blocked는 진짜 지형
+        //            int surfY = GetSurfaceY(cell.x, cell.z);
+        //            if (headY <= surfY)
+        //            {
+        //                walkable = false;
+        //            }
+        //        }
+        //    }
+        //}
 
         // 조건 3 — TODO : 장애물 마킹 (동적 변경 시)
+        */
 
         cell.type = walkable ? CellType::Walkable : CellType::Blocked;
 
@@ -205,13 +218,8 @@ int VoxelGrid::GetSurfaceY(int x, int z) const
     // 위에서 아래로 내려오면서 처음으로 채워진 복셀 찾기
     for (int y = m_SizeY - 1; y >= 0; y--)
     {
-        if (m_Grid[Index(x, y, z)] != CellType::Blocked)
-        {
-            continue;
-        }
-        // 이 x,z에 복셀이 하나라도 있으면
-        // BuildCells에서 y=0~voxelY까지 채웠으니
-        // 가장 위가 표면
+        // Empty만 스킵 — Walkable이든 Blocked든 "채워진 것"으로 취급
+        if (m_Grid[Index(x, y, z)] == CellType::Empty)  continue;
         return y;
     }
     return 0;
