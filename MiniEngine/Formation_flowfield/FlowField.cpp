@@ -84,6 +84,7 @@ void FlowField::Startup(void)
     m_MainScissor.bottom = (LONG)g_SceneColorBuffer.GetHeight();
 
     VoxelRenderer::Initialize();
+    NPCRenderer::Initialize();
 
     // BMP 로드 → 복셀 생성 → GPU 업로드
     // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
@@ -148,11 +149,11 @@ void FlowField::Startup(void)
                 * m_HeightMap.GetVoxelSize();
 
             NPCRenderer::InstanceData inst = {};
+            inst.scaleXZ = 0.3f;
+            inst.scaleY  = 0.8f;
             inst.position[0] = gx * m_HeightMap.GetVoxelSize();
-            inst.position[1] = surfY; // 발 기준이 아닌 중심 기준이면 + scaleY/2 필요
+            inst.position[1] = surfY + m_HeightMap.GetVoxelSize() + inst.scaleY;
             inst.position[2] = gz * m_HeightMap.GetVoxelSize();
-            inst.scaleXZ = 0.3f; // 가로 반지름
-            inst.scaleY = 0.8f; // 세로 반지름 (길쭉하게)
             inst.colorType = 0;
             npcInstances.push_back(inst);
         }
@@ -160,9 +161,10 @@ void FlowField::Startup(void)
     NPCRenderer::UpdateInstances(npcInstances);
 }
 
-void FlowField::Cleanup(void) 
+void FlowField::Cleanup(void)
 {
     VoxelRenderer::Shutdown();
+    NPCRenderer::Shutdown();
 }
 
 void FlowField::Update(float dt)
