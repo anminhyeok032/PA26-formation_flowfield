@@ -56,6 +56,9 @@ public:
 
     void SetHeadingPitchAndPosition(float heading, float pitch, const Vector3& position);
 
+    void SetMoveSpeed(float speed) { m_MoveSpeed = speed; }
+    void SetStrafeSpeed(float speed) { m_StrafeSpeed = speed; }
+
 private:
 
     Vector3 m_WorldUp;

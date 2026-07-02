@@ -45,7 +45,7 @@ namespace VoxelRenderer
     static ByteAddressBuffer s_VertexBuffer;
     static ByteAddressBuffer s_IndexBuffer;
     static StructuredBuffer  s_InstanceBuffer;
-    static bool              s_IsWireframe = false;               // F1키 누르면 중첩 렌더
+    static bool              s_IsWireframe = false;                     // F1키 누르면 중첩 렌더
 
     // CPU 사이드 인스턴스 목록
     static uint32_t s_InstanceCount = 0;
@@ -79,10 +79,10 @@ namespace VoxelRenderer
         // 래스터라이저 ① 솔리드 (기본 큐브 표시)
         // -------------------------------------------------
         D3D12_RASTERIZER_DESC solid = {};
-        solid.FillMode = D3D12_FILL_MODE_SOLID;   // 면 채우기
-        solid.CullMode = D3D12_CULL_MODE_BACK;    // 뒷면 제거
+        solid.FillMode = D3D12_FILL_MODE_SOLID;             // 면 채우기
+        solid.CullMode = D3D12_CULL_MODE_BACK;              // 뒷면 제거
         solid.FrontCounterClockwise = FALSE;
-        solid.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;      // 0 — bias 없음
+        solid.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;         // 0 — bias 없음
         solid.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
         solid.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
         solid.DepthClipEnable = TRUE;
@@ -96,10 +96,10 @@ namespace VoxelRenderer
         // solid를 복사한 뒤 다른 부분만 덮어씀
         // -------------------------------------------------
         D3D12_RASTERIZER_DESC wireframe = solid;
-        wireframe.FillMode = D3D12_FILL_MODE_WIREFRAME; // 선만
-        wireframe.CullMode = D3D12_CULL_MODE_NONE;      // 양면 (뒷면 모서리도 표시)
-        wireframe.DepthBias = -1;      // 솔리드 위로 살짝 당겨서 z-fighting 방지
-        wireframe.SlopeScaledDepthBias = -0.5f;  // 경사면 추가 보정
+        wireframe.FillMode = D3D12_FILL_MODE_WIREFRAME;     // 선만
+        wireframe.CullMode = D3D12_CULL_MODE_FRONT;         // 양면 (뒷면 모서리도 표시)
+        wireframe.DepthBias = -1;                           // 솔리드 위로 살짝 당겨서 z-fighting 방지
+        wireframe.SlopeScaledDepthBias = -0.5f;             // 경사면 추가 보정
         wireframe.DepthBiasClamp = 0.0f;
 
         // -------------------------------------------------
@@ -117,12 +117,12 @@ namespace VoxelRenderer
         s_SolidPSO.SetRenderTargetFormats(1, &colorFmt, depthFmt);
         s_SolidPSO.SetVertexShader(g_pCubeVS, sizeof(g_pCubeVS));
         s_SolidPSO.SetPixelShader(g_pCubePS, sizeof(g_pCubePS));
-        s_SolidPSO.Finalize();  // ← 솔리드 GPU 등록
+        s_SolidPSO.Finalize();                              // 솔리드 GPU 등록
 
         // 와이어프레임 PSO — 솔리드를 복사한 뒤 래스터라이저만 교체
         s_WireframePSO = s_SolidPSO;                        // 모든 설정 복사
         s_WireframePSO.SetRasterizerState(wireframe);       // 래스터라이저만 덮어씀
-        s_WireframePSO.Finalize();                          // ← 와이어프레임 GPU 등록
+        s_WireframePSO.Finalize();                          // 와이어프레임 GPU 등록
 
         // -------------------------------------------------
         // 큐브 메시 버퍼 — 인스턴싱에서도 메시는 하나
@@ -209,7 +209,7 @@ namespace VoxelRenderer
         // 단 1번의 드로우콜로 s_InstanceCount개 전부 그리기 (gpu 인스턴싱)
         // 1 - 솔리드 패스
         uint32_t isWire = 0;
-        ctx.SetConstantArray(2, 1, &isWire);  // 슬롯2, 1개, 값=0
+        ctx.SetConstantArray(2, 1, &isWire);                // 슬롯2, 1개, 값=0
         ctx.SetPipelineState(s_SolidPSO);
         ctx.DrawIndexedInstanced(36, s_InstanceCount, 0, 0, 0);
 
@@ -217,7 +217,7 @@ namespace VoxelRenderer
         if (true == s_IsWireframe)
         {
             isWire = 1;
-            ctx.SetConstantArray(2, 1, &isWire);  // 슬롯2, 1개, 값=1
+            ctx.SetConstantArray(2, 1, &isWire);            // 슬롯2, 1개, 값=1
             ctx.SetPipelineState(s_WireframePSO);
             ctx.DrawIndexedInstanced(36, s_InstanceCount, 0, 0, 0);
         }

@@ -29,7 +29,9 @@ using namespace Math;
 using namespace Graphics;
 using namespace std;
 
-
+constexpr float CAMERA_SPEED = 2500.0f;
+constexpr float MAX_HEIGHT = 1000.0f;
+constexpr float VOXEL_SIZE = 50.0f;
 
 class FlowField : public GameCore::IGameApp
 {
@@ -55,19 +57,16 @@ CREATE_APPLICATION(FlowField);
 
 void FlowField::Startup(void)
 {
-    m_Camera.SetZRange(1.0f, 10000.0f); // 1-10000까지만 그려짐
+    m_Camera.SetZRange(1.0f, 20000.0f); // 1-10000까지만 그려짐
 
     m_CameraController.reset(
         new FlyingFPSCamera(m_Camera, Vector3(kYUnitVector)));
 
     auto* fpsCam = static_cast<FlyingFPSCamera*>(m_CameraController.get());
-    fpsCam->SetHeadingPitchAndPosition(
-        XM_PI,                         // 180도 — +Z 방향(큐브 있는 곳)을 바라봄
-        -1.0f,                         // 약간 아래를 봄
-        Vector3(0.0f, 100.0f, 0.0f)    // 카메라 위치
-    );
+    
     // 카메라 속도 조정
-    fpsCam->SlowMovement(true);
+    fpsCam->SetMoveSpeed(CAMERA_SPEED);
+    fpsCam->SetStrafeSpeed(CAMERA_SPEED);
 
     // 뷰포트 / 시저
     m_MainViewport.TopLeftX = 0;
@@ -86,9 +85,9 @@ void FlowField::Startup(void)
 
     // BMP 로드 → 복셀 생성 → GPU 업로드
     // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
-    bool loaded = m_HeightMap.LoadFromBMP("Heightmap.bmp",
-        10.0f,  // 최대 높이 (월드 유닛)
-        1.0f);  // 복셀 1개 크기
+    bool loaded = m_HeightMap.LoadFromBMP("Heightmap02.bmp",
+        MAX_HEIGHT,     // 최대 높이 (월드 유닛)
+        VOXEL_SIZE);    // 복셀 1개 크기
 
     if (true == loaded)
     {
@@ -100,7 +99,7 @@ void FlowField::Startup(void)
     }
     else
     {
-        // 테스트용 1000x1000 그리드 인스턴스 생성
+        // 임시용 1000x1000 그리드 인스턴스 생성
         std::vector<VoxelRenderer::InstanceData> instances;
         instances.reserve(1000 * 1000);
         // BMP 로드 실패 시 평면 그리드로 폴백
@@ -121,6 +120,12 @@ void FlowField::Startup(void)
         VoxelRenderer::UpdateInstances(instances);
     }
 
+    float xz_position = m_HeightMap.GetWidth() * VOXEL_SIZE / 2;
+    fpsCam->SetHeadingPitchAndPosition(
+        XM_PI,                          // 180도 — +Z 방향(큐브 있는 곳)을 바라봄
+        -90.0f,                         // 아래를 봄
+        Vector3(xz_position, MAX_HEIGHT * 2.0f, xz_position)    // 카메라 위치
+    );
 }
 
 void FlowField::Cleanup(void) 

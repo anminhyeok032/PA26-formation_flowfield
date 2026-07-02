@@ -22,7 +22,7 @@ namespace VoxelRenderer
     static_assert(sizeof(InstanceData) % 16 == 0, "InstanceData must be 16-byte aligned");
 
     // GPU 버퍼 최대 예약 크기 (복셀 시각화를 위한 큐브 개수)
-    static const uint32_t MAX_INSTANCES = 100000;
+    static const uint32_t MAX_INSTANCES = 10'0000;
 
     // 초기화 / 종료
     void Initialize();
