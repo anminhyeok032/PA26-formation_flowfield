@@ -25,4 +25,6 @@ namespace NPCRenderer
     void Shutdown();
     void UpdateInstances(const std::vector<InstanceData>& instances);
     void Render(GraphicsContext& ctx, const Math::Matrix4& viewProj);
+    void ToggleWireframe();
+    bool IsWireframe();
 }

@@ -35,6 +35,9 @@ constexpr float MAX_HEIGHT = 10.0f;
 constexpr float WORLD_SCALE = 1.0f;
 constexpr float VOXEL_SIZE = 0.5f;
 
+constexpr float NPC_HEIGHT = (VOXEL_SIZE * 3.0f) / 2.0f;
+constexpr float NPC_WIDTH = VOXEL_SIZE / 2.0f;
+
 class FlowField : public GameCore::IGameApp
 {
 public:
@@ -145,14 +148,13 @@ void FlowField::Startup(void)
             int gz = 10 + j * 3;
 
             // 지형 표면 Y 위에 올리기
-            float surfY = (float)m_VoxelGrid.GetSurfaceY(gx, gz)
-                * m_HeightMap.GetVoxelSize();
+            float surfY = (float)m_VoxelGrid.GetSurfaceY(gx, gz) * m_HeightMap.GetVoxelSize();
 
             NPCRenderer::InstanceData inst = {};
-            inst.scaleXZ = 0.3f;
-            inst.scaleY  = 0.8f;
+            inst.scaleXZ = NPC_WIDTH;
+            inst.scaleY  = NPC_HEIGHT;
             inst.position[0] = gx * m_HeightMap.GetVoxelSize();
-            inst.position[1] = surfY + m_HeightMap.GetVoxelSize() + inst.scaleY;
+            inst.position[1] = surfY + (m_HeightMap.GetVoxelSize() / 2.0f) + inst.scaleY + 0.1f;
             inst.position[2] = gz * m_HeightMap.GetVoxelSize();
             inst.colorType = 0;
             npcInstances.push_back(inst);
@@ -176,6 +178,7 @@ void FlowField::Update(float dt)
     if (GameInput::IsFirstPressed(GameInput::kKey_f1))
     {
         VoxelRenderer::ToggleWireframe();
+        NPCRenderer::ToggleWireframe();
     }
 }
 
