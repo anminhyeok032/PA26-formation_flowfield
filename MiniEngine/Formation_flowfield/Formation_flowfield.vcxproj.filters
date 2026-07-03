@@ -9,10 +9,6 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="리소스 파일">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
     <Filter Include="Render">
       <UniqueIdentifier>{7765d3c0-5eea-4c50-a26c-91f312e512ba}</UniqueIdentifier>
     </Filter>
@@ -28,6 +24,13 @@
     <Filter Include="NPC\Shaders">
       <UniqueIdentifier>{eaee7eca-4b04-4e9a-aa00-ce4bd6ef3361}</UniqueIdentifier>
     </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Simulation\Voxel">
+      <UniqueIdentifier>{f9429f92-90a9-4ada-ab31-881012298d51}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -39,11 +42,11 @@
     <ClCompile Include="HeightMap.cpp">
       <Filter>Simulation</Filter>
     </ClCompile>
-    <ClCompile Include="VoxelGrid.cpp">
-      <Filter>Simulation</Filter>
-    </ClCompile>
     <ClCompile Include="NPCRenderer.cpp">
       <Filter>NPC</Filter>
+    </ClCompile>
+    <ClCompile Include="VoxelGrid.cpp">
+      <Filter>Simulation\Voxel</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -67,9 +70,6 @@
     <ClInclude Include="VoxelRenderer.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="VoxelGrid.h">
-      <Filter>Simulation</Filter>
-    </ClInclude>
     <ClInclude Include="FlowFieldSolver.h">
       <Filter>Simulation</Filter>
     </ClInclude>
@@ -78,6 +78,9 @@
     </ClInclude>
     <ClInclude Include="NPCRenderer.h">
       <Filter>NPC</Filter>
+    </ClInclude>
+    <ClInclude Include="VoxelGrid.h">
+      <Filter>Simulation\Voxel</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

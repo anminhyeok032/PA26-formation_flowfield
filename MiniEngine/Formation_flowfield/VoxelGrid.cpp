@@ -9,14 +9,29 @@ void VoxelGrid::Initialize(int sizeX, int sizeY, int sizeZ, float cellSize)
     m_SizeY = sizeY;
     m_SizeZ = sizeZ;
     m_CellSize = cellSize;
-    m_Grid.assign(sizeX * sizeY * sizeZ, CellType::Walkable);
+
+    AllocateChunks();  // 청크 배열 할당 (전부 Empty 상태)
+
+    // 전체를 Walkable로 채움
+    for (int z = 0; z < m_SizeZ; z++)
+    {
+        for (int y = 0; y < m_SizeY; y++)
+        {
+            for (int x = 0; x < m_SizeX; x++)
+            {
+                SetCell(x, y, z, CellType::Walkable);
+            }
+        }
+    }
+
     m_Cells.clear();
 }
 
 void VoxelGrid::Shutdown()
 {
     m_Cells.clear();
-    m_Grid.clear();
+    m_Chunks.clear();
+    m_ChunkCountX = m_ChunkCountY = m_ChunkCountZ = 0;  // 청크 카운트도 리셋
 }
 
 void VoxelGrid::BuildFromHeightMap(const HeightMap& hm)
@@ -38,8 +53,8 @@ void VoxelGrid::BuildCells(const HeightMap& hm)
     m_SizeZ = (int)(worldD / m_CellSize);
     m_SizeY = (int)(hm.GetMaxHeight() / m_CellSize) + 1;
 
-    // 3D 그리드 전체 Empty로 초기화
-    m_Grid.assign(m_SizeX * m_SizeY * m_SizeZ, CellType::Empty);
+    // 청크 배열 할당 (전체 Empty로 초기화됨)
+    AllocateChunks();
 
     // 1단계: 높이맵 읽어서 3D 그리드에 채워진 공간 마킹
     //        m_Grid만 채움 (m_Cells는 아직 안 넣음)
@@ -51,14 +66,16 @@ void VoxelGrid::BuildCells(const HeightMap& hm)
             float wx = (x + 0.5f) * m_CellSize;
             float wz = (z + 0.5f) * m_CellSize;
 
+            
             float worldH = hm.SampleHeight(wx, wz);
+            //float worldH = hm.GetHeight(wx, wz);
             int   surfY = (int)(worldH / m_CellSize);
             surfY = std::max(0, std::min(surfY, m_SizeY - 1));
 
             // y=0 ~ surfY 공간을 Blocked로 마킹 (패스 2에서 Walkable로 바뀔 수 있음)
             for (int y = 0; y <= surfY; y++)
             {
-                m_Grid[Index(x, y, z)] = CellType::Blocked;
+                SetCell(x, y, z, CellType::Blocked);  // 배열 직접 대입 대신 SetCell
             }
         }
     }
@@ -180,7 +197,7 @@ void VoxelGrid::ValidateWalkable()
         //    if (headY < m_SizeY)
         //    {
         //        // 머리 위에 복셀이 있으면 이동 불가 (천장)
-        //        if (m_Grid[Index(cell.x, headY, cell.z)] == CellType::Blocked)
+        //        if (GetCell(cell.x, headY, cell.z) == CellType::Blocked)
         //        {
         //            // 단, 이 경우는 내부 채우기로 생긴 Blocked인지
         //            // 진짜 지형 복셀인지 구분이 필요함
@@ -199,8 +216,8 @@ void VoxelGrid::ValidateWalkable()
 
         cell.type = walkable ? CellType::Walkable : CellType::Blocked;
 
-        // 3D 그리드에도 반영 (FlowField 계산 시 빠른 접근용)
-        m_Grid[Index(cell.x, cell.y, cell.z)] = cell.type;
+        // 청크에도 반영 (FlowField 계산 시 빠른 접근용)
+        SetCell(cell.x, cell.y, cell.z, cell.type);
     }
 
 }
@@ -210,7 +227,7 @@ bool VoxelGrid::IsSurface(int x, int y, int z) const
     // 위쪽이 Empty이면 표면
     int above = y + 1;
     if (above >= m_SizeY) return true;
-    return m_Grid[Index(x, above, z)] == CellType::Empty;
+    return GetCell(x, above, z) == CellType::Empty;
 }
 
 int VoxelGrid::GetSurfaceY(int x, int z) const
@@ -219,10 +236,36 @@ int VoxelGrid::GetSurfaceY(int x, int z) const
     for (int y = m_SizeY - 1; y >= 0; y--)
     {
         // Empty만 스킵 — Walkable이든 Blocked든 "채워진 것"으로 취급
-        if (m_Grid[Index(x, y, z)] == CellType::Empty)  continue;
+        if (GetCell(x, y, z) == CellType::Empty)  continue;
         return y;
     }
     return 0;
+}
+
+void VoxelGrid::AllocateChunks()
+{
+    // 올림 나눗셈으로 각 축에 필요한 청크 개수 계산
+    // 예: m_SizeX=20 → (20+15)/16 = 2개 청크 (0~15, 16~31 중 16~19만 사용)
+    m_ChunkCountX = (m_SizeX + VoxelChunk::CHUNK_SIZE - 1) / VoxelChunk::CHUNK_SIZE;
+    m_ChunkCountY = (m_SizeY + VoxelChunk::CHUNK_SIZE - 1) / VoxelChunk::CHUNK_SIZE;
+    m_ChunkCountZ = (m_SizeZ + VoxelChunk::CHUNK_SIZE - 1) / VoxelChunk::CHUNK_SIZE;
+
+    size_t totalChunks = (size_t)m_ChunkCountX * m_ChunkCountY * m_ChunkCountZ;
+
+    // VoxelChunk 기본 생성자가 이미 Empty로 채우므로 별도 fill 불필요
+    m_Chunks.clear();
+    m_Chunks.resize(totalChunks);
+}
+
+void VoxelGrid::ToChunkCoord(int x, int y, int z, int& chunkIndex, int& lx, int& ly, int& lz) const
+{
+    int cx = x / VoxelChunk::CHUNK_SIZE;
+    int cy = y / VoxelChunk::CHUNK_SIZE;
+    int cz = z / VoxelChunk::CHUNK_SIZE;
+    lx = x % VoxelChunk::CHUNK_SIZE;
+    ly = y % VoxelChunk::CHUNK_SIZE;
+    lz = z % VoxelChunk::CHUNK_SIZE;
+    chunkIndex = cx + m_ChunkCountX * (cz + m_ChunkCountZ * cy);
 }
 
 void VoxelGrid::BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outInstances) const
@@ -253,7 +296,10 @@ void VoxelGrid::SetCell(int x, int y, int z, CellType type)
     if (x < 0 || x >= m_SizeX) return;
     if (y < 0 || y >= m_SizeY) return;
     if (z < 0 || z >= m_SizeZ) return;
-    m_Grid[Index(x, y, z)] = type;
+
+    int chunkIdx, lx, ly, lz;
+    ToChunkCoord(x, y, z, chunkIdx, lx, ly, lz);
+    m_Chunks[chunkIdx].Set(lx, ly, lz, type);
 }
 
 VoxelGrid::CellType VoxelGrid::GetCell(int x, int y, int z) const
@@ -261,7 +307,10 @@ VoxelGrid::CellType VoxelGrid::GetCell(int x, int y, int z) const
     if (x < 0 || x >= m_SizeX) return CellType::Blocked;
     if (y < 0 || y >= m_SizeY) return CellType::Blocked;
     if (z < 0 || z >= m_SizeZ) return CellType::Blocked;
-    return m_Grid[Index(x, y, z)];
+
+    int chunkIdx, lx, ly, lz;
+    ToChunkCoord(x, y, z, chunkIdx, lx, ly, lz);
+    return m_Chunks[chunkIdx].Get(lx, ly, lz);
 }
 
 bool VoxelGrid::IsWalkable(int x, int y, int z) const

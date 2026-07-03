@@ -83,7 +83,7 @@ float HeightMap::GetHeight(int x, int z) const
     return m_Heights[Index(x, z)];
 }
 
-// 월드 좌표 → 바이리니어 보간으로 높이 샘플링
+// 월드 좌표 → Bilinear Interpolation 으로 높이 샘플링
 float HeightMap::SampleHeight(float worldX, float worldZ) const
 {
     // 월드 좌표 → 픽셀 좌표 (실수)
