@@ -6,6 +6,8 @@
 
 class HeightMap;
 
+using VoxelSourceFn = std::function<bool(int x, int y, int z)>;
+
 // 해당 노드가 walkable인지 판별할때, 이웃간의 cache locality 향상
 // 이웃을 봐도 최대 거리가 256바이트이므로 캐시라인 4번이면 처음부터 끝까지 접근 가능
 class VoxelChunk
@@ -57,12 +59,19 @@ public:
     void BuildFromHeightMap(const HeightMap& hm);
     // 패스 1 — 높이값만 읽어서 복셀 배치
     void BuildCells(const HeightMap& hm);
+
+    // xz당 표면 1개 가정을 없앤 build
+    void BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, int sizeY, int sizeZ, float cellSize);
+
     // 패스 2 — 배치 완료 후 표면 복셀 walkable 재판정
     void ValidateWalkable();
     // 표면 복셀인지 확인 (위쪽이 비어있는 복셀)
     bool IsSurface(int x, int y, int z) const;
     // x,z 위치의 표면 y값 반환
     int  GetSurfaceY(int x, int z) const;
+
+    // 동굴이 있으면 2개 이상, 없으면 GetSurfaceY와 동일한 값 1개만 담긴 리스트가 됨.
+    std::vector<int> GetSurfaceYList(int x, int z) const;
 
 private:
     // 표면 복셀 하나만 저장 (위치 + 타입)
@@ -86,6 +95,7 @@ private:
     int   m_SizeZ = 0;
     float m_CellSize = 1.0f;
 
+    // 청크 배열 리사이즈 + 초기화 (m_SizeX/Y/Z, m_ChunkCount* 설정 후 호출)
     void AllocateChunks();
 
     void ToChunkCoord(int x, int y, int z, int& chunkIndex, int& lx, int& ly, int& lz) const;

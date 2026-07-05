@@ -40,6 +40,85 @@ void VoxelGrid::BuildFromHeightMap(const HeightMap& hm)
     ValidateWalkable();
 }
 
+void VoxelGrid::BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, int sizeY, int sizeZ, float cellSize)
+{
+    // 동굴/다층 지형 등 임의의 3D 소스를 위한 일반화된 빌드 경로.
+    // BuildCells(HeightMap)와 달리 "표면은 컬럼당 하나"라는 가정이 없음
+    // isSolid(x,y,z)가 y축으로 여러 번 열리고 닫혀도(동굴) 그대로 반영됨.
+
+    m_Cells.clear();
+    m_SizeX = sizeX;
+    m_SizeY = sizeY;
+    m_SizeZ = sizeZ;
+    m_CellSize = cellSize;
+
+    AllocateChunks();
+
+    // 1단계: 소스 콜백으로 3D 그리드 채우기 (청크만 채움, m_Cells는 아직 안 넣음)
+    for (int z = 0; z < m_SizeZ; z++)
+    {
+        for (int y = 0; y < m_SizeY; y++)
+        {
+            for (int x = 0; x < m_SizeX; x++)
+            {
+                SetCell(x, y, z, isSolid(x, y, z) ? CellType::Blocked : CellType::Empty);
+            }
+        }
+    }
+
+    // 2단계: 렌더링할 복셀만 m_Cells에 추가
+    //        조건: 표면(IsSurface) OR 바닥(y=0) OR 6면 중 어느 한 면이라도 이웃이 Empty(노출)
+    //        기존 BuildCells는 "컬럼의 최상단 surfY"만 표면으로 취급했지만,
+    //        여기서는 셀 단위 IsSurface + 6방향 이웃 노출 검사로 일반화함
+    //        (동굴 천장/바닥처럼 컬럼 중간에 있는 표면도 놓치지 않기 위함)
+    const int dx[] = { 1, -1, 0, 0, 0, 0 };
+    const int dy[] = { 0, 0, 1, -1, 0, 0 };
+    const int dz[] = { 0, 0, 0, 0, 1, -1 };
+
+    for (int z = 0; z < m_SizeZ; z++)
+    {
+        for (int y = 0; y < m_SizeY; y++)
+        {
+            for (int x = 0; x < m_SizeX; x++)
+            {
+                if (GetCell(x, y, z) == CellType::Empty) continue; // 빈 공간은 렌더 대상 아님
+
+                bool isBottom = (y == 0);
+                bool isWallX = (x == 0 || x == m_SizeX - 1);
+                bool isWallZ = (z == 0 || z == m_SizeZ - 1);
+
+                // 6방향 중 하나라도 Empty(또는 맵 밖)면 공기에 노출된 면이 있는 것
+                bool isExposed = isBottom || isWallX || isWallZ;
+                if (!isExposed)
+                {
+                    for (int d = 0; d < 6; d++)
+                    {
+                        int nx = x + dx[d];
+                        int ny = y + dy[d];
+                        int nz = z + dz[d];
+                        if (nx < 0 || nx >= m_SizeX || ny < 0 || ny >= m_SizeY || nz < 0 || nz >= m_SizeZ)
+                            continue;
+                        if (GetCell(nx, ny, nz) == CellType::Empty)
+                        {
+                            isExposed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!isExposed) continue; // 완전히 파묻힌 내부 복셀은 렌더 스킵
+
+                VoxelCell cell;
+                cell.x = x;
+                cell.y = y;
+                cell.z = z;
+                cell.type = CellType::Blocked; // ValidateWalkable에서 덮어씀
+                m_Cells.push_back(cell);
+            }
+        }
+    }
+}
+
 void VoxelGrid::BuildCells(const HeightMap& hm)
 {
     m_Cells.clear();
@@ -240,6 +319,37 @@ int VoxelGrid::GetSurfaceY(int x, int z) const
         return y;
     }
     return 0;
+}
+
+std::vector<int> VoxelGrid::GetSurfaceYList(int x, int z) const
+{
+    // (x,z) 컬럼을 아래(y=0)에서 위로 훑으면서
+    // "Solid(채워짐) 다음에 Empty가 나오는" 경계를 전부 표면으로 기록.
+    // 단층 지형이면 결과가 1개, 동굴이 있으면 2개 이상이 됨.
+    std::vector<int> surfaces;
+
+    bool prevFilled = false; // y=-1은 가상의 Empty(바닥 아래는 없음)로 취급
+    for (int y = 0; y < m_SizeY; y++)
+    {
+        bool curFilled = (GetCell(x, y, z) != CellType::Empty);
+
+        // Filled -> Empty로 바뀌는 경계 = 직전 y(prevFilled였던 y-1)가 밟을 수 있는 표면
+        if (prevFilled && !curFilled)
+        {
+            surfaces.push_back(y - 1);
+        }
+
+        prevFilled = curFilled;
+    }
+
+    // 컬럼 맨 위(y = m_SizeY-1)까지 채워진 채로 끝난 경우(=그 위가 곧바로 맵 경계)도
+    // 표면으로 포함시킴 - GetSurfaceY의 "above >= m_SizeY이면 표면" 규칙과 동일하게 맞춤
+    if (true == prevFilled)
+    {
+        surfaces.push_back(m_SizeY - 1);
+    }
+
+    return surfaces;
 }
 
 void VoxelGrid::AllocateChunks()
