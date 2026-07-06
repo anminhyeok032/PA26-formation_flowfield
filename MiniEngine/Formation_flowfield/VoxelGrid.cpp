@@ -119,6 +119,89 @@ void VoxelGrid::BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, i
     }
 }
 
+void VoxelGrid::BuildFromHeightMapWithTunnel(const HeightMap& ground,
+    float startX, float startZ,
+    float endX, float endZ,
+    float tunnelHeightWorld,
+    float tunnelRadiusWorld,
+    float archThicknessWorld,
+    bool  openAtStart,
+    bool  openAtEnd)
+{
+    float cellSize = ground.GetVoxelSize();
+    int sizeX = (int)(ground.GetWorldWidth() / cellSize);
+    int sizeZ = (int)(ground.GetWorldDepth() / cellSize);
+
+    // 아치가 지표면 위로 솟아오르는 만큼 맵 높이(sizeY)에 여유를 더함
+    float extraWorldHeight = tunnelHeightWorld + archThicknessWorld + 1.0f; // +1은 여유분
+    int sizeY = (int)((ground.GetMaxHeight() + extraWorldHeight) / cellSize) + 1;
+
+    int archThicknessCells = std::max(1, (int)(archThicknessWorld / cellSize));
+
+    // 터널 경로 벡터 (시작->끝)
+    float dx = endX - startX;
+    float dz = endZ - startZ;
+    float pathLenSq = dx * dx + dz * dz;
+    float pathLen = std::sqrt(pathLenSq);
+
+    // 입/출구 개방 전환 구간 길이 — 이 거리 안에서 아치 높이가 0->최대로 서서히 자라남
+    float transitionLen = std::max(cellSize, tunnelRadiusWorld * 2.0f);
+
+    auto isSolid = [&](int x, int y, int z) -> bool
+    {
+        float wx = (x + 0.5f) * cellSize;
+        float wz = (z + 0.5f) * cellSize;
+
+        int groundY = (int)(ground.SampleHeight(wx, wz) / cellSize);
+        groundY = std::max(0, std::min(groundY, sizeY - 1));
+
+        // 1. 기존 지표면까지는 그대로 solid (터널 바닥, 기존 지형 유지)
+        if (y <= groundY) return true;
+
+        // 2. 이 컬럼이 터널 경로에서 얼마나 떨어져 있는지 계산 (선분 최단거리)
+        float t = pathLenSq > 0.0f
+            ? ((wx - startX) * dx + (wz - startZ) * dz) / pathLenSq
+            : 0.0f;
+        t = std::max(0.0f, std::min(t, 1.0f));
+
+        float closestX = startX + t * dx;
+        float closestZ = startZ + t * dz;
+        float perpDist = std::sqrt((wx - closestX) * (wx - closestX) +
+            (wz - closestZ) * (wz - closestZ));
+
+        // 터널 폭 바깥이면 이 함수는 관여하지 않음 -> 기존과 동일하게 지표면 위는 공중
+        if (perpDist > tunnelRadiusWorld) return false;
+
+        // 3. 시작/끝 지점까지의 경로상 거리 (양 끝에서 0이 되도록)
+        float distFromStart = t * pathLen;
+        float distFromEnd = (1.0f - t) * pathLen;
+
+        // 개방 전환 비율 계산: 강제 개방하는 쪽 끝에서는 0에 가까울수록 openFrac도 0에 가까워짐
+        float openFracStart = openAtStart ? std::min(1.0f, distFromStart / transitionLen) : 1.0f;
+        float openFracEnd = openAtEnd ? std::min(1.0f, distFromEnd / transitionLen) : 1.0f;
+        float openFrac = std::min(openFracStart, openFracEnd); // 둘 중 더 "닫힌"(개방 안 된) 쪽을 따름
+
+        // 4. 아치 높이 = 목표 높이(헤드룸+두께) * 개방비율
+        //    양 끝(openFrac=0)에서는 추가 높이 0 -> 지표면 그대로, 즉 완전 개방
+        float addHeight = (tunnelHeightWorld + archThicknessWorld) * openFrac;
+        int addCells = (int)(addHeight / cellSize);
+
+        if (addCells <= 0) return false; // 이 지점은 아치 없음 -> 공중 (입/출구 부분)
+
+        int archTopY = groundY + addCells;
+        int archBotY = std::max(groundY, archTopY - archThicknessCells); // 지표면 아래로는 못 내려감
+
+        if (archBotY <= archTopY && y >= archBotY && y <= archTopY)
+            return true; // 아치 본체 -> solid
+
+        return false; // 터널 내부 간격 또는 아치 위 공중 -> air
+    };
+
+    BuildFromVolumeSource(isSolid, sizeX, sizeY, sizeZ, cellSize);
+    ValidateWalkable();
+}
+
+
 void VoxelGrid::BuildCells(const HeightMap& hm)
 {
     m_Cells.clear();
@@ -236,9 +319,6 @@ void VoxelGrid::ValidateWalkable()
         // 표면 복셀 walkable 판정 조건들
         bool walkable = true;
 
-        /*
-        // TODO : 해당 walkable 검증 조건들은 아직 필요가 없음
-        //        조건 1은 필요시 활성화
 
         //// 조건 1 — 이웃 4방향 표면 복셀과 높이차 검사
         //// 패스 1이 끝난 뒤라 GetSurfaceY로 정확한 이웃 높이를 알 수 있음
@@ -268,30 +348,31 @@ void VoxelGrid::ValidateWalkable()
         //    }
         //}
 
-        //// 조건 2 — 머리 위 공간 확인 (NPC 키 높이만큼 비어있어야 함)
-        //// 지금은 2칸만 확인, 나중에 NPC 키에 따라 조절 가능
-        //if (true == walkable)
-        //{
-        //    int headY = cell.y + 2;
-        //    if (headY < m_SizeY)
-        //    {
-        //        // 머리 위에 복셀이 있으면 이동 불가 (천장)
-        //        if (GetCell(cell.x, headY, cell.z) == CellType::Blocked)
-        //        {
-        //            // 단, 이 경우는 내부 채우기로 생긴 Blocked인지
-        //            // 진짜 지형 복셀인지 구분이 필요함
-        //            // GetSurfaceY보다 높은 y의 Blocked는 진짜 지형
-        //            int surfY = GetSurfaceY(cell.x, cell.z);
-        //            if (headY <= surfY)
-        //            {
-        //                walkable = false;
-        //            }
-        //        }
-        //    }
-        //}
+
+
+        // 조건 2 — 머리 위 공간(헤드룸) 확인
+        // 터널/아치 구조에서는 컬럼마다 천장 위치가 다르므로, 표면(cell.y) 바로 위부터
+        // HEADROOM_CELLS칸이 전부 비어있어야 실제로 지나갈 수 있는 통로로 인정.
+        // GetSurfaceY 비교 같은 우회 로직 불필요 — GetCell이 이미 정확한 Empty/Blocked를
+        // 반환하므로 그대로 신뢰하면 됨 (컬럼당 표면 1개 가정이 깨져도 안전).
+        const int HEADROOM_CELLS = 3 + 1; // 캐릭터 키 3칸 + 여유 1칸
+
+        for (int k = 1; k <= HEADROOM_CELLS; k++)
+        {
+            int headY = cell.y + k;
+
+            // 맵 맨 위를 넘어가면 그 위는 무조건 뚫려있는 것으로 간주하고 통과
+            if (headY >= m_SizeY) break;
+
+            if (GetCell(cell.x, headY, cell.z) != CellType::Empty)
+            {
+                walkable = false; // 천장(아치)이 너무 낮음 -> 통행 불가
+                break;
+            }
+        }
 
         // 조건 3 — TODO : 장애물 마킹 (동적 변경 시)
-        */
+        
 
         cell.type = walkable ? CellType::Walkable : CellType::Blocked;
 

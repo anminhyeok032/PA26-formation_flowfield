@@ -96,9 +96,18 @@ void FlowField::Startup(void)
         WORLD_SCALE,    // MapScale
         VOXEL_SIZE);    // 복셀 1개 크기 -> 복셀 수 = pow( (맵 크기 * MAP_SCALE) / VOXEL_SIZE), 2 )
 
+
     if (true == loaded)
     {
-        m_VoxelGrid.BuildFromHeightMap(m_HeightMap);
+        // 관통 터널 생성
+        m_VoxelGrid.BuildFromHeightMapWithTunnel(
+            m_HeightMap,
+            70.0f, 90.0f,       // 입구 좌표
+            170.0f, 104.0f,     // 출구 좌표
+            15.0f,              // 터널 내부 높이(헤드룸)
+            30.0f,              // 터널 반경
+            2.0f,               // 아치 두께
+            true, true);        // 양쪽 다 개방
 
         std::vector<VoxelRenderer::InstanceData> instances;
         m_VoxelGrid.BuildInstanceList(instances);
@@ -137,15 +146,15 @@ void FlowField::Startup(void)
 
     // 테스트용 NPC 배치
     std::vector<NPCRenderer::InstanceData> npcInstances;
-    npcInstances.reserve(100);
+    npcInstances.reserve(1000);
 
     // 지형 위에 격자 형태로 100개 배치
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 100; i++)
     {
-        for (int j = 0; j < 10; j++)
+        for (int j = 0; j < 100; j++)
         {
-            int gx = 10 + i * 3;
-            int gz = 10 + j * 3;
+            int gx = 100 + i * 3;
+            int gz = 100 + j * 3;
 
             // 지형 표면 Y 위에 올리기
             float surfY = (float)m_VoxelGrid.GetSurfaceY(gx, gz) * m_HeightMap.GetVoxelSize();

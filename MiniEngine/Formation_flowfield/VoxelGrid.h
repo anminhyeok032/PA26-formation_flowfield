@@ -63,6 +63,24 @@ public:
     // xz당 표면 1개 가정을 없앤 build
     void BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, int sizeY, int sizeZ, float cellSize);
 
+    // ===== 변경 (좌표 4개 기반) =====
+        // 시작점(startX,startZ) ~ 끝점(endX,endZ) 사이에 직선 아치형 터널을 생성.
+        // 지표면(ground)은 그대로 유지한 채, 그 위에 다리처럼 아치를 얹고
+        // 아치 아래 빈 공간이 터널이 됨 (NPC는 아래로 통과, 아치 위로도 통과 가능).
+        //
+        // openAtStart/openAtEnd == true인 쪽은 그 좌표에서 아치 높이가 0으로 강제되어
+        // 반드시 개방된 입/출구가 생김. false면 그쪽 끝은 개방을 강제하지 않고
+        // (막다른 동굴처럼) 자연 지형에 그대로 파묻힘.
+    void BuildFromHeightMapWithTunnel(const HeightMap& ground,
+        float startX, float startZ,
+        float endX, float endZ,
+        float tunnelHeightWorld = 2.0f,  // 터널 내부 통행 가능 높이(헤드룸)
+        float tunnelRadiusWorld = 3.0f,  // 터널 폭(중심선 기준 반경)
+        float archThicknessWorld = 1.0f,  // 아치(천장) 두께
+        bool  openAtStart = true,
+        bool  openAtEnd = true);
+
+
     // 패스 2 — 배치 완료 후 표면 복셀 walkable 재판정
     void ValidateWalkable();
     // 표면 복셀인지 확인 (위쪽이 비어있는 복셀)
