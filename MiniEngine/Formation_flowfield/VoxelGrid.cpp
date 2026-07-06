@@ -159,15 +159,12 @@ void VoxelGrid::BuildFromHeightMapWithTunnel(const HeightMap& ground,
         if (y <= groundY) return true;
 
         // 2. 이 컬럼이 터널 경로에서 얼마나 떨어져 있는지 계산 (선분 최단거리)
-        float t = pathLenSq > 0.0f
-            ? ((wx - startX) * dx + (wz - startZ) * dz) / pathLenSq
-            : 0.0f;
+        float t = pathLenSq > 0.0f ? ((wx - startX) * dx + (wz - startZ) * dz) / pathLenSq : 0.0f;
         t = std::max(0.0f, std::min(t, 1.0f));
 
         float closestX = startX + t * dx;
         float closestZ = startZ + t * dz;
-        float perpDist = std::sqrt((wx - closestX) * (wx - closestX) +
-            (wz - closestZ) * (wz - closestZ));
+        float perpDist = std::sqrt((wx - closestX) * (wx - closestX) + (wz - closestZ) * (wz - closestZ));
 
         // 터널 폭 바깥이면 이 함수는 관여하지 않음 -> 기존과 동일하게 지표면 위는 공중
         if (perpDist > tunnelRadiusWorld) return false;
@@ -459,14 +456,15 @@ void VoxelGrid::ToChunkCoord(int x, int y, int z, int& chunkIndex, int& lx, int&
     chunkIndex = cx + m_ChunkCountX * (cz + m_ChunkCountZ * cy);
 }
 
-void VoxelGrid::BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outInstances) const
+void VoxelGrid::BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outInstances,
+    std::vector<CellCoord>* outCoords) const
 {
     outInstances.clear();
     outInstances.reserve(m_Cells.size());
+    if (outCoords) { outCoords->clear(); outCoords->reserve(m_Cells.size()); }
 
     for (const auto& cell : m_Cells)
     {
-        // Empty는 렌더링하지 않음
         if (cell.type == CellType::Empty) continue;
 
         VoxelRenderer::InstanceData inst = {};
@@ -474,13 +472,12 @@ void VoxelGrid::BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outI
         inst.position[1] = cell.y * m_CellSize;
         inst.position[2] = cell.z * m_CellSize;
         inst.scale = m_CellSize;
-
-        // Empty=0, Walkable=1(흰색), Blocked=2(빨강)
         inst.colorType = (cell.type == CellType::Walkable) ? 0 : 1;
         outInstances.push_back(inst);
+
+        if (outCoords) outCoords->push_back({ cell.x, cell.y, cell.z });
     }
 }
-
 
 void VoxelGrid::SetCell(int x, int y, int z, CellType type)
 {
@@ -491,6 +488,71 @@ void VoxelGrid::SetCell(int x, int y, int z, CellType type)
     int chunkIdx, lx, ly, lz;
     ToChunkCoord(x, y, z, chunkIdx, lx, ly, lz);
     m_Chunks[chunkIdx].Set(lx, ly, lz, type);
+}
+
+bool VoxelGrid::RaycastVoxel(const Math::Vector3& origin, const Math::Vector3& dir, float maxDistance, int& outX, int& outY, int& outZ) const
+{
+    // 이 프로젝트의 셀은 "중심"이 x*cellSize인 좌표계를 씀 (BuildInstanceList, GetWorldPos와 동일 규칙).
+    // DDA 알고리즘 자체는 "모서리가 x*cellSize인" 좌표계를 가정하므로, origin을 반 칸(0.5*cellSize)만큼 이동시켜서
+    // 두 좌표계를 일치시킨다. (거리 계산은 평행이동에 불변이라 t값에는 영향 없음)
+    const float half = m_CellSize * 0.5f;
+    Math::Vector3 shiftedOrigin(origin.GetX() + half, origin.GetY() + half, origin.GetZ() + half);
+
+    int x = (int)std::floor(shiftedOrigin.GetX() / m_CellSize);
+    int y = (int)std::floor(shiftedOrigin.GetY() / m_CellSize);
+    int z = (int)std::floor(shiftedOrigin.GetZ() / m_CellSize);
+
+    // 각 축으로 +1/-1 중 어느 방향으로 진행하는지
+    int stepX = (dir.GetX() > 0.0f) ? 1 : -1;
+    int stepY = (dir.GetY() > 0.0f) ? 1 : -1;
+    int stepZ = (dir.GetZ() > 0.0f) ? 1 : -1;
+
+    // 각 축에서 "다음 격자선까지 이동하는 데 필요한 거리"의 증가량
+    float tDeltaX = (dir.GetX() != 0) ? std::abs(m_CellSize / dir.GetX()) : FLT_MAX;
+    float tDeltaY = (dir.GetY() != 0) ? std::abs(m_CellSize / dir.GetY()) : FLT_MAX;
+    float tDeltaZ = (dir.GetZ() != 0) ? std::abs(m_CellSize / dir.GetZ()) : FLT_MAX;
+
+    // 현재 셀에서 다음 격자선까지의 초기 거리
+    auto initialT = [&](float originVal, int cellIdx, float dirVal, int step) -> float
+    {
+        if (dirVal == 0.0f) return FLT_MAX;
+        float boundary = (step > 0) ? (cellIdx + 1) * m_CellSize : cellIdx * m_CellSize;
+        return std::abs((boundary - originVal) / dirVal);
+    };
+
+    float tMaxX = initialT(shiftedOrigin.GetX(), x, dir.GetX(), stepX);
+    float tMaxY = initialT(shiftedOrigin.GetY(), y, dir.GetY(), stepY);
+    float tMaxZ = initialT(shiftedOrigin.GetZ(), z, dir.GetZ(), stepZ);
+
+    float traveled = 0.0f;
+
+    while (traveled < maxDistance)
+    {
+        // 맵 범위를 벗어나면 실패
+        if (x < 0 || x >= m_SizeX || y < 0 || y >= m_SizeY || z < 0 || z >= m_SizeZ)
+            return false;
+
+        if (GetCell(x, y, z) != CellType::Empty)
+        {
+            outX = x; outY = y; outZ = z;
+            return true;
+        }
+
+        // 세 축 중 가장 먼저 다음 격자선에 도달하는 축으로 한 칸 이동
+        if (tMaxX < tMaxY && tMaxX < tMaxZ)
+        {
+            x += stepX; traveled = tMaxX; tMaxX += tDeltaX;
+        }
+        else if (tMaxY < tMaxZ)
+        {
+            y += stepY; traveled = tMaxY; tMaxY += tDeltaY;
+        }
+        else
+        {
+            z += stepZ; traveled = tMaxZ; tMaxZ += tDeltaZ;
+        }
+    }
+    return false;
 }
 
 VoxelGrid::CellType VoxelGrid::GetCell(int x, int y, int z) const

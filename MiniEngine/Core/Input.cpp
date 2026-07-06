@@ -1,4 +1,4 @@
-//
+﻿//
 // Copyright (c) Microsoft. All rights reserved.
 // This code is licensed under the MIT License (MIT).
 // THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
@@ -444,3 +444,23 @@ float GameInput::GetTimeCorrectedAnalogInput( AnalogInput ai )
 {
     return s_AnalogsTC[ai];
 }
+
+
+#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+void GameInput::SetMouseExclusiveMode(bool exclusive)
+{
+    if (!s_Mouse) return;
+
+    // 협조 수준을 바꾸려면 먼저 기존 획득을 해제해야 함
+    s_Mouse->Unacquire();
+    s_Mouse->SetCooperativeLevel(GameCore::g_hWnd,
+        exclusive ? (DISCL_FOREGROUND | DISCL_EXCLUSIVE)
+        : (DISCL_FOREGROUND | DISCL_NONEXCLUSIVE));
+    // 실제 재획득(Acquire)은 다음 프레임 KbmUpdate()에서 자동으로 이루어짐
+}
+#else
+void GameInput::SetMouseExclusiveMode(bool)
+{
+    // 데스크톱이 아닌 플랫폼(UWP 등)은 DirectInput을 안 쓰므로 아무 동작 없음
+}
+#endif

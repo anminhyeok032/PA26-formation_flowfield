@@ -32,6 +32,10 @@ namespace VoxelRenderer
     // 지형 변경 시 또는 NPC 위치 갱신 시 호출
     void UpdateInstances(const std::vector<InstanceData>& instances);
 
+    // 연속된 인스턴스 범위([startIndex, startIndex+count-1])를 한 번의 GPU 호출로 갱신.
+    // count가 1이면 기존 UpdateSingleInstance와 동일하게 동작.
+    void UpdateInstanceRange(uint32_t startIndex, uint32_t count, const InstanceData* data);
+
     // 매 프레임 렌더
     // viewProj: m_Camera.GetViewProjMatrix() 그대로 넘기면 됨. 내부에서 Transpose 해줌
     void Render(GraphicsContext& ctx, const Math::Matrix4& viewProj);

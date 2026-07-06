@@ -44,8 +44,20 @@ public:
 
     // TODO - 지형 동적 변경
     void SetCell(int x, int y, int z, CellType type);
-    // 렌더용 인스턴스 목록 생성
-    void BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outInstances) const;
+ 
+    // 격자 좌표 하나 (우클릭 피킹 결과와 렌더 인스턴스를 매칭하기 위한 용도)
+    struct CellCoord { int x, y, z; };
+
+    // 렌더용 인스턴스 목록 생성.
+    // outCoords가 주어지면 outInstances[i]에 대응하는 격자 좌표를 같은 순서로 채움
+    // (기존 호출부는 nullptr 그대로 두면 기존과 동일하게 동작).
+    void BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outInstances,
+        std::vector<CellCoord>* outCoords = nullptr) const;
+
+    // 레이(origin, dir)를 따라 격자를 순회하며 처음 만나는 non-Empty 셀을 찾음.
+    // 우클릭 피킹(목적지 복셀 지정)에 사용. 찾으면 true, maxDistance 안에 없으면 false.
+    bool RaycastVoxel(const Math::Vector3& origin, const Math::Vector3& dir,
+        float maxDistance, int& outX, int& outY, int& outZ) const;
 
     CellType      GetCell(int x, int y, int z) const;
     bool          IsWalkable(int x, int y, int z) const;

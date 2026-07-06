@@ -76,6 +76,108 @@ namespace NPCRenderer
         }
     }
 
+
+    // 두 선분(p1~q1, p2~q2) 사이의 최단 거리 제곱을 구하고, 각 선분 위의
+    // 매개변수(s,t ∈ [0,1])와 최근접점(c1,c2)을 채움
+    // 레이-캡슐, 나중에 캡슐-캡슐(NPC 충돌) 판정 모두 이 함수 하나로 처리 가능.
+    static float ClosestPtSegmentSegment(const Math::Vector3& p1, const Math::Vector3& q1,
+        const Math::Vector3& p2, const Math::Vector3& q2,
+        float& s, float& t, Math::Vector3& c1, Math::Vector3& c2)
+    {
+        using namespace Math;
+        Vector3 d1 = q1 - p1; // 첫 번째 선분 방향
+        Vector3 d2 = q2 - p2; // 두 번째 선분 방향
+        Vector3 r = p1 - p2;
+
+        float a = (float)Dot(d1, d1);
+        float e = (float)Dot(d2, d2);
+        float f = (float)Dot(d2, r);
+
+        const float EPS = 1e-8f;
+
+        if (a <= EPS && e <= EPS)
+        {
+            s = 0.0f; t = 0.0f;
+            c1 = p1; c2 = p2;
+            Vector3 diff = c1 - c2;
+            return (float)Dot(diff, diff);
+        }
+
+        if (a <= EPS)
+        {
+            s = 0.0f;
+            t = Clamp(f / e, 0.0f, 1.0f);
+        }
+        else
+        {
+            float c = (float)Dot(d1, r);
+            if (e <= EPS)
+            {
+                t = 0.0f;
+                s = Clamp(-c / a, 0.0f, 1.0f);
+            }
+            else
+            {
+                float b = (float)Dot(d1, d2);
+                float denom = a * e - b * b;
+
+                s = (denom != 0.0f) ? Clamp((b * f - c * e) / denom, 0.0f, 1.0f) : 0.0f;
+                t = (b * s + f) / e;
+
+                if (t < 0.0f)
+                {
+                    t = 0.0f;
+                    s = Clamp(-c / a, 0.0f, 1.0f);
+                }
+                else if (t > 1.0f)
+                {
+                    t = 1.0f;
+                    s = Clamp((b - c) / a, 0.0f, 1.0f);
+                }
+            }
+        }
+
+        c1 = p1 + d1 * s;
+        c2 = p2 + d2 * t;
+        Vector3 diff = c1 - c2;
+        return (float)Dot(diff, diff);
+    }
+
+    Capsule MakeCapsule(const InstanceData& inst)
+    {
+        using namespace Math;
+        Vector3 center(inst.position[0], inst.position[1], inst.position[2]);
+        float radius = inst.scaleXZ;
+
+        // 원통 구간의 절반 길이. scaleY가 radius보다 작으면(예: 구에 가까운 형태)
+        // 0으로 클램프되어 캡슐이 자연스럽게 구 하나로 축소됨.
+        float halfSegment = std::max(0.0f, inst.scaleY - radius);
+
+        Capsule cap;
+        cap.p0 = center - Vector3(0.0f, halfSegment, 0.0f);
+        cap.p1 = center + Vector3(0.0f, halfSegment, 0.0f);
+        cap.radius = radius;
+        return cap;
+    }
+
+    bool RayIntersectsCapsule(const Math::Vector3& rayOrigin, const Math::Vector3& rayDir,
+        float maxDistance, const Capsule& capsule, float& outT)
+    {
+        Math::Vector3 rayEnd = rayOrigin + rayDir * maxDistance;
+
+        float s, t;
+        Math::Vector3 c1, c2;
+        float distSq = ClosestPtSegmentSegment(rayOrigin, rayEnd, capsule.p0, capsule.p1, s, t, c1, c2);
+
+        if (distSq > capsule.radius * capsule.radius)
+            return false;
+
+        outT = s * maxDistance; // s(0~1)를 실제 레이 거리로 환산
+        return true;
+    }
+
+
+
     void Initialize()
     {
         // 루트 시그니처 — VoxelRenderer와 동일한 슬롯 구조

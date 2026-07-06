@@ -177,6 +177,13 @@ namespace VoxelRenderer
         }
     }
 
+    void UpdateInstanceRange(uint32_t startIndex, uint32_t count, const InstanceData* data)
+    {
+        size_t offset = (size_t)startIndex * sizeof(InstanceData);
+        size_t bytes = (size_t)count * sizeof(InstanceData);
+        CommandContext::InitializeBuffer(s_InstanceBuffer, data, bytes, offset);
+    }
+
     void Render(GraphicsContext& ctx, const Matrix4& viewProj)
     {
         if (s_InstanceCount == 0) return;

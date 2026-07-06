@@ -1,4 +1,4 @@
-//
+﻿//
 // Copyright (c) Microsoft. All rights reserved.
 // This code is licensed under the MIT License (MIT).
 // THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
@@ -188,6 +188,11 @@ namespace GameInput
 
     float GetAnalogInput( AnalogInput ai );
     float GetTimeCorrectedAnalogInput( AnalogInput ai );
+
+    // 마우스 배타적 캡처 모드 전환 (데스크톱 전용).
+    // true  = 카메라 조작용 배타적 모드 (OS 커서가 숨겨진 채 상대 이동량만 제공)
+    // false = 일반 모드 (OS 커서가 보이고 정상적으로 화면 위를 움직임, 피킹에 사용)
+    void SetMouseExclusiveMode(bool exclusive);
 
 #if !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_TV_TITLE | WINAPI_PARTITION_DESKTOP)
     void SetKeyState(Windows::System::VirtualKey key, bool IsDown);
