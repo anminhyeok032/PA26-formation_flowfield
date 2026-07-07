@@ -27,7 +27,7 @@ public:
     void Set(int lx, int ly, int lz, CellType type) { m_Cells[LocalIndex(lx, ly, lz)] = type; }
 
 private:
-    static int LocalIndex(int lx, int ly, int lz) { return lx + 16 * (ly + 16 * lz); }
+    static int LocalIndex(int lx, int ly, int lz) { return lx + CHUNK_SIZE * (ly + CHUNK_SIZE * lz); }
     std::array<CellType, CHUNK_VOLUME> m_Cells;                 // 청크 하나 = 정확히 4096바이트(4KB)
 };
 
@@ -59,12 +59,12 @@ public:
     bool RaycastVoxel(const Math::Vector3& origin, const Math::Vector3& dir,
         float maxDistance, int& outX, int& outY, int& outZ) const;
 
-    CellType      GetCell(int x, int y, int z) const;
-    bool          IsWalkable(int x, int y, int z) const;
-    Math::Vector3 GetWorldPos(int x, int y, int z) const;
-    int   GetSizeX()    const { return m_SizeX; }
-    int   GetSizeZ()    const { return m_SizeZ; }
-    float GetCellSize() const { return m_CellSize; }
+    CellType        GetCell(int x, int y, int z) const;
+    bool            IsWalkable(int x, int y, int z) const;
+    Math::Vector3   GetWorldPos(int x, int y, int z) const;
+    int             GetSizeX()    const { return m_SizeX; }
+    int             GetSizeZ()    const { return m_SizeZ; }
+    float           GetCellSize() const { return m_CellSize; }
 
     //-----
     // HeightMap 기반 복셀 생성
@@ -102,6 +102,14 @@ public:
 
     // 동굴이 있으면 2개 이상, 없으면 GetSurfaceY와 동일한 값 1개만 담긴 리스트가 됨.
     std::vector<int> GetSurfaceYList(int x, int z) const;
+
+
+    // worldPos에서 가장 가까운 Walkable 셀을 찾음 (A* 시작점 스냅 등에 사용).
+    // 중심에서부터 반지름을 넓혀가며 검사하므로, 맵 전체를 순회하지 않고
+    // 대부분의 경우 몇 칸 안에서 빠르게 찾아짐. maxSearchRadius 안에 못 찾으면 false.
+    bool FindNearestWalkable(const Math::Vector3& worldPos,
+        int& outX, int& outY, int& outZ,
+        int maxSearchRadius = 10) const;
 
 private:
     // 표면 복셀 하나만 저장 (위치 + 타입)

@@ -67,6 +67,18 @@ private:
     std::vector<VoxelRenderer::InstanceData> m_VoxelInstances;  // 지속 보관
     std::vector<VoxelGrid::CellCoord>        m_VoxelCellCoords; // m_VoxelInstances와 1:1 대응
 
+    // (x,y,z) 좌표 -> m_VoxelInstances 배열의 인덱스로 즉시 찾아가기 위한 색인.
+    // BuildInstanceList 직후 딱 한 번만 만들고, 그 이후로는 조회만 함.
+    std::unordered_map<int64_t, int> m_VoxelCoordToIndex;
+
+    // 좌표 세 개(x,y,z)를 해시맵 키로 쓸 숫자 하나로 합치는 함수
+    static int64_t MakeVoxelCoordKey(int x, int y, int z)
+    {
+        return (int64_t)(x & 0x1FFFFF) |
+            ((int64_t)(y & 0x1FFFFF) << 21) |
+            ((int64_t)(z & 0x1FFFFF) << 42);
+    }
+
     int m_HoverCellIndex = -1;      // 지금 마우스가 가리키는 셀 (매 프레임 갱신)
     int m_ConfirmedCellIndex = -1;  // 우클릭으로 확정된 목적지 (다음 확정 전까지 유지)
     bool m_HoverActive = false;     // NPC 선택 시 true, 우클릭으로 확정되는 순간 false (호버 정지)
@@ -139,6 +151,15 @@ void FlowField::Startup(void)
         
         m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
         VoxelRenderer::UpdateInstances(m_VoxelInstances);
+
+        // 색인 구축: 여기서만 전체를 한 번 순회함 (이후로는 절대 이렇게 다시 순회 안 함)
+        m_VoxelCoordToIndex.clear();
+        m_VoxelCoordToIndex.reserve(m_VoxelCellCoords.size());
+        for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
+        {
+            auto& c = m_VoxelCellCoords[i];
+            m_VoxelCoordToIndex[MakeVoxelCoordKey(c.x, c.y, c.z)] = (int)i;
+        }
     }
     else
     {
@@ -303,16 +324,9 @@ void FlowField::HandlePicking()
         int newHoverIndex = -1;
         if (hit)
         {
-            for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
-            {
-                if (m_VoxelCellCoords[i].x == hx &&
-                    m_VoxelCellCoords[i].y == hy &&
-                    m_VoxelCellCoords[i].z == hz)
-                {
-                    newHoverIndex = (int)i;
-                    break;
-                }
-            }
+            auto it = m_VoxelCoordToIndex.find(MakeVoxelCoordKey(hx, hy, hz));
+            if (it != m_VoxelCoordToIndex.end())
+                newHoverIndex = it->second;
         }
 
         if (newHoverIndex != m_HoverCellIndex)

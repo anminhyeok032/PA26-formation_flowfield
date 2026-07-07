@@ -31,6 +31,15 @@
     <Filter Include="Simulation\Voxel">
       <UniqueIdentifier>{f9429f92-90a9-4ada-ab31-881012298d51}</UniqueIdentifier>
     </Filter>
+    <Filter Include="NPC\PathFinding">
+      <UniqueIdentifier>{2768acf4-4116-4384-a6ab-392d9aebdadf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NPC\PublicFunction">
+      <UniqueIdentifier>{d024e92a-a954-468a-a681-85e8f0f39959}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NPC\FlowField">
+      <UniqueIdentifier>{f81cf28f-af33-4617-97d5-55bba11ba604}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -47,6 +56,18 @@
     </ClCompile>
     <ClCompile Include="VoxelGrid.cpp">
       <Filter>Simulation\Voxel</Filter>
+    </ClCompile>
+    <ClCompile Include="AStarPathfinder.cpp">
+      <Filter>NPC\PathFinding</Filter>
+    </ClCompile>
+    <ClCompile Include="PathCorrider.cpp">
+      <Filter>NPC\PublicFunction</Filter>
+    </ClCompile>
+    <ClCompile Include="GridNeighbors.cpp">
+      <Filter>NPC\PublicFunction</Filter>
+    </ClCompile>
+    <ClCompile Include="CorridorFlowField.cpp">
+      <Filter>NPC\FlowField</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -81,6 +102,21 @@
     </ClInclude>
     <ClInclude Include="VoxelGrid.h">
       <Filter>Simulation\Voxel</Filter>
+    </ClInclude>
+    <ClInclude Include="AStarPathfinder.h">
+      <Filter>NPC\PathFinding</Filter>
+    </ClInclude>
+    <ClInclude Include="ChunkKey.h">
+      <Filter>NPC\PublicFunction</Filter>
+    </ClInclude>
+    <ClInclude Include="PathCorridor.h">
+      <Filter>NPC\PublicFunction</Filter>
+    </ClInclude>
+    <ClInclude Include="GridNeighbors.h">
+      <Filter>NPC\PublicFunction</Filter>
+    </ClInclude>
+    <ClInclude Include="CorridorFlowField.h">
+      <Filter>NPC\FlowField</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

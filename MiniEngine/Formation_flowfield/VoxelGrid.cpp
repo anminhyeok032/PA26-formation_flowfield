@@ -430,6 +430,61 @@ std::vector<int> VoxelGrid::GetSurfaceYList(int x, int z) const
     return surfaces;
 }
 
+bool VoxelGrid::FindNearestWalkable(const Math::Vector3& worldPos, int& outX, int& outY, int& outZ, int maxSearchRadius) const
+{
+    // worldPos에 가장 가까운 셀 좌표 (중심 정렬 좌표계이므로 반올림 사용)
+    int centerX = (int)std::round(worldPos.GetX() / m_CellSize);
+    int centerZ = (int)std::round(worldPos.GetZ() / m_CellSize);
+
+    // 반지름 0(중심 칸 자신)부터 시작해서 바깥으로 넓혀가며 검사
+    for (int radius = 0; radius <= maxSearchRadius; radius++)
+    {
+        bool found = false;
+        int bestX = 0, bestY = 0, bestZ = 0;
+        float bestDistSq = FLT_MAX;
+
+        // 이번 반지름에 해당하는 "링"만 순회 (정사각형 테두리)
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            for (int dz = -radius; dz <= radius; dz++)
+            {
+                // 링의 테두리만: 이전 반지름에서 이미 검사한 내부는 건너뜀
+                if (std::max(std::abs(dx), std::abs(dz)) != radius) continue;
+
+                int x = centerX + dx;
+                int z = centerZ + dz;
+                if (x < 0 || x >= m_SizeX || z < 0 || z >= m_SizeZ) continue;
+
+                // 이 컬럼의 모든 표면 후보 중, worldPos.y와 가장 가까운 Walkable 층을 찾음
+                std::vector<int> surfaces = GetSurfaceYList(x, z);
+                for (int sy : surfaces)
+                {
+                    if (!IsWalkable(x, sy, z)) continue;
+
+                    Math::Vector3 candidatePos = GetWorldPos(x, sy, z);
+                    float distSq = Math::LengthSquare(candidatePos - worldPos);
+
+                    if (distSq < bestDistSq)
+                    {
+                        bestDistSq = distSq;
+                        bestX = x; bestY = sy; bestZ = z;
+                        found = true;
+                    }
+                }
+            }
+        }
+
+        if (true == found)
+        {
+            outX = bestX; outY = bestY; outZ = bestZ;
+            return true; // 이 반지름에서 찾았으면 더 바깥은 볼 필요 없음(더 가까울 수 없음)
+        }
+    }
+
+    return false; // maxSearchRadius 안에 Walkable 셀이 아예 없음
+}
+
+
 void VoxelGrid::AllocateChunks()
 {
     // 올림 나눗셈으로 각 축에 필요한 청크 개수 계산

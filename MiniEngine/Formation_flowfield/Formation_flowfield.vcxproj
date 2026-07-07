@@ -150,9 +150,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AStarPathfinder.cpp" />
+    <ClCompile Include="CorridorFlowField.cpp" />
     <ClCompile Include="FlowField.cpp" />
+    <ClCompile Include="GridNeighbors.cpp" />
     <ClCompile Include="HeightMap.cpp" />
     <ClCompile Include="NPCRenderer.cpp" />
+    <ClCompile Include="PathCorrider.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
     <ClCompile Include="VoxelRenderer.cpp" />
   </ItemGroup>
@@ -225,9 +229,14 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AStarPathfinder.h" />
+    <ClInclude Include="ChunkKey.h" />
+    <ClInclude Include="CorridorFlowField.h" />
     <ClInclude Include="FlowFieldSolver.h" />
+    <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
     <ClInclude Include="NPCRenderer.h" />
+    <ClInclude Include="PathCorridor.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClInclude Include="VoxelRenderer.h" />
   </ItemGroup>
@@ -277,6 +286,18 @@
       <AdditionalLibraryDirectories>..\..\Packages\zlib-msvc-x64.1.2.11.8900\build\native\lib_release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <ClCompile>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
+    </ClCompile>
+    <ClCompile>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdcpp17</LanguageStandard>
+    </ClCompile>
+    <ClCompile>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
+    </ClCompile>
+    <ClCompile>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ImportGroup Label="ExtensionTargets">
     <Import Project="..\..\Packages\zlib-msvc-x64.1.2.11.8900\build\native\zlib-msvc-x64.targets" Condition="Exists('..\..\Packages\zlib-msvc-x64.1.2.11.8900\build\native\zlib-msvc-x64.targets')" />
