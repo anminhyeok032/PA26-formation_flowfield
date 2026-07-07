@@ -2,7 +2,7 @@
 #include <cmath>
 #include <climits>
 
-void GetWalkableNeighbors(const VoxelGrid& grid, const DirectX::XMINT3& cur, std::vector<DirectX::XMINT3>& outNeighbors)
+void GetWalkableNeighbors(const VoxelGrid& grid, const DirectX::XMINT3& curr, std::vector<DirectX::XMINT3>& outNeighbors)
 {
     outNeighbors.clear();
 
@@ -11,8 +11,8 @@ void GetWalkableNeighbors(const VoxelGrid& grid, const DirectX::XMINT3& cur, std
 
     for (int d = 0; d < 4; d++)
     {
-        int nx = cur.x + dx[d];
-        int nz = cur.z + dz[d];
+        int nx = curr.x + dx[d];
+        int nz = curr.z + dz[d];
 
         std::vector<int> surfaces = grid.GetSurfaceYList(nx, nz);
 
@@ -20,7 +20,7 @@ void GetWalkableNeighbors(const VoxelGrid& grid, const DirectX::XMINT3& cur, std
         int bestDiff = INT_MAX;
         for (int sy : surfaces)
         {
-            int diff = std::abs(sy - cur.y);
+            int diff = std::abs(sy - curr.y);
             if (diff <= 1 && diff < bestDiff)
             {
                 bestDiff = diff;

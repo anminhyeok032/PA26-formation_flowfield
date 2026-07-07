@@ -41,25 +41,34 @@ public:
                     int maxIterations = 100000);
 
 private:
-    // ---- A* 방문 기록 저장용 청크 (VoxelChunk와 같은 크기 철학, 필요한 만큼만 지연 할당) ----
-    struct PathNodeRecord
-    {
-        float           gScore = FLT_MAX;
-        DirectX::XMINT3 cameFrom{ -1, -1, -1 };
-        bool            closed = false;
-    };
-
+    // cameFrom을 아예 저장하지 않음. 이동 비용이 균일(1칸=1)하므로,
+    // 탐색이 끝난 뒤 내 이웃 중 gScore가 정확히 나보다 1 작은 셀을 찾으면 부모
     struct PathNodeChunk
     {
-        static constexpr int SIZE = VoxelChunk::CHUNK_SIZE;
-        std::array<PathNodeRecord, VoxelChunk::CHUNK_VOLUME> records;
-    };
+        static constexpr int SIZE = 16;
+        static constexpr int VOLUME = SIZE * SIZE * SIZE;
 
+        std::array<float, VOLUME> gScore;
+        std::array<bool, VOLUME> closed;
+
+        PathNodeChunk()
+        {
+            gScore.fill(FLT_MAX);
+            closed.fill(false);
+        }
+    };
 
     std::unordered_map<int64_t, std::unique_ptr<PathNodeChunk>> m_Chunks;
 
 
-    PathNodeRecord& GetRecord(int x, int y, int z);
+    PathNodeChunk* FindOrCreateChunk(int x, int y, int z, int& outLocalIdx);
+    const PathNodeChunk* FindChunk(int x, int y, int z, int& outLocalIdx) const;
+
+    // 탐색 종료 후, gScore만으로 목적지->시작점 경로를 거꾸로 재구성.
+    // 방문한 노드 전체가 아니라 실제 경로 길이만큼만 탐색
+    bool ReconstructPath(const VoxelGrid& grid, const DirectX::XMINT3& start,
+        const DirectX::XMINT3& goal, std::vector<DirectX::XMINT3>& outPath) const;
+
 
 
     static float Heuristic(const DirectX::XMINT3& a, const DirectX::XMINT3& b)

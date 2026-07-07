@@ -90,6 +90,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
 {
     std::vector<DirectX::XMINT3> neighbors;
 
+    // 만들어진 청크 기준으로 탐색
     for (auto& [key, chunkPtr] : m_Chunks)
     {
         int cx, cy, cz;
@@ -111,6 +112,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                     int y = cy * FlowFieldChunk::SIZE + ly;
                     int z = cz * FlowFieldChunk::SIZE + lz;
 
+                    // 해당 셀의 이웃 후보 neighbors에 저장
                     GetWalkableNeighbors(grid, { x, y, z }, neighbors);
 
                     float bestCost = myCost;

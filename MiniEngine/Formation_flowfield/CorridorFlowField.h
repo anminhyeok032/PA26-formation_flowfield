@@ -14,6 +14,7 @@ public:
     void Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask);
 
     // (x,y,z) 셀의 이동 방향을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.
+    // const는 위치 조회로 새로운 청크 할당 방지
     bool SampleDirection(int x, int y, int z, DirectX::XMFLOAT3& outDir) const;
 
 private:
@@ -29,13 +30,11 @@ private:
         static constexpr int SIZE = 16;
         static constexpr int VOLUME = SIZE * SIZE * SIZE;
 
-        // BFS(1단계)가 압도적으로 자주 읽고 쓰는 필드들을 별도 배열로 분리(SoA).
-        // direction은 2단계(ComputeDirections)에서만 쓰이므로 따로 떼어내서,
-        // BFS 도중 캐시라인에 불필요한 데이터가 섞여 들어오지 않게 함.
+        // BFS에서 자주 읽고 쓰는 필드들 별도 배열로 분리 (SoA)
         std::array<float, VOLUME> cost;
         std::array<bool, VOLUME> visited;
 
-        // 2단계에서만 쓰이는 "차가운(cold)" 데이터 - 별도 배열
+        // cold 데이터 - flowfield 값
         std::array<DirectX::XMFLOAT3, VOLUME> direction;
 
         FlowFieldChunk()
@@ -46,11 +45,13 @@ private:
         }
     };
 
-    // AStarPathfinder와 동일하게 unique_ptr+unordered_map 방식
+    // unique_ptr+unordered_map
     std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>> m_Chunks;
 
     FlowFieldChunk* FindOrCreateChunk(int x, int y, int z, int& outLocalIdx);
     const FlowFieldChunk* FindChunk(int x, int y, int z, int& outLocalIdx) const;
 
+
+    // 주변셀의 Cost를 비교해 낮아지는 칸을 경로로 지정
     void ComputeDirections(const VoxelGrid& grid);
 };
