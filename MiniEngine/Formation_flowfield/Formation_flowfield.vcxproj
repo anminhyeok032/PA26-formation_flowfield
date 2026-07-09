@@ -232,7 +232,7 @@
     <ClInclude Include="AStarPathfinder.h" />
     <ClInclude Include="ChunkKey.h" />
     <ClInclude Include="CorridorFlowField.h" />
-    <ClInclude Include="FlowFieldSolver.h" />
+    <ClInclude Include="FlowField.h" />
     <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
     <ClInclude Include="NPCRenderer.h" />
@@ -287,16 +287,16 @@
       <AdditionalDependencies>zlibstatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <ClCompile>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Default</LanguageStandard>
     </ClCompile>
     <ClCompile>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Default</LanguageStandard>
     </ClCompile>
     <ClCompile>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Default</LanguageStandard>
     </ClCompile>
     <ClCompile>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">stdcpp17</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Default</LanguageStandard>
     </ClCompile>
   </ItemDefinitionGroup>
   <ImportGroup Label="ExtensionTargets">

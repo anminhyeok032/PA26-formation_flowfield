@@ -5,6 +5,7 @@
 #include <array>
 #include <unordered_map>
 #include <memory>
+#include <cmath>
 
 // DirectX::XMINT3는 POD라 operator==/해시가 없으므로 자유 함수/특수화로 보강.
 inline bool operator==(const DirectX::XMINT3& a, const DirectX::XMINT3& b)
@@ -13,6 +14,8 @@ inline bool operator==(const DirectX::XMINT3& a, const DirectX::XMINT3& b)
 }
 inline bool operator!=(const DirectX::XMINT3& a, const DirectX::XMINT3& b) { return !(a == b); }
 
+
+// std를 열어서 DirectX::XMINT3에 대한 해싱 명시
 namespace std
 {
     template<> struct hash<DirectX::XMINT3>
@@ -41,7 +44,6 @@ public:
                     int maxIterations = 100000);
 
 private:
-    // cameFrom을 아예 저장하지 않음. 이동 비용이 균일(1칸=1)하므로,
     // 탐색이 끝난 뒤 내 이웃 중 gScore가 정확히 나보다 1 작은 셀을 찾으면 부모
     struct PathNodeChunk
     {
@@ -51,29 +53,43 @@ private:
         std::array<float, VOLUME> gScore;
         std::array<bool, VOLUME> closed;
 
+        // 부모로 가는 델타 - 이동방향(dx,dy,dz, 각 -1/0/1)를 2비트씩 압축해 1바이트로 저장.
+        // 0xFF = 부모 없음(시작 노드). gScore 역산 방식이 비용 종류 4가지(1,√2,√2,√3)
+        std::array<uint8_t, VOLUME> parentDir;
+
         PathNodeChunk()
         {
             gScore.fill(FLT_MAX);
             closed.fill(false);
+            parentDir.fill(0xFFu);
         }
     };
-
     std::unordered_map<int64_t, std::unique_ptr<PathNodeChunk>> m_Chunks;
 
 
-    PathNodeChunk* FindOrCreateChunk(int x, int y, int z, int& outLocalIdx);
-    const PathNodeChunk* FindChunk(int x, int y, int z, int& outLocalIdx) const;
+    // 그전에 찾은 청크를 캐싱해서 매번 해싱 오버헤드 방지
+    struct ChunkCache
+    {
+        // -1 - 캐시안된 상태
+        int64_t key = -1;
+        PathNodeChunk * chunk = nullptr;
+    };
+
+    PathNodeChunk* FindOrCreateChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache);
+    const PathNodeChunk* FindChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache) const;
 
     // 탐색 종료 후, gScore만으로 목적지->시작점 경로를 거꾸로 재구성.
     // 방문한 노드 전체가 아니라 실제 경로 길이만큼만 탐색
-    bool ReconstructPath(const VoxelGrid& grid, const DirectX::XMINT3& start,
+    bool ReconstructPath(const DirectX::XMINT3& start,
         const DirectX::XMINT3& goal, std::vector<DirectX::XMINT3>& outPath) const;
 
 
-
+    // Euclidean
     static float Heuristic(const DirectX::XMINT3& a, const DirectX::XMINT3& b)
     {
-        // y는 지형에 종속된 파생값이라 수평 거리만 사용 (기존 FlowField 설계와 동일 원칙)
-        return (float)(std::abs(a.x - b.x) + std::abs(a.z - b.z));
+        float dx = (float)(a.x - b.x);
+        float dy = (float)(a.y - b.y);
+        float dz = (float)(a.z - b.z);
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
     }
 };

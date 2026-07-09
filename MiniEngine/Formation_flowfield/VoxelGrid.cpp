@@ -25,6 +25,7 @@ void VoxelGrid::Initialize(int sizeX, int sizeY, int sizeZ, float cellSize)
     }
 
     m_Cells.clear();
+
 }
 
 void VoxelGrid::Shutdown()
@@ -34,11 +35,6 @@ void VoxelGrid::Shutdown()
     m_ChunkCountX = m_ChunkCountY = m_ChunkCountZ = 0;  // 청크 카운트도 리셋
 }
 
-void VoxelGrid::BuildFromHeightMap(const HeightMap& hm)
-{
-    BuildCells(hm);
-    ValidateWalkable();
-}
 
 void VoxelGrid::BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, int sizeY, int sizeZ, float cellSize)
 {
@@ -120,187 +116,80 @@ void VoxelGrid::BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, i
 }
 
 void VoxelGrid::BuildFromHeightMapWithTunnel(const HeightMap& ground,
-    float startX, float startZ,
-    float endX, float endZ,
-    float tunnelHeightWorld,
-    float tunnelRadiusWorld,
-    float archThicknessWorld,
+    const DirectX::XMFLOAT3& start,
+    const DirectX::XMFLOAT3& end,
+    float radius,               // 터널 폭(중심선 기준 반경)
+    float shellThickness,       // 터널 벽/천장의 두께
     bool  openAtStart,
     bool  openAtEnd)
 {
     float cellSize = ground.GetVoxelSize();
+    float outerRadius = (radius + shellThickness);
+
+    float axisY = ground.SampleHeight(start.x, start.z) - radius/3.0f;
+
+    DirectX::XMFLOAT3 startPoint = { start.x, axisY, start.z };
+    DirectX::XMFLOAT3 endPoint = { end.x, axisY, end.z };
+
+    XMVECTOR S = XMLoadFloat3(&startPoint);
+    XMVECTOR E = XMLoadFloat3(&endPoint);
+    DirectX::XMVECTOR axisDir = DirectX::XMVectorSubtract(E, S);
+
+    // 축 길이의 제곱을 미리 한 번만 계산
+    float axisLenSq = DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(axisDir));
+
+    // 맵 크기 계산 (기존 BuildCells와 동일한 방식)
     int sizeX = (int)(ground.GetWorldWidth() / cellSize);
     int sizeZ = (int)(ground.GetWorldDepth() / cellSize);
 
-    // 아치가 지표면 위로 솟아오르는 만큼 맵 높이(sizeY)에 여유를 더함
-    float extraWorldHeight = tunnelHeightWorld + archThicknessWorld + 1.0f; // +1은 여유분
-    int sizeY = (int)((ground.GetMaxHeight() + extraWorldHeight) / cellSize) + 1;
-
-    int archThicknessCells = std::max(1, (int)(archThicknessWorld / cellSize));
-
-    // 터널 경로 벡터 (시작->끝)
-    float dx = endX - startX;
-    float dz = endZ - startZ;
-    float pathLenSq = dx * dx + dz * dz;
-    float pathLen = std::sqrt(pathLenSq);
-
-    // 입/출구 개방 전환 구간 길이 — 이 거리 안에서 아치 높이가 0->최대로 서서히 자라남
-    float transitionLen = std::max(cellSize, tunnelRadiusWorld * 2.0f);
+    // 축이 원래 지형 최고높이보다 위로 솟을 수 있으니, 그만큼 sizeY에 여유를 둠
+    float maxPossibleHeight = std::max(ground.GetMaxHeight(), axisY + radius + shellThickness);
+    int sizeY = (int)(maxPossibleHeight / cellSize) + 2;
 
     auto isSolid = [&](int x, int y, int z) -> bool
     {
-        float wx = (x + 0.5f) * cellSize;
-        float wz = (z + 0.5f) * cellSize;
+        DirectX::XMFLOAT3 worldF = { x * cellSize, y * cellSize, z * cellSize };
+        DirectX::XMVECTOR P = DirectX::XMLoadFloat3(&worldF);
 
-        int groundY = (int)(ground.SampleHeight(wx, wz) / cellSize);
-        groundY = std::max(0, std::min(groundY, sizeY - 1));
+        float wx = worldF.x;
+        float wz = worldF.z;
+        float GroundY = ground.SampleHeight(wx, wz);
+        bool baseSolid = (worldF.y <= GroundY);
 
-        // 1. 기존 지표면까지는 그대로 solid (터널 바닥, 기존 지형 유지)
-        if (y <= groundY) return true;
+        // 원래 지형(바닥)이었던 부분은 원 안쪽이라도 그대로 보존 -> 밟고 다닐 바닥 유지
+        if (true == baseSolid)
+            return true;
 
-        // 2. 이 컬럼이 터널 경로에서 얼마나 떨어져 있는지 계산 (선분 최단거리)
-        float t = pathLenSq > 0.0f ? ((wx - startX) * dx + (wz - startZ) * dz) / pathLenSq : 0.0f;
-        t = std::max(0.0f, std::min(t, 1.0f));
+        // cell 위치를 중심축에 투영 후, 비율 구하기
+        DirectX::XMVECTOR toP = DirectX::XMVectorSubtract(P, S);
+        float rawT = DirectX::XMVectorGetX(DirectX::XMVector3Dot(toP, axisDir)) / axisLenSq;
+        float clampedT = std::max(0.0f, std::min(rawT, 1.0f));
 
-        float closestX = startX + t * dx;
-        float closestZ = startZ + t * dz;
-        float perpDist = std::sqrt((wx - closestX) * (wx - closestX) + (wz - closestZ) * (wz - closestZ));
+        // S + axisDir × clampedT
+        DirectX::XMVECTOR closeestPoint = DirectX::XMVectorAdd(S, DirectX::XMVectorScale(axisDir, clampedT));
+        // 검사하려는 셀과 실제 거리
+        float dist = DirectX::XMVectorGetX(DirectX::XMVector3Length(DirectX::XMVectorSubtract(P, closeestPoint)));
 
-        // 터널 폭 바깥이면 이 함수는 관여하지 않음 -> 기존과 동일하게 지표면 위는 공중
-        if (perpDist > tunnelRadiusWorld) return false;
+        // 비율이 양끝이면 검사로 끝에를 연다
+        bool inStart = (rawT < 0.0f);
+        bool inEnd = (rawT > 1.0f);
 
-        // 3. 시작/끝 지점까지의 경로상 거리 (양 끝에서 0이 되도록)
-        float distFromStart = t * pathLen;
-        float distFromEnd = (1.0f - t) * pathLen;
+        bool openShell = (inStart && openAtStart) || (inEnd && openAtEnd);
 
-        // 개방 전환 비율 계산: 강제 개방하는 쪽 끝에서는 0에 가까울수록 openFrac도 0에 가까워짐
-        float openFracStart = openAtStart ? std::min(1.0f, distFromStart / transitionLen) : 1.0f;
-        float openFracEnd = openAtEnd ? std::min(1.0f, distFromEnd / transitionLen) : 1.0f;
-        float openFrac = std::min(openFracStart, openFracEnd); // 둘 중 더 "닫힌"(개방 안 된) 쪽을 따름
+        // 바깥 반지름 안쪽이면 지형과 상관없이 새로운 지형 생성
+        bool forcedSolid = (dist <= outerRadius) && (!openShell);
+        bool solidHere = baseSolid || forcedSolid;
 
-        // 4. 아치 높이 = 목표 높이(헤드룸+두께) * 개방비율
-        //    양 끝(openFrac=0)에서는 추가 높이 0 -> 지표면 그대로, 즉 완전 개방
-        float addHeight = (tunnelHeightWorld + archThicknessWorld) * openFrac;
-        int addCells = (int)(addHeight / cellSize);
-
-        if (addCells <= 0) return false; // 이 지점은 아치 없음 -> 공중 (입/출구 부분)
-
-        int archTopY = groundY + addCells;
-        int archBotY = std::max(groundY, archTopY - archThicknessCells); // 지표면 아래로는 못 내려감
-
-        if (archBotY <= archTopY && y >= archBotY && y <= archTopY)
-            return true; // 아치 본체 -> solid
-
-        return false; // 터널 내부 간격 또는 아치 위 공중 -> air
+        if (dist <= radius)
+            return false;
+        return solidHere;
     };
-
     BuildFromVolumeSource(isSolid, sizeX, sizeY, sizeZ, cellSize);
     ValidateWalkable();
+    BuildSurfaceCache();
 }
 
 
-void VoxelGrid::BuildCells(const HeightMap& hm)
-{
-    m_Cells.clear();
-    m_CellSize = hm.GetVoxelSize(); // 복셀 크기
-
-    // 복셀 수를 맵 크기 / 복셀 크기로 결정
-    float worldW = hm.GetWorldWidth();  // = 픽셀수 × worldScale
-    float worldD = hm.GetWorldDepth();
-
-    m_SizeX = (int)(worldW / m_CellSize); // 복셀 수 = 맵크기 / 복셀크기
-    m_SizeZ = (int)(worldD / m_CellSize);
-    m_SizeY = (int)(hm.GetMaxHeight() / m_CellSize) + 1;
-
-    // 청크 배열 할당 (전체 Empty로 초기화됨)
-    AllocateChunks();
-
-    // 1단계: 높이맵 읽어서 3D 그리드에 채워진 공간 마킹
-    //        m_Grid만 채움 (m_Cells는 아직 안 넣음)
-    for (int z = 0; z < m_SizeZ; z++)
-    {
-        for (int x = 0; x < m_SizeX; x++)
-        {
-            // 이 복셀의 월드 중심 좌표
-            float wx = (x + 0.5f) * m_CellSize;
-            float wz = (z + 0.5f) * m_CellSize;
-
-            
-            float worldH = hm.SampleHeight(wx, wz);
-            //float worldH = hm.GetHeight(wx, wz);
-            int   surfY = (int)(worldH / m_CellSize);
-            surfY = std::max(0, std::min(surfY, m_SizeY - 1));
-
-            // y=0 ~ surfY 공간을 Blocked로 마킹 (패스 2에서 Walkable로 바뀔 수 있음)
-            for (int y = 0; y <= surfY; y++)
-            {
-                SetCell(x, y, z, CellType::Blocked);  // 배열 직접 대입 대신 SetCell
-            }
-        }
-    }
-
-    // 2단계: 렌더링할 복셀만 m_Cells에 추가
-    //        조건: 표면 OR 바닥(y=0) OR 4면 벽(맵 가장자리)
-    for (int z = 0; z < m_SizeZ; z++)
-    {
-        for (int x = 0; x < m_SizeX; x++)
-        {
-            int surfY = GetSurfaceY(x, z);
-
-            for (int y = 0; y <= surfY; y++)
-            {
-                // 이 복셀을 렌더링해야 하는지 판단
-                bool isTopSurface = (y == surfY);
-                bool isBottom = (y == 0);
-                bool isWallX = (x == 0 || x == m_SizeX - 1);
-                bool isWallZ = (z == 0 || z == m_SizeZ - 1);
-
-                // 4면 벽: 가장자리 x,z 열의 모든 y
-                // 바닥: 모든 x,z에서 y=0
-                // 표면: 각 x,z의 최상단 y
-                // 벽면: 이웃 셀보다 높은 y는 옆면이 공기에 노출됨
-                bool isExposedSide = false;
-                if (!isTopSurface && !isBottom && !isWallX && !isWallZ)
-                {
-                    const int dx[] = { 1, -1,  0, 0 };
-                    const int dz[] = { 0,  0,  1,-1 };
-
-                    for (int d = 0; d < 4; d++)
-                    {
-                        int nx = x + dx[d];
-                        int nz = z + dz[d];
-
-                        // 맵 밖이면 공기에 노출된 것
-                        if (nx < 0 || nx >= m_SizeX ||
-                            nz < 0 || nz >= m_SizeZ)
-                        {
-                            isExposedSide = true;
-                            break;
-                        }
-
-                        // 이웃의 surfY보다 현재 y가 높으면
-                        // 이 y는 이웃 방향에서 보일 수 있는 옆면
-                        if (y > GetSurfaceY(nx, nz))
-                        {
-                            isExposedSide = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 내부면 렌더 스킵
-                if (!isTopSurface && !isBottom && !isWallX && !isWallZ && !isExposedSide)   continue;
-
-                VoxelCell cell;
-                cell.x = x;
-                cell.y = y;
-                cell.z = z;
-                cell.type = CellType::Blocked; // 패스 2에서 덮어씀
-                m_Cells.push_back(cell);
-            }
-        }
-    }
-}
 
 void VoxelGrid::ValidateWalkable()
 {
@@ -399,35 +288,21 @@ int VoxelGrid::GetSurfaceY(int x, int z) const
     return 0;
 }
 
-std::vector<int> VoxelGrid::GetSurfaceYList(int x, int z) const
+
+VoxelGrid::SurfaceSpan VoxelGrid::GetSurfaceYList(int x, int z) const
 {
-    // (x,z) 컬럼을 아래(y=0)에서 위로 훑으면서
-    // "Solid(채워짐) 다음에 Empty가 나오는" 경계를 전부 표면으로 기록.
-    // 단층 지형이면 결과가 1개, 동굴이 있으면 2개 이상이 됨.
-    std::vector<int> surfaces;
+    if (x < 0 || x >= m_SizeX || z < 0 || z >= m_SizeZ) return { nullptr, 0 };
+    // 캐시 미구축 상태
+    if (m_SurfaceChunks.empty())    return { nullptr, 0 };
 
-    bool prevFilled = false; // y=-1은 가상의 Empty(바닥 아래는 없음)로 취급
-    for (int y = 0; y < m_SizeY; y++)
-    {
-        bool curFilled = (GetCell(x, y, z) != CellType::Empty);
+    int cx = x / SurfaceChunk::CHUNK_SIZE;
+    int cz = z / SurfaceChunk::CHUNK_SIZE;
+    int lx = x % SurfaceChunk::CHUNK_SIZE;
+    int lz = z % SurfaceChunk::CHUNK_SIZE;
+    int chunkIdx = cx + m_SurfaceChunkCountX * cz;
 
-        // Filled -> Empty로 바뀌는 경계 = 직전 y(prevFilled였던 y-1)가 밟을 수 있는 표면
-        if (prevFilled && !curFilled)
-        {
-            surfaces.push_back(y - 1);
-        }
-
-        prevFilled = curFilled;
-    }
-
-    // 컬럼 맨 위(y = m_SizeY-1)까지 채워진 채로 끝난 경우(=그 위가 곧바로 맵 경계)도
-    // 표면으로 포함시킴 - GetSurfaceY의 "above >= m_SizeY이면 표면" 규칙과 동일하게 맞춤
-    if (true == prevFilled)
-    {
-        surfaces.push_back(m_SizeY - 1);
-    }
-
-    return surfaces;
+    const auto& col = m_SurfaceChunks[chunkIdx].At(lx, lz);
+    return { col.surfaces.data(), (int)col.count };
 }
 
 bool VoxelGrid::FindNearestWalkable(const Math::Vector3& worldPos, int& outX, int& outY, int& outZ, int maxSearchRadius) const
@@ -456,10 +331,10 @@ bool VoxelGrid::FindNearestWalkable(const Math::Vector3& worldPos, int& outX, in
                 if (x < 0 || x >= m_SizeX || z < 0 || z >= m_SizeZ) continue;
 
                 // 이 컬럼의 모든 표면 후보 중, worldPos.y와 가장 가까운 Walkable 층을 찾음
-                std::vector<int> surfaces = GetSurfaceYList(x, z);
-                for (int sy : surfaces)
+                VoxelGrid::SurfaceSpan surfaces = GetSurfaceYList(x, z);
+                for(auto sy : surfaces)
                 {
-                    if (!IsWalkable(x, sy, z)) continue;
+                    if (false == IsWalkable(x, sy, z)) continue;
 
                     Math::Vector3 candidatePos = GetWorldPos(x, sy, z);
                     float distSq = Math::LengthSquare(candidatePos - worldPos);
@@ -498,6 +373,63 @@ void VoxelGrid::AllocateChunks()
     // VoxelChunk 기본 생성자가 이미 Empty로 채우므로 별도 fill 불필요
     m_Chunks.clear();
     m_Chunks.resize(totalChunks);
+}
+
+void VoxelGrid::AllocateSurfaceCache()
+{
+    m_SurfaceChunkCountX = (m_SizeX + SurfaceChunk::CHUNK_SIZE - 1) / SurfaceChunk::CHUNK_SIZE;
+    m_SurfaceChunkCountZ = (m_SizeZ + SurfaceChunk::CHUNK_SIZE - 1) / SurfaceChunk::CHUNK_SIZE;
+
+    size_t total = (size_t)m_SurfaceChunkCountX * m_SurfaceChunkCountZ;
+    m_SurfaceChunks.clear();
+    m_SurfaceChunks.resize(total);   // 기본 생성자가 count=0으로 초기화
+}
+
+void VoxelGrid::RefreshSurfaceColumn(int x, int z)
+{
+    int cx = x / SurfaceChunk::CHUNK_SIZE;
+    int cz = z / SurfaceChunk::CHUNK_SIZE;
+    int lx = x % SurfaceChunk::CHUNK_SIZE;
+    int lz = z % SurfaceChunk::CHUNK_SIZE;
+    int chunkIdx = cx + m_SurfaceChunkCountX * cz;
+
+    auto& col = m_SurfaceChunks[chunkIdx].At(lx, lz);
+    col.count = 0;
+
+    bool prevFilled = false;
+    for (int y = 0; y < m_SizeY; y++)
+    {
+        bool currFilled = (GetCell(x, y, z) != CellType::Empty);
+        if (prevFilled && !currFilled)
+        {
+            // INLINE_CAPACITY(4) 초과하는 극단적 케이스는 뒤 표면을 버림 —
+            // 동굴이 4겹 이상 겹치는 경우는 사실상 없다고 가정
+            // 아파트 같은 구조를 만약 만들게 되면 해당 로직 수정 필요.
+            if (col.count < SurfaceChunk::SurfaceColumn::INLINE_CAPACITY)
+            {
+                col.surfaces[col.count++] = y - 1;
+            }
+        }
+        prevFilled = currFilled;
+    }
+
+    if (prevFilled && col.count < SurfaceChunk::SurfaceColumn::INLINE_CAPACITY)
+    {
+        col.surfaces[col.count++] = m_SizeY - 1;
+    }
+}
+
+void VoxelGrid::BuildSurfaceCache()
+{
+    AllocateSurfaceCache();  // 청크 배열 할당
+
+    for (int z = 0; z < m_SizeZ; z++)
+    {
+        for (int x = 0; x < m_SizeX; x++)
+        {
+            RefreshSurfaceColumn(x, z);   // 컬럼당 1회 전체 스캔
+        }
+    }
 }
 
 void VoxelGrid::ToChunkCoord(int x, int y, int z, int& chunkIndex, int& lx, int& ly, int& lz) const

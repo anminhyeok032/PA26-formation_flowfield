@@ -4,44 +4,82 @@
 #include <algorithm>
 #include <cmath>
 
-AStarPathfinder::PathNodeChunk* AStarPathfinder::FindOrCreateChunk(int x, int y, int z, int& outLocalIdx)
+// PathNodeChunk 내에 parentDir을 위한 헬퍼
+namespace
 {
-    int cx = x / PathNodeChunk::SIZE;
-    int cy = y / PathNodeChunk::SIZE;
-    int cz = z / PathNodeChunk::SIZE;
-    int64_t key = MakeChunkKey(cx, cy, cz);
+    constexpr uint8_t kNoParent = 0xFFu;
 
-    auto it = m_Chunks.find(key);
-    if (it == m_Chunks.end())
-        it = m_Chunks.emplace(key, std::make_unique<PathNodeChunk>()).first;
+    // dx,dy,dz(각 -1/0/1) -> 2비트씩 packing (0/1/2로 offset해서 저장)
+    uint8_t EncodeParentDelta(int dx, int dy, int dz)
+    {
+        uint8_t ex = (uint8_t)(dx + 1);
+        uint8_t ey = (uint8_t)(dy + 1);
+        uint8_t ez = (uint8_t)(dz + 1);
+        return ex | (ey << 2) | (ez << 4);
+    }
 
-    int lx = x % PathNodeChunk::SIZE;
-    int ly = y % PathNodeChunk::SIZE;
-    int lz = z % PathNodeChunk::SIZE;
-    outLocalIdx = lx + PathNodeChunk::SIZE * (ly + PathNodeChunk::SIZE * lz);
-    return it->second.get();
+    void DecodeParentDelta(uint8_t packed, int& dx, int& dy, int& dz)
+    {
+        dx = (int)(packed & 0x3u) - 1;
+        dy = (int)((packed >> 2) & 0x3u) - 1;
+        dz = (int)((packed >> 4) & 0x3u) - 1;
+    }
 }
 
-const AStarPathfinder::PathNodeChunk* AStarPathfinder::FindChunk(int x, int y, int z, int& outLocalIdx) const
+AStarPathfinder::PathNodeChunk* AStarPathfinder::FindOrCreateChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache)
 {
     int cx = x / PathNodeChunk::SIZE;
     int cy = y / PathNodeChunk::SIZE;
     int cz = z / PathNodeChunk::SIZE;
     int64_t key = MakeChunkKey(cx, cy, cz);
 
-    auto it = m_Chunks.find(key);
-    if (it == m_Chunks.end()) return nullptr;
+    if (key != cache.key)
+    {
+        auto it = m_Chunks.find(key);
+        if (it == m_Chunks.end())
+            it = m_Chunks.emplace(key, std::make_unique<PathNodeChunk>()).first;
+
+        cache.key = key;
+        cache.chunk = it->second.get();
+    }
 
     int lx = x % PathNodeChunk::SIZE;
     int ly = y % PathNodeChunk::SIZE;
     int lz = z % PathNodeChunk::SIZE;
     outLocalIdx = lx + PathNodeChunk::SIZE * (ly + PathNodeChunk::SIZE * lz);
-    return it->second.get();
+    return cache.chunk;
+}
+
+const AStarPathfinder::PathNodeChunk* AStarPathfinder::FindChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache) const
+{
+    int cx = x / PathNodeChunk::SIZE;
+    int cy = y / PathNodeChunk::SIZE;
+    int cz = z / PathNodeChunk::SIZE;
+    int64_t key = MakeChunkKey(cx, cy, cz);
+
+    if (key != cache.key)
+    {
+        auto it = m_Chunks.find(key);
+        if (it == m_Chunks.end())
+        {
+            cache.key = -1;   // 실패 시 캐시를 무효화
+            return nullptr;
+        }
+        cache.key = key;
+        cache.chunk = const_cast<PathNodeChunk*>(it->second.get());
+    }
+
+    int lx = x % PathNodeChunk::SIZE;
+    int ly = y % PathNodeChunk::SIZE;
+    int lz = z % PathNodeChunk::SIZE;
+    outLocalIdx = lx + PathNodeChunk::SIZE * (ly + PathNodeChunk::SIZE * lz);
+    return cache.chunk;
 }
 
 bool AStarPathfinder::FindPath(const VoxelGrid& grid, const XMINT3& start, const XMINT3& goal,
     std::vector<XMINT3>& outPath, int maxIterations)
 {
+    // 각 인스턴스마다 따로 가지고 있음
     m_Chunks.clear(); // 이전 탐색 기록 초기화 (탐색마다 새로 시작)
     outPath.clear();
 
@@ -54,12 +92,15 @@ bool AStarPathfinder::FindPath(const VoxelGrid& grid, const XMINT3& start, const
 
     std::priority_queue<OpenEntry, std::vector<OpenEntry>, std::greater<OpenEntry>> openList;
 
+    ChunkCache chunkCache;
+
     int startIdx;
-    PathNodeChunk* startChunk = FindOrCreateChunk(start.x, start.y, start.z, startIdx);
+    PathNodeChunk* startChunk = FindOrCreateChunk(start.x, start.y, start.z, startIdx, chunkCache);
     startChunk->gScore[startIdx] = 0.0f;
+    startChunk->parentDir[startIdx] = kNoParent;
     openList.push({ start, Heuristic(start, goal) });
 
-    std::vector<DirectX::XMINT3> neighbors;
+    std::vector<NeighborInfo> neighbors;
     int iterations = 0;
 
     while (!openList.empty())
@@ -74,31 +115,41 @@ bool AStarPathfinder::FindPath(const VoxelGrid& grid, const XMINT3& start, const
 
         // 이미 더 나은 경로로 확정된 노드라면 스킵
         int curIdx;
-        PathNodeChunk* curChunk = FindOrCreateChunk(current.x, current.y, current.z, curIdx);
-        if (true == curChunk->closed[curIdx]) continue;
-        curChunk->closed[curIdx] = true;
+        PathNodeChunk* currChunk = FindOrCreateChunk(current.x, current.y, current.z, curIdx, chunkCache);
+        if (true == currChunk->closed[curIdx]) continue;
+        currChunk->closed[curIdx] = true;
 
         if (current == goal)
         {
-            return ReconstructPath(grid, start, goal, outPath); // gScore만으로 경로 복원
+            return ReconstructPath(start, goal, outPath); // gScore만으로 경로 복원
         }
 
-        float currentG = curChunk->gScore[curIdx];
+        float currentG = currChunk->gScore[curIdx];
 
         GetWalkableNeighbors(grid, current, neighbors);
 
         for (const auto& n : neighbors)
         {
             int idx;
-            PathNodeChunk* nChunk = FindOrCreateChunk(n.x, n.y, n.z, idx);
+            PathNodeChunk* nChunk = FindOrCreateChunk(n.pos.x, n.pos.y, n.pos.z, idx, chunkCache);
             if (nChunk->closed[idx]) continue;
 
-            float predG = currentG + 1.0f;
+            float predG = currentG + n.cost;
 
             if (predG < nChunk->gScore[idx])
             {
                 nChunk->gScore[idx] = predG;
-                openList.push({ n, predG + Heuristic(n, goal) });
+
+                // n의 부모는 current이므로, n -> current로 가는 델타(= current - n)를 저장.
+                // 나중에 재구성 시 n + delta = current(부모)로 즉시 복원 가능.
+                int dx = current.x - n.pos.x;
+                int dy = current.y - n.pos.y;
+                int dz = current.z - n.pos.z;
+                
+                nChunk->parentDir[idx] = EncodeParentDelta(dx, dy, dz);
+
+
+                openList.push({ n.pos, predG + Heuristic(n.pos, goal) });
             }
         }
     }
@@ -107,44 +158,28 @@ bool AStarPathfinder::FindPath(const VoxelGrid& grid, const XMINT3& start, const
 }
 
 
-bool AStarPathfinder::ReconstructPath(const VoxelGrid& grid, const DirectX::XMINT3& start,
+bool AStarPathfinder::ReconstructPath(const DirectX::XMINT3& start,
     const DirectX::XMINT3& goal, std::vector<DirectX::XMINT3>& outPath) const
 {
     outPath.clear();
     outPath.push_back(goal);
 
     DirectX::XMINT3 trace = goal;
-    std::vector<DirectX::XMINT3> neighbors;
+    ChunkCache cachechunk;
 
     while (!(trace == start))
     {
-        int traceIdx;
-        const PathNodeChunk* traceChunk = FindChunk(trace.x, trace.y, trace.z, traceIdx);
-        float traceG = traceChunk->gScore[traceIdx];
+        int idx;
+        const PathNodeChunk* traceChunk = FindChunk(trace.x, trace.y, trace.z, idx, cachechunk);
 
-        GetWalkableNeighbors(grid, trace, neighbors);
+        if (!traceChunk || traceChunk->parentDir[idx] == kNoParent)
+            return false;   // 이론상 발생하면 안 되지만, 안전장치로 실패 처리
 
-        DirectX::XMINT3 prev{ -1,-1,-1 };
-        bool found = false;
+        int dx, dy, dz;
+        DecodeParentDelta(traceChunk->parentDir[idx], dx, dy, dz);
 
-        for (const auto& n : neighbors)
-        {
-            int idx;
-            const PathNodeChunk* nChunk = FindChunk(n.x, n.y, n.z, idx);
-            // 나보다 gScore가 1 작은 이웃 == 내가 여기 온 경로의 부모
-            if (nChunk && 
-                true == nChunk->closed[idx] &&
-                std::abs(nChunk->gScore[idx] - (traceG - 1.0f)) < 0.001f)   // float 비교 epsilon
-            {
-                prev = n;
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) return false; // 이론상 발생하면 안 되지만, 안전장치로 실패 처리
-
-        outPath.push_back(prev);
+        DirectX::XMINT3 prev{ trace.x + dx, trace.y + dy, trace.z + dz };
+        outPath.emplace_back(prev);
         trace = prev;
     }
 

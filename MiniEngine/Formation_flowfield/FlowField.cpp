@@ -1,10 +1,9 @@
-﻿#include "GameCore.h"
-#include "CameraController.h"
-#include "Camera.h"				// view/proj
-#include "BufferManager.h"		// rendertarget/depthbuffer
-#include "CommandContext.h"		// GraphicsContext/CommandContext
+﻿#include "FlowField.h"
+
+#include "BufferManager.h"      // rendertarget/depthbuffer
+#include "CommandContext.h"     // GraphicsContext/CommandContext
 #include "SystemTime.h"
-#include "TextRenderer.h"		// Text
+#include "TextRenderer.h"       // Text
 #include "GameInput.h"
 
 // model load
@@ -19,10 +18,6 @@
 #include "PipelineState.h"
 #include "GraphicsCommon.h"
 
-#include "VoxelRenderer.h"
-#include "VoxelGrid.h"
-#include "HeightMap.h"
-#include "NPCRenderer.h"
 
 
 using namespace GameCore;
@@ -40,68 +35,12 @@ constexpr float VOXEL_SIZE = 0.5f;
 constexpr float NPC_HEIGHT = (VOXEL_SIZE * 3.0f) / 2.0f;
 constexpr float NPC_WIDTH = VOXEL_SIZE / 2.0f;
 
-class FlowField : public GameCore::IGameApp
-{
-public:
-    virtual void Startup(void) override;
-    virtual void Cleanup(void) override;
-    void FlushVoxelInstanceChanges(std::vector<int>& changedIndices);
-    virtual void Update(float deltaT) override;
-    virtual void RenderScene(void) override;
-
-private:
-    Camera m_Camera;
-    std::unique_ptr<CameraController> m_CameraController;
-    D3D12_VIEWPORT m_MainViewport;
-    D3D12_RECT m_MainScissor;
-
-    HeightMap m_HeightMap;
-    VoxelGrid m_VoxelGrid;
-
-    // ---- NPC 선택 관련 ----
-    std::vector<NPCRenderer::InstanceData> m_NpcInstances;      // 지속 보관 (색상만 바꿔 재업로드하기 위해)
-    float m_NpcPickRadius = 1.0f;                               // 좌클릭 피킹 시 NPC를 구(sphere)로 취급할 반지름
-    int   m_SelectedNpcIndex = -1;                              // 현재 선택된 NPC 인덱스, 없으면 -1
-
-    // ---- 목적지 복셀 선택 관련 ----
-    std::vector<VoxelRenderer::InstanceData> m_VoxelInstances;  // 지속 보관
-    std::vector<VoxelGrid::CellCoord>        m_VoxelCellCoords; // m_VoxelInstances와 1:1 대응
-
-    // (x,y,z) 좌표 -> m_VoxelInstances 배열의 인덱스로 즉시 찾아가기 위한 색인.
-    // BuildInstanceList 직후 딱 한 번만 만들고, 그 이후로는 조회만 함.
-    std::unordered_map<int64_t, int> m_VoxelCoordToIndex;
-
-    // 좌표 세 개(x,y,z)를 해시맵 키로 쓸 숫자 하나로 합치는 함수
-    static int64_t MakeVoxelCoordKey(int x, int y, int z)
-    {
-        return (int64_t)(x & 0x1FFFFF) |
-            ((int64_t)(y & 0x1FFFFF) << 21) |
-            ((int64_t)(z & 0x1FFFFF) << 42);
-    }
-
-    int m_HoverCellIndex = -1;      // 지금 마우스가 가리키는 셀 (매 프레임 갱신)
-    int m_ConfirmedCellIndex = -1;  // 우클릭으로 확정된 목적지 (다음 확정 전까지 유지)
-    bool m_HoverActive = false;     // NPC 선택 시 true, 우클릭으로 확정되는 순간 false (호버 정지)
-
-    void RestoreCellColor(int instanceIndex); // 헬퍼: 실제 셀 타입 기준으로 색 복원
-
-
-    // true = 인게임(카메라 조작 모드, 커서 숨김) / false = 해제(커서 보임, 피킹 가능)
-    // 기본값 true로 시작 -> Startup()에서 커서 숨김과 짝을 맞춰야 함
-    bool m_MouseCaptured = true;
-
-    // ---- 피킹(레이캐스팅) 관련 헬퍼 ----
-    // 화면 좌표(마우스 클라이언트 좌표)를 월드 공간 레이(origin, dir)로 변환
-    bool ScreenPointToRay(int mouseX, int mouseY, Math::Vector3& outOrigin, Math::Vector3& outDir) const;
-    // 매 프레임 좌/우클릭을 검사해서 NPC 선택 / 목적지 지정 처리
-    void HandlePicking();
-};
 
 CREATE_APPLICATION(FlowField);
 
 void FlowField::Startup(void)
 {
-    m_Camera.SetZRange(1.0f, 20000.0f); // 1-10000까지만 그려짐
+    m_Camera.SetZRange(1.0f, 20000.0f); // 1-20000까지만 그려짐
 
     m_CameraController.reset(
         new FlyingFPSCamera(m_Camera, Vector3(kYUnitVector)));
@@ -138,15 +77,16 @@ void FlowField::Startup(void)
 
     if (true == loaded)
     {
+        DirectX::XMFLOAT3 StartPos { 70.0f, 0.0f, 90.0f };
+        DirectX::XMFLOAT3 EndPos { 100.0f, 0.0f, 91.0f };
         // 관통 터널 생성
         m_VoxelGrid.BuildFromHeightMapWithTunnel(
             m_HeightMap,
-            70.0f, 90.0f,       // 입구 좌표
-            170.0f, 104.0f,     // 출구 좌표
-            15.0f,              // 터널 내부 높이(헤드룸)
-            30.0f,              // 터널 반경
-            2.0f,               // 아치 두께
-            true, true);        // 양쪽 다 개방
+            StartPos,
+            EndPos,
+            15.0f,               // 터널 반지름
+            1.5,              
+            false, true);        // 양쪽 다 개방
 
         
         m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
@@ -190,7 +130,6 @@ void FlowField::Startup(void)
         -90.0f,                         // 아래를 봄
         Vector3(xz_position, MAX_HEIGHT * 2.0f, xz_position)    // 카메라 위치
     );
-
 
     // 테스트용 NPC 배치
     m_NpcInstances.clear();
@@ -377,10 +316,128 @@ void FlowField::HandlePicking()
         m_HoverActive = false; // 목적지 확정 -> 실시간 호버 종료
 
 
-        // TODO: 여기서 FlowFieldSolver.Solve(...) 호출 예정 (길찾기는 이후 별도 구현)
+        // ---- 파이프라인: 선택된 NPC 위치 -> A* -> 마스크 -> CorridorFlowField ----
+        m_HasGoal = false; // 아래에서 전부 성공해야만 true로 바뀜
+
+        if (m_SelectedNpcIndex >= 0)
+        {
+            auto& npc = m_NpcInstances[m_SelectedNpcIndex];
+            Math::Vector3 npcPos(npc.position[0], npc.position[1], npc.position[2]);
+
+            int startX, startY, startZ;
+            bool foundStart = m_VoxelGrid.FindNearestWalkable(npcPos, startX, startY, startZ);
+
+            if (foundStart)
+            {
+                auto& goalCoord = m_VoxelCellCoords[m_ConfirmedCellIndex];
+                DirectX::XMINT3 goal{ goalCoord.x, goalCoord.y, goalCoord.z };
+                DirectX::XMINT3 start{ startX, startY, startZ };
+
+                std::vector<DirectX::XMINT3> path;
+                if (true == m_Pathfinder.FindPath(m_VoxelGrid, start, goal, path))
+                {
+                    // TODO: 지금은 NPC 1마리라 memberCount=1 고정. 그룹 도입 시 실제 인원수로 교체.
+                    int margin = ComputeMarginChunks(1, VoxelChunk::CHUNK_SIZE);
+                    auto mask = BuildChunkMask(path, margin);
+
+                    m_CorridorField.Build(m_VoxelGrid, goal, mask);
+                    m_ConfirmedGoal = goal;
+                    m_HasGoal = true;
+
+                    m_NpcCurrentCell = start;
+                    m_NpcCellInitialized = true;
+
+                    // 시작점에서의 방향을 즉시 조회해서 첫 목표 셀도 미리 정해둠
+                    DirectX::XMFLOAT3 firstDir;
+                    if (m_CorridorField.SampleDirection(start.x, start.y, start.z, firstDir))
+                    {
+                        int nx = start.x + (int)std::round(firstDir.x);
+                        int ny = start.y + (int)std::round(firstDir.y);
+                        int nz = start.z + (int)std::round(firstDir.z);
+                        m_NpcTargetCell = { nx, ny, nz };
+                    }
+                    else
+                    {
+                        m_NpcTargetCell = start; // 이미 목적지거나 방향 없음 -> 제자리
+                    }
+                }
+                // FindPath 실패(도달 불가) 시 m_HasGoal은 false로 남음
+            }
+        }
     }
 
     FlushVoxelInstanceChanges(changedVoxelIndices);
+}
+
+Math::Vector3 FlowField::GetNpcStandPos(const DirectX::XMINT3& cell, float npcHalfHeight) const
+{
+    Math::Vector3 cellCenter = m_VoxelGrid.GetWorldPos(cell.x, cell.y, cell.z);
+    float cellSize = m_VoxelGrid.GetCellSize();
+
+    // Startup()의 배치 공식과 동일: 셀 중심 -> 셀 윗면(절반) -> NPC 반높이만큼 더 위로
+    float standY = cellCenter.GetY() + (cellSize * 0.5f) + npcHalfHeight + 0.1f;
+
+    return Math::Vector3(cellCenter.GetX(), standY, cellCenter.GetZ());
+}
+
+// TODO : 현재는 타일값에다 보간하는 형태인데, RVO 움직이는 원리 파악하고 해당값 이용할 수 있도록 이동 방식 변경해보기
+void FlowField::UpdateNpcMovement(float dt)
+{
+    if (!m_HasGoal || !m_NpcCellInitialized) return;
+    if (m_SelectedNpcIndex < 0 || m_SelectedNpcIndex >= (int)m_NpcInstances.size()) return;
+
+    const float NPC_SPEED = 1.0f;
+    const float ARRIVE_EPSILON = 0.05f;
+
+    auto& inst = m_NpcInstances[m_SelectedNpcIndex];
+    Math::Vector3 curPos(inst.position[0], inst.position[1], inst.position[2]);
+
+    // 목표 셀에 도착했는지 확인
+    Math::Vector3 targetWorldPos = GetNpcStandPos(m_NpcTargetCell, inst.scaleY);
+
+    bool alreadyAtGoal = (m_NpcCurrentCell.x == m_NpcTargetCell.x &&
+        m_NpcCurrentCell.y == m_NpcTargetCell.y &&
+        m_NpcCurrentCell.z == m_NpcTargetCell.z);
+
+    if (!alreadyAtGoal &&
+        Math::LengthSquare(curPos - targetWorldPos) < ARRIVE_EPSILON * ARRIVE_EPSILON)
+    {
+        // 보간 중 남은 오차와 상관없이, 좌표를 목표 셀의 정확한 값으로 강제 주입
+        inst.position[0] = targetWorldPos.GetX();
+        inst.position[1] = targetWorldPos.GetY();
+        inst.position[2] = targetWorldPos.GetZ();
+
+        // 도착 확정 -> 현재 셀을 갱신하고, 다음 목표 셀을 새로 조회
+        m_NpcCurrentCell = m_NpcTargetCell;
+
+        DirectX::XMFLOAT3 dir;
+        if (m_CorridorField.SampleDirection(m_NpcCurrentCell.x, m_NpcCurrentCell.y, m_NpcCurrentCell.z, dir))
+        {
+            float dirLenSq = dir.x * dir.x + dir.y * dir.y + dir.z * dir.z;
+            if (dirLenSq >= 1e-6f)
+            {
+                int nx = m_NpcCurrentCell.x + (int)std::round(dir.x);
+                int ny = m_NpcCurrentCell.y + (int)std::round(dir.y);
+                int nz = m_NpcCurrentCell.z + (int)std::round(dir.z);
+                m_NpcTargetCell = { nx, ny, nz };
+            }
+            // dirLenSq가 0에 가까우면 목적지 도착 -> m_NpcTargetCell을 그대로(=현재 셀) 유지
+        }
+
+        NPCRenderer::UpdateInstances(m_NpcInstances);
+        return; // 이번 프레임은 스냅만 하고 종료 (다음 프레임부터 새 목표로 이동)
+    }
+
+    if (alreadyAtGoal) return; // 최종 목적지 도착, 더 이상 이동 없음
+
+    // 아직 목표 셀에 도착 전 -> 목표 셀 방향으로 계속 이동
+    Math::Vector3 dirVec = Math::Normalize(targetWorldPos - curPos);
+
+    inst.position[0] += dirVec.GetX() * NPC_SPEED * dt;
+    inst.position[1] += dirVec.GetY() * NPC_SPEED * dt;
+    inst.position[2] += dirVec.GetZ() * NPC_SPEED * dt;
+
+    NPCRenderer::UpdateInstances(m_NpcInstances);
 }
 
 void FlowField::RestoreCellColor(int instanceIndex)
@@ -444,6 +501,8 @@ void FlowField::Update(float dt)
         // 해제 모드: 카메라는 멈추고, 클릭으로 NPC 선택/목적지 지정만 가능
         HandlePicking();
     }
+
+    UpdateNpcMovement(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
 
     // F1: 솔리드 ↔ 와이어프레임 토글
     // IsFirstPressed = 키를 막 누른 순간 한 번만 true

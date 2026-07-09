@@ -31,6 +31,37 @@ private:
     std::array<CellType, CHUNK_VOLUME> m_Cells;                 // 청크 하나 = 정확히 4096바이트(4KB)
 };
 
+
+
+// 표면 캐시 전용 2d 청크 
+// VoxelChunk와 동일한 CHUNK_SIZE(16)를 재사용해서, 같은 청크 좌표 체계를 공유함
+// (A*가 국소적으로 이웃을 맴도는 사용 패턴과 일치시키기 위함)
+class SurfaceChunk
+{
+public :
+    static constexpr int CHUNK_SIZE = VoxelChunk::CHUNK_SIZE;
+    static constexpr int CHUNK_AREA = CHUNK_SIZE * CHUNK_SIZE; // 256 (xz 표면만 사용함)
+
+    struct SurfaceColumn
+    {
+        static constexpr int INLINE_CAPACITY = 4;
+        std::array<int, INLINE_CAPACITY> surfaces{};
+        uint8_t count = 0;
+    };
+
+    // 해당 위치(x, z)의 surfacecolmn 반환
+    SurfaceColumn& At(int lx, int lz) { return m_Columns[lx + CHUNK_SIZE * lz]; }
+    const SurfaceColumn& At(int lx, int lz) const { return m_Columns[lx + CHUNK_SIZE * lz]; }
+
+private:
+    std::array<SurfaceColumn, CHUNK_AREA> m_Columns;
+
+};
+
+
+
+
+
 // 복셀 메모리는 16^3 청크(VoxelChunk)로 구성 — 3D A*/FlowField 인접 접근 캐시 효율용.
 // TODO : 청크 내부 인덱싱 Morton order 전환은 BFS/A* 프로파일링 후 결정
 class VoxelGrid
@@ -44,7 +75,7 @@ public:
 
     // TODO - 지형 동적 변경
     void SetCell(int x, int y, int z, CellType type);
- 
+
     // 격자 좌표 하나 (우클릭 피킹 결과와 렌더 인스턴스를 매칭하기 위한 용도)
     struct CellCoord { int x, y, z; };
 
@@ -66,29 +97,21 @@ public:
     int             GetSizeZ()    const { return m_SizeZ; }
     float           GetCellSize() const { return m_CellSize; }
 
-    //-----
-    // HeightMap 기반 복셀 생성
-    void BuildFromHeightMap(const HeightMap& hm);
-    // 패스 1 — 높이값만 읽어서 복셀 배치
-    void BuildCells(const HeightMap& hm);
+
 
     // xz당 표면 1개 가정을 없앤 build
     void BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, int sizeY, int sizeZ, float cellSize);
 
-    // ===== 변경 (좌표 4개 기반) =====
-        // 시작점(startX,startZ) ~ 끝점(endX,endZ) 사이에 직선 아치형 터널을 생성.
-        // 지표면(ground)은 그대로 유지한 채, 그 위에 다리처럼 아치를 얹고
-        // 아치 아래 빈 공간이 터널이 됨 (NPC는 아래로 통과, 아치 위로도 통과 가능).
-        //
-        // openAtStart/openAtEnd == true인 쪽은 그 좌표에서 아치 높이가 0으로 강제되어
-        // 반드시 개방된 입/출구가 생김. false면 그쪽 끝은 개방을 강제하지 않고
-        // (막다른 동굴처럼) 자연 지형에 그대로 파묻힘.
+
+    // 지형이 동굴 바닥과 같고 높이만 높힌 터널 제작 함수
+    // 시작점(startX,startZ) ~ 끝점(endX,endZ) 사이에 직선 아치형 터널을 생성.
+    // 지표면(ground)은 그대로 유지한 채, 그 위에 다리처럼 아치를 얹고
+    // 아치 아래 빈 공간이 터널이 됨 (NPC는 아래로 통과, 아치 위로도 통과 가능).
     void BuildFromHeightMapWithTunnel(const HeightMap& ground,
-        float startX, float startZ,
-        float endX, float endZ,
-        float tunnelHeightWorld = 2.0f,  // 터널 내부 통행 가능 높이(헤드룸)
-        float tunnelRadiusWorld = 3.0f,  // 터널 폭(중심선 기준 반경)
-        float archThicknessWorld = 1.0f,  // 아치(천장) 두께
+        const DirectX::XMFLOAT3& start,
+        const DirectX::XMFLOAT3& end,
+        float radius = 3.0f,            // 터널 폭(중심선 기준 반경)
+        float shellThickness = 1.5f,    // 터널 벽/천장의 두께
         bool  openAtStart = true,
         bool  openAtEnd = true);
 
@@ -100,8 +123,17 @@ public:
     // x,z 위치의 표면 y값 반환
     int  GetSurfaceY(int x, int z) const;
 
-    // 동굴이 있으면 2개 이상, 없으면 GetSurfaceY와 동일한 값 1개만 담긴 리스트가 됨.
-    std::vector<int> GetSurfaceYList(int x, int z) const;
+
+
+    struct SurfaceSpan
+    {
+        const int* data;
+        int count;
+        // range 기반 탐색용 - std::span 패턴
+        const int* begin() const { return data; }
+        const int* end() const { return data + count; }
+    };
+    SurfaceSpan GetSurfaceYList(int x, int z) const;
 
 
     // worldPos에서 가장 가까운 Walkable 셀을 찾음 (A* 시작점 스냅 등에 사용).
@@ -119,22 +151,42 @@ private:
         CellType type;
     };
 
-    std::vector<VoxelCell>  m_Cells;    // 기존 구조와 병행
-    //std::vector<CellType>   m_Grid;   // 3D 그리드 (A* 등 용도)
-    std::vector<VoxelChunk> m_Chunks;
+    // 렌더용 셀 저장소
+    std::vector<VoxelCell>  m_Cells;    
+
+    // walkable 판별용 청크 구조
+    std::vector<VoxelChunk> m_Chunks; 
+
+    // xz좌표당 몇개의 표면(y)를 갖고있는지 아는 청크
+    std::vector<SurfaceChunk> m_SurfaceChunks;
+    int m_SurfaceChunkCountX = 0;
+    int m_SurfaceChunkCountZ = 0;
 
     // 청크 개수 멤버
     int m_ChunkCountX = 0;
     int m_ChunkCountY = 0;
     int m_ChunkCountZ = 0;
 
+    // 맵 전체 크기(cell 기준 단위)
     int   m_SizeX = 0;
     int   m_SizeY = 0;
     int   m_SizeZ = 0;
     float m_CellSize = 1.0f;
 
-    // 청크 배열 리사이즈 + 초기화 (m_SizeX/Y/Z, m_ChunkCount* 설정 후 호출)
+    // m_Chunks 청크 배열 리사이즈 + 초기화 (m_SizeX/Y/Z, m_ChunkCount* 설정 후 호출)
     void AllocateChunks();
+
+    // --- SurfaceChunk 캐싱을 위한 함수 ---
+    // xz좌표당 표면 cell 전용 청크 크기 할당 (AllocateChunks 시점에 같이 호출)
+    void AllocateSurfaceCache();                
+    // 컬럼 하나(x,z)만 다시 스캔해서 캐시 갱신.
+    // 지형 확정 직후 전체 컬럼에 대해 1회씩 호출되고,
+    // TODO : 동적 지형 도입 시 SetCell이 바뀐 컬럼에 대해 호출
+    void RefreshSurfaceColumn(int x, int z); 
+    // 지형이 확정된 직후(모든 SetCell 완료 후) 호출 — 표면 캐시 할당 + 전체 컬럼 1회 스캔.
+    void BuildSurfaceCache();
+
+
 
     void ToChunkCoord(int x, int y, int z, int& chunkIndex, int& lx, int& ly, int& lz) const;
 };

@@ -91,9 +91,6 @@
     <ClInclude Include="VoxelRenderer.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="FlowFieldSolver.h">
-      <Filter>Simulation</Filter>
-    </ClInclude>
     <ClInclude Include="HeightMap.h">
       <Filter>Simulation</Filter>
     </ClInclude>
@@ -117,6 +114,9 @@
     </ClInclude>
     <ClInclude Include="CorridorFlowField.h">
       <Filter>NPC\FlowField</Filter>
+    </ClInclude>
+    <ClInclude Include="FlowField.h">
+      <Filter>소스 파일</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
