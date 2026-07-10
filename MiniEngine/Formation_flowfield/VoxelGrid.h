@@ -45,7 +45,7 @@ public :
     struct SurfaceColumn
     {
         static constexpr int INLINE_CAPACITY = 4;
-        std::array<int, INLINE_CAPACITY> surfaces{};
+        std::array<int16_t, INLINE_CAPACITY> surfaces{};    // y가 32'767 넘으면 자료형 교체
         uint8_t count = 0;
     };
 
@@ -127,11 +127,11 @@ public:
 
     struct SurfaceSpan
     {
-        const int* data;
+        const int16_t* data;
         int count;
         // range 기반 탐색용 - std::span 패턴
-        const int* begin() const { return data; }
-        const int* end() const { return data + count; }
+        const int16_t* begin() const { return data; }
+        const int16_t* end() const { return data + count; }
     };
     SurfaceSpan GetSurfaceYList(int x, int z) const;
 

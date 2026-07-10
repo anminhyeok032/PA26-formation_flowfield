@@ -5,12 +5,13 @@
 #include <functional>   // std::greater
 #include <cmath>
 
-CorridorFlowField::FlowFieldChunk* CorridorFlowField::FindOrCreateChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache)
+CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindOrCreateColumn(
+    const VoxelGrid& grid, int x, int y, int z,
+    int& outSlotIdx, ChunkCache& cache) 
 {
     int cx = x / FlowFieldChunk::SIZE;
-    int cy = y / FlowFieldChunk::SIZE;
     int cz = z / FlowFieldChunk::SIZE;
-    int64_t key = MakeChunkKey(cx, cy, cz);
+    int64_t key = MakeChunkKey(cx, 0, cz);  // y값은 청크 좌표 관여 x
 
     if (key != cache.key)
     {
@@ -23,32 +24,59 @@ CorridorFlowField::FlowFieldChunk* CorridorFlowField::FindOrCreateChunk(int x, i
     }
 
     int lx = x % FlowFieldChunk::SIZE;
-    int ly = y % FlowFieldChunk::SIZE;
     int lz = z % FlowFieldChunk::SIZE;
-    outLocalIdx = lx + FlowFieldChunk::SIZE * (ly + FlowFieldChunk::SIZE * lz);
-    return cache.chunk;
+
+    VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
+    outSlotIdx = -1;
+    for (int i = 0; i < surfaces.count; ++i)
+    {
+        if (surfaces.data[i] == y)
+        {
+            outSlotIdx = i;
+            break;
+        }
+    }
+
+    return &cache.chunk->At(lx, lz);
 }
 
-const CorridorFlowField::FlowFieldChunk* CorridorFlowField::FindChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache) const
+const CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindColumn(
+    const VoxelGrid& grid, int x, int y, int z,
+    int& outSlotIdx, ChunkCache& cache) const 
 {
     int cx = x / FlowFieldChunk::SIZE;
-    int cy = y / FlowFieldChunk::SIZE;
     int cz = z / FlowFieldChunk::SIZE;
-    int64_t key = MakeChunkKey(cx, cy, cz);
+    int64_t key = MakeChunkKey(cx, 0, cz);
 
     if (key != cache.key)
     {
         auto it = m_Chunks.find(key);
-        if (it == m_Chunks.end()) { cache.key = -1; return nullptr; }
+        if (it == m_Chunks.end()) 
+        { 
+            cache.key = -1; 
+            outSlotIdx = -1;
+            return nullptr; 
+        }
         cache.key = key;
         cache.chunk = const_cast<FlowFieldChunk*>(it->second.get());
     }
 
     int lx = x % FlowFieldChunk::SIZE;
-    int ly = y % FlowFieldChunk::SIZE;
     int lz = z % FlowFieldChunk::SIZE;
-    outLocalIdx = lx + FlowFieldChunk::SIZE * (ly + FlowFieldChunk::SIZE * lz);
-    return cache.chunk;
+
+    VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
+    outSlotIdx = -1;
+
+    for (int i = 0; i < surfaces.count; ++i)
+    {
+        if (surfaces.data[i] == y)
+        {
+            outSlotIdx = i;
+            break;
+        }
+    }
+
+    return &cache.chunk->At(lx,lz);
 }
 
 void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask)
@@ -66,7 +94,7 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
     ChunkCache chunkcache;
 
     int goalIdx;
-    FlowFieldChunk* goalChunk = FindOrCreateChunk(goal.x, goal.y, goal.z, goalIdx, chunkcache);
+    FlowFieldChunk::ColumnData* goalChunk = FindOrCreateColumn(grid, goal.x, goal.y, goal.z, goalIdx, chunkcache);
     goalChunk->cost[goalIdx] = 0.0f;
     openList.push({ goal, 0.0f });
 
@@ -77,7 +105,7 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
         openList.pop();
 
         int currIdx;
-        FlowFieldChunk* currChunk = FindOrCreateChunk(curr.x, curr.y, curr.z, currIdx, chunkcache);
+        FlowFieldChunk::ColumnData* currChunk = FindOrCreateColumn(grid, curr.x, curr.y, curr.z, currIdx, chunkcache);
 
         if (true == currChunk->visited[currIdx]) continue;
         currChunk->visited[currIdx] = true;
@@ -95,7 +123,7 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
             if (mask.find(MakeChunkKey(next_x, next_y, next_z)) == mask.end())   continue;
 
             int next_idx;
-            FlowFieldChunk* nChunk = FindOrCreateChunk(n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
+            FlowFieldChunk::ColumnData* nChunk = FindOrCreateColumn(grid, n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
             if (nChunk->visited[next_idx]) continue;   // 이미 확정된 노드는 더 나아질 수 없음
 
             float predCost = currCost + n.cost;
@@ -127,21 +155,24 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
 
         ChunkCache chunkCache;
 
-        for (int ly = 0; ly < FlowFieldChunk::SIZE; ly++)
+        for (int lz = 0; lz < FlowFieldChunk::SIZE; lz++)
         {
-            for (int lz = 0; lz < FlowFieldChunk::SIZE; lz++)
+            for (int lx = 0; lx < FlowFieldChunk::SIZE; lx++)
             {
-                for (int lx = 0; lx < FlowFieldChunk::SIZE; lx++)
+                int x = cx * FlowFieldChunk::SIZE + lx;
+                int z = cz * FlowFieldChunk::SIZE + lz;
+                
+                VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
+                FlowFieldChunk::ColumnData& col = chunkPtr->At(lx, lz);
+
+                for (int slot = 0; slot < surfaces.count; ++slot)
                 {
-                    int localIdx = lx + FlowFieldChunk::SIZE * (ly + FlowFieldChunk::SIZE * lz);
-                    if (!chunkPtr->visited[localIdx]) continue;
+                    if (false == col.visited[slot])  continue;
 
-                    float myCost = chunkPtr->cost[localIdx];
-                    if (myCost == 0.0f) continue; // 목적지 자신은 방향 없음
+                    float myCost = col.cost[slot];
+                    if (myCost == 0.0f)  continue;  // 목적지 자신
 
-                    int x = cx * FlowFieldChunk::SIZE + lx;
-                    int y = cy * FlowFieldChunk::SIZE + ly;
-                    int z = cz * FlowFieldChunk::SIZE + lz;
+                    int y = surfaces.data[slot];
 
                     // 해당 셀의 이웃 후보 neighbors에 저장
                     GetWalkableNeighbors(grid, { x, y, z }, neighbors);
@@ -153,7 +184,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                     for (const auto& n : neighbors)
                     {
                         int nIdx;
-                        const FlowFieldChunk* nChunk = FindChunk(n.pos.x, n.pos.y, n.pos.z, nIdx, chunkCache);
+                        const FlowFieldChunk::ColumnData* nChunk = FindColumn(grid, n.pos.x, n.pos.y, n.pos.z, nIdx, chunkCache);
                         if (nChunk && nChunk->visited[nIdx] && nChunk->cost[nIdx] < bestCost)
                         {
                             bestCost = nChunk->cost[nIdx];
@@ -162,26 +193,29 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                         }
                     }
 
-                    if (found)
+                    if (true == found)
                     {
                         Math::Vector3 selfPos = grid.GetWorldPos(x, y, z);
                         Math::Vector3 neighborPos = grid.GetWorldPos(bestNeighbor.x, bestNeighbor.y, bestNeighbor.z);
                         Math::Vector3 dir = Math::Normalize(neighborPos - selfPos);
-                        chunkPtr->direction[localIdx] = DirectX::XMFLOAT3(dir.GetX(), dir.GetY(), dir.GetZ());
+                        col.direction[slot] = DirectX::XMFLOAT3(dir.GetX(), dir.GetY(), dir.GetZ());
                     }
                 }
+
+ 
             }
         }
+        
     }
 }
 
-bool CorridorFlowField::SampleDirection(int x, int y, int z, DirectX::XMFLOAT3& outDir) const
+bool CorridorFlowField::SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMFLOAT3& outDir) const
 {
-    int idx;
+    int slot;
     ChunkCache chunkcache;
-    const FlowFieldChunk* chunk = FindChunk(x, y, z, idx, chunkcache);
-    if (!chunk || !chunk->visited[idx]) return false;
+    const FlowFieldChunk::ColumnData* col = FindColumn(grid, x, y, z, slot, chunkcache);
+    if (!col || slot < 0 || !col->visited[slot]) return false;
 
-    outDir = chunk->direction[idx];
+    outDir = col->direction[slot];
     return true;
 }

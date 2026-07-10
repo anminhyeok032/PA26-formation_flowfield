@@ -136,9 +136,9 @@ void FlowField::Startup(void)
     m_NpcInstances.reserve(1000);
 
     // 지형 위에 격자 형태로 100개 배치
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 1; i++)
     {
-        for (int j = 0; j < 100; j++)
+        for (int j = 0; j < 1; j++)
         {
             int gx = 100 + i * 3;
             int gz = 100 + j * 3;
@@ -349,7 +349,7 @@ void FlowField::HandlePicking()
 
                     // 시작점에서의 방향을 즉시 조회해서 첫 목표 셀도 미리 정해둠
                     DirectX::XMFLOAT3 firstDir;
-                    if (m_CorridorField.SampleDirection(start.x, start.y, start.z, firstDir))
+                    if (m_CorridorField.SampleDirection(m_VoxelGrid, start.x, start.y, start.z, firstDir))
                     {
                         int nx = start.x + (int)std::round(firstDir.x);
                         int ny = start.y + (int)std::round(firstDir.y);
@@ -386,7 +386,7 @@ void FlowField::UpdateNpcMovement(float dt)
     if (!m_HasGoal || !m_NpcCellInitialized) return;
     if (m_SelectedNpcIndex < 0 || m_SelectedNpcIndex >= (int)m_NpcInstances.size()) return;
 
-    const float NPC_SPEED = 1.0f;
+    const float NPC_SPEED = 5.0f;
     const float ARRIVE_EPSILON = 0.05f;
 
     auto& inst = m_NpcInstances[m_SelectedNpcIndex];
@@ -411,7 +411,7 @@ void FlowField::UpdateNpcMovement(float dt)
         m_NpcCurrentCell = m_NpcTargetCell;
 
         DirectX::XMFLOAT3 dir;
-        if (m_CorridorField.SampleDirection(m_NpcCurrentCell.x, m_NpcCurrentCell.y, m_NpcCurrentCell.z, dir))
+        if (m_CorridorField.SampleDirection(m_VoxelGrid, m_NpcCurrentCell.x, m_NpcCurrentCell.y, m_NpcCurrentCell.z, dir))
         {
             float dirLenSq = dir.x * dir.x + dir.y * dir.y + dir.z * dir.z;
             if (dirLenSq >= 1e-6f)

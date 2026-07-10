@@ -15,37 +15,38 @@ public:
 
     // (x,y,z) 셀의 이동 방향을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.
     // const는 위치 조회로 새로운 청크 할당 방지
-    bool SampleDirection(int x, int y, int z, DirectX::XMFLOAT3& outDir) const;
+    bool SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMFLOAT3& outDir) const;
 
 private:
-    struct FlowFieldRecord
-    {
-        float             cost = FLT_MAX;
-        DirectX::XMFLOAT3 direction{ 0.0f, 0.0f, 0.0f };
-        bool              visited = false;
-    };
-
 
     // cell당 17Byte
     // 
     struct FlowFieldChunk
     {
         static constexpr int SIZE = 8;
-        static constexpr int VOLUME = SIZE * SIZE * SIZE;
+        static constexpr int AREA = SIZE * SIZE; // 256
+        static constexpr int MAX_SLOTS = SurfaceChunk::SurfaceColumn::INLINE_CAPACITY;
 
-        // BFS에서 자주 읽고 쓰는 필드들 별도 배열로 분리 (SoA)
-        std::array<float, VOLUME> cost;
-        std::array<bool, VOLUME> visited;
 
-        // cold 데이터 - flowfield 값
-        std::array<DirectX::XMFLOAT3, VOLUME> direction;
-
-        FlowFieldChunk()
+        struct ColumnData
         {
-            cost.fill(FLT_MAX);
-            visited.fill(false);
-            direction.fill(DirectX::XMFLOAT3(0, 0, 0));
-        }
+            std::array<float, MAX_SLOTS>                cost;
+            std::array<bool, MAX_SLOTS>                 visited;
+            // cold 데이터 - flowfield 값
+            std::array<DirectX::XMFLOAT3, MAX_SLOTS>    direction;
+
+            ColumnData()
+            {
+                cost.fill(FLT_MAX);
+                visited.fill(false);
+                direction.fill(DirectX::XMFLOAT3(0, 0, 0));
+            }
+        };
+
+        std::array<ColumnData, AREA> columns;
+
+        ColumnData& At(int lx, int lz)              { return columns[lx + SIZE * lz]; }
+        const ColumnData& At(int lx, int lz) const  { return columns[lx + SIZE * lz]; }
     };
 
     // 그전에 찾은 청크를 캐싱해서 매번 해싱 오버헤드 방지
@@ -59,8 +60,10 @@ private:
     // unique_ptr+unordered_map
     std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>> m_Chunks;
 
-    FlowFieldChunk* FindOrCreateChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache);
-    const FlowFieldChunk* FindChunk(int x, int y, int z, int& outLocalIdx, ChunkCache& cache) const;
+    FlowFieldChunk::ColumnData* FindOrCreateColumn(const VoxelGrid& grid, int x, int y, int z,
+        int& outSlotIdx, ChunkCache& cache);
+    const FlowFieldChunk::ColumnData* FindColumn(const VoxelGrid& grid, int x, int y, int z,
+        int& outSlotIdx, ChunkCache& cache) const;
 
 
 

@@ -44,10 +44,11 @@ public:
                     int maxIterations = 100000);
 
 private:
+    // 메모리를 많이 사용해도, 주변 청크를 검사해서 해싱을 절감
     // 탐색이 끝난 뒤 내 이웃 중 gScore가 정확히 나보다 1 작은 셀을 찾으면 부모
     struct PathNodeChunk
     {
-        static constexpr int SIZE = 16;
+        static constexpr int SIZE = 8;
         static constexpr int VOLUME = SIZE * SIZE * SIZE;
 
         std::array<float, VOLUME> gScore;
