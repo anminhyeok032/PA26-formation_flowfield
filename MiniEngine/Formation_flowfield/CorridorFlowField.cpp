@@ -116,14 +116,14 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
 
         for (const auto& n : neighbors)
         {
-            int next_x = n.pos.x / VoxelChunk::CHUNK_SIZE;
-            int next_y = n.pos.y / VoxelChunk::CHUNK_SIZE;
-            int next_z = n.pos.z / VoxelChunk::CHUNK_SIZE;
+            int next_x = n.pos.x / FlowFieldChunk::SIZE;
+            int next_z = n.pos.z / FlowFieldChunk::SIZE;
 
-            if (mask.find(MakeChunkKey(next_x, next_y, next_z)) == mask.end())   continue;
+            if (mask.find(MakeChunkKey(next_x, 0, next_z)) == mask.end())   continue;
 
             int next_idx;
             FlowFieldChunk::ColumnData* nChunk = FindOrCreateColumn(grid, n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
+            if (next_idx < 0) continue;
             if (nChunk->visited[next_idx]) continue;   // 이미 확정된 노드는 더 나아질 수 없음
 
             float predCost = currCost + n.cost;

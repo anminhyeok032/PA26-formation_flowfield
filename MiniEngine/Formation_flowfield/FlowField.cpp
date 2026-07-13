@@ -348,8 +348,11 @@ void FlowField::HandlePicking()
                 if (true == m_Pathfinder.FindPath(m_VoxelGrid, start, goal, path))
                 {
                     // TODO: 지금은 NPC 1마리라 memberCount=1 고정. 그룹 도입 시 실제 인원수로 교체.
-                    int margin = ComputeMarginChunks(1, VoxelChunk::CHUNK_SIZE);
-                    auto mask = BuildChunkMask(path, margin);
+                    int memberCount = 1;
+                    const int chunkSize = m_CorridorField.GetChunkSize();   // = FlowFieldChunk::SIZE
+
+                    int margin = ComputeMarginChunks(memberCount, chunkSize);
+                    auto mask = BuildChunkMask(path, margin, chunkSize);
 
                     m_CorridorField.Build(m_VoxelGrid, goal, mask);
                     m_HasGoal = true;
@@ -411,7 +414,7 @@ void FlowField::UpdateNpcMovement(float dt)
     if (!m_HasGoal || !m_NpcCellInitialized) return;
     if (m_SelectedNpcIndex < 0 || m_SelectedNpcIndex >= (int)m_NpcInstances.size()) return;
 
-    const float NPC_SPEED = 5.0f;
+    const float NPC_SPEED = 3.0f;
     const float ARRIVE_EPSILON = 0.05f;
 
     auto& inst = m_NpcInstances[m_SelectedNpcIndex];

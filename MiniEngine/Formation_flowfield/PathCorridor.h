@@ -2,6 +2,7 @@
 #include <DirectXMath.h>
 #include <vector>
 #include <unordered_set>
+#include <cstdint>
 
 
 // 그룹 인원수를 기준으로 필요한 margin(청크 단위)을 계산.
@@ -11,4 +12,4 @@ int ComputeMarginChunks(int memberCount, int chunkSize, int bufferCells = 2);
 
 // A* 경로가 지나가는 청크들 + 수평(XZ) 방향 여유(margin)를 포함한 청크 마스크 생성.
 // 이 마스크는 CorridorFlowField가 "이 청크까지만 계산하고 그 밖은 확장하지 않는다"는 경계로 사용됨.
-std::unordered_set<int64_t> BuildChunkMask(const std::vector<DirectX::XMINT3>& path, int marginChunks);
+std::unordered_set<int64_t> BuildChunkMask(const std::vector<DirectX::XMINT3>& path, int marginChunks, int chunkSize);
