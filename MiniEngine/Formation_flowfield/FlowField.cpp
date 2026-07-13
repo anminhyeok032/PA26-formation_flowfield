@@ -269,7 +269,7 @@ void FlowField::HandlePicking()
     if (m_SelectedNpcIndex >= 0 && m_HoverActive && hasRay)
     {
         int hx, hy, hz;
-        bool hit = m_VoxelGrid.RaycastVoxel(rayOrigin, rayDir, 500.0f, hx, hy, hz);
+        bool hit = m_VoxelGrid.RaycastVoxel(rayOrigin, rayDir, 2000.0f, hx, hy, hz);
 
         int newHoverIndex = -1;
         if (hit)

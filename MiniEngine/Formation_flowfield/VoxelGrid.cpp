@@ -479,65 +479,37 @@ void VoxelGrid::SetCell(int x, int y, int z, CellType type)
 
 bool VoxelGrid::RaycastVoxel(const Math::Vector3& origin, const Math::Vector3& dir, float maxDistance, int& outX, int& outY, int& outZ) const
 {
-    // 이 프로젝트의 셀은 "중심"이 x*cellSize인 좌표계를 씀 (BuildInstanceList, GetWorldPos와 동일 규칙).
-    // DDA 알고리즘 자체는 "모서리가 x*cellSize인" 좌표계를 가정하므로, origin을 반 칸(0.5*cellSize)만큼 이동시켜서
-    // 두 좌표계를 일치시킨다. (거리 계산은 평행이동에 불변이라 t값에는 영향 없음)
     const float half = m_CellSize * 0.5f;
-    Math::Vector3 shiftedOrigin(origin.GetX() + half, origin.GetY() + half, origin.GetZ() + half);
+    // 복셀 크기보다 작게 잡아야 뚫고 가는거 방지
+    const float step = m_CellSize * 0.25f;
 
-    int x = (int)std::floor(shiftedOrigin.GetX() / m_CellSize);
-    int y = (int)std::floor(shiftedOrigin.GetY() / m_CellSize);
-    int z = (int)std::floor(shiftedOrigin.GetZ() / m_CellSize);
-
-    // 각 축으로 +1/-1 중 어느 방향으로 진행하는지
-    int stepX = (dir.GetX() > 0.0f) ? 1 : -1;
-    int stepY = (dir.GetY() > 0.0f) ? 1 : -1;
-    int stepZ = (dir.GetZ() > 0.0f) ? 1 : -1;
-
-    // 각 축에서 "다음 격자선까지 이동하는 데 필요한 거리"의 증가량
-    float tDeltaX = (dir.GetX() != 0) ? std::abs(m_CellSize / dir.GetX()) : FLT_MAX;
-    float tDeltaY = (dir.GetY() != 0) ? std::abs(m_CellSize / dir.GetY()) : FLT_MAX;
-    float tDeltaZ = (dir.GetZ() != 0) ? std::abs(m_CellSize / dir.GetZ()) : FLT_MAX;
-
-    // 현재 셀에서 다음 격자선까지의 초기 거리
-    auto initialT = [&](float originVal, int cellIdx, float dirVal, int step) -> float
-    {
-        if (dirVal == 0.0f) return FLT_MAX;
-        float boundary = (step > 0) ? (cellIdx + 1) * m_CellSize : cellIdx * m_CellSize;
-        return std::abs((boundary - originVal) / dirVal);
-    };
-
-    float tMaxX = initialT(shiftedOrigin.GetX(), x, dir.GetX(), stepX);
-    float tMaxY = initialT(shiftedOrigin.GetY(), y, dir.GetY(), stepY);
-    float tMaxZ = initialT(shiftedOrigin.GetZ(), z, dir.GetZ(), stepZ);
-
+    // 직전 검사한 복셀 좌표 저장
+    int lastX = INT_MIN, lastY = INT_MIN, lastZ = INT_MIN;
     float traveled = 0.0f;
 
     while (traveled < maxDistance)
     {
-        // 맵 범위를 벗어나면 실패
-        if (x < 0 || x >= m_SizeX || y < 0 || y >= m_SizeY || z < 0 || z >= m_SizeZ)
-            return false;
+        Math::Vector3 samplePos = origin + dir * traveled;
 
-        if (GetCell(x, y, z) != CellType::Empty)
+        int x = (int)std::floor((samplePos.GetX() + half) / m_CellSize);
+        int y = (int)std::floor((samplePos.GetY() + half) / m_CellSize);
+        int z = (int)std::floor((samplePos.GetZ() + half) / m_CellSize);
+
+        // 맵 밖이면 통과
+        if (x >= 0 && x < m_SizeX && y >= 0 && y < m_SizeY && z >= 0 && z < m_SizeZ)
         {
-            outX = x; outY = y; outZ = z;
-            return true;
+            if (x != lastX || y != lastY || z != lastZ)
+            {
+                if (GetCell(x, y, z) != CellType::Empty)
+                {
+                    outX = x; outY = y; outZ = z;
+                    return true;
+                }
+                lastX = x; lastY = y; lastZ = z;
+            }
         }
 
-        // 세 축 중 가장 먼저 다음 격자선에 도달하는 축으로 한 칸 이동
-        if (tMaxX < tMaxY && tMaxX < tMaxZ)
-        {
-            x += stepX; traveled = tMaxX; tMaxX += tDeltaX;
-        }
-        else if (tMaxY < tMaxZ)
-        {
-            y += stepY; traveled = tMaxY; tMaxY += tDeltaY;
-        }
-        else
-        {
-            z += stepZ; traveled = tMaxZ; tMaxZ += tDeltaZ;
-        }
+        traveled += step;
     }
     return false;
 }
