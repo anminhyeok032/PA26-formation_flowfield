@@ -9,13 +9,6 @@
 
 class CorridorFlowField
 {
-public:
-    // Dijkstra를 이용한 flowfield 만들기
-    void Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask);
-
-    // (x,y,z) 셀의 이동 방향을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.
-    // const는 위치 조회로 새로운 청크 할당 방지
-    bool SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMFLOAT3& outDir) const;
 
 private:
 
@@ -69,4 +62,16 @@ private:
 
     // 주변셀의 Cost를 비교해 낮아지는 칸을 경로로 지정
     void ComputeDirections(const VoxelGrid& grid);
+
+public:
+    // Dijkstra를 이용한 flowfield 만들기
+    void Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask);
+
+    // (x,y,z) 셀의 이동 방향을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.
+    // const는 위치 조회로 새로운 청크 할당 방지
+    bool SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMFLOAT3& outDir) const;
+
+    // 청크 순회용 getter
+    const std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>>& GetChunks() const { return m_Chunks; }
+    const int GetChunkSize() { return FlowFieldChunk::SIZE; }
 };

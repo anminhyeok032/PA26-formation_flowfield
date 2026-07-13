@@ -43,14 +43,41 @@ private:
     //       나중에 그룹(여러 NPC 선택)이 추가되면 memberCount를 실제 그룹 크기로 교체.
     AStarPathfinder     m_Pathfinder;
     CorridorFlowField   m_CorridorField;
-    DirectX::XMINT3     m_ConfirmedGoal{ -1, -1, -1 };
     bool                m_HasGoal = false;
 
     DirectX::XMINT3     m_NpcCurrentCell{ -1, -1, -1 };  // 이미 도착해서 확정된 셀
     DirectX::XMINT3     m_NpcTargetCell{ -1, -1, -1 };   // 지금 이동해서 향하고 있는 다음 셀
     bool                m_NpcCellInitialized = false;
 
-    // ---- 목적지 복셀 선택 관련 ----
+    // ------------ 청크 시각화 관련 ----------------
+    // 
+    // 청크 디버그 시각화(f2)
+    bool                m_DebugShowChunks = false;
+    // 청크 key / 청크 내부 복셀 인스턴스 인덱스 목록
+    std::unordered_map<int64_t, std::vector<int>> m_ChunkToVoxelIndices;
+
+    // 청크 key / 청크 점유중인 그룹 ID (진입 순서순)
+    // back()으로 색 표시를 기준 - 해당 그룹 도착시, erase해라.
+    std::unordered_map<int64_t, std::vector<int>> m_ChunkOccupants;
+
+    // 그룹들이 점유한 청크 키
+    std::vector<int64_t> m_OccupiedChunkKeys;
+    // A* 경로 복셀 인스턴스 인덱스 (진빨강 추가 표시용)
+    std::vector<int64_t> m_PathVoxelIndices;
+
+    // 특정 청크 최종 colorType 우선순위 저장
+    uint32_t GetBaseColorType(int instanceIndex) const;
+
+    // 점유 청크 등록 / 해제
+    void OccupyChunks(int groupId);
+    void ReleaseChunks(int groupId);
+
+    // 레이어 순서대로 덮어써서 디버그 색을 갱신하고 GPU에 반영.
+    // extraKeys: 이번에 해제되어 기본색으로 돌려놔야 하는 청크 키들 (없으면 비워서 호출)
+    void RefreshDebugColors(const std::vector<int64_t>& extraKeys = {});
+
+
+    // ----------------- 목적지 복셀 선택 관련 --------------
     std::vector<VoxelRenderer::InstanceData> m_VoxelInstances;  // 지속 보관
     std::vector<VoxelGrid::CellCoord>        m_VoxelCellCoords; // m_VoxelInstances와 1:1 대응
 
@@ -83,11 +110,14 @@ private:
     // 매 프레임 좌/우클릭을 검사해서 NPC 선택 / 목적지 지정 처리
     void HandlePicking();
 
+
+    // --------------NPC 이동----------------
     // 확정된 목적지를 향해 선택된 NPC를 매 프레임 이동시킴
     void UpdateNpcMovement(float dt);
-
     // 격자 셀 좌표 -> NPC가 실제로 서 있어야 할 월드 좌표.
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float npcHalfHeight) const;
 
+
+    // 바뀐 복셀 gpu 업로드
     void FlushVoxelInstanceChanges(std::vector<int>& changedIndices);
 };

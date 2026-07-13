@@ -95,10 +95,21 @@ void FlowField::Startup(void)
         // 색인 구축: 여기서만 전체를 한 번 순회함 (이후로는 절대 이렇게 다시 순회 안 함)
         m_VoxelCoordToIndex.clear();
         m_VoxelCoordToIndex.reserve(m_VoxelCellCoords.size());
+
+        // 청크 시각화용 자료 초기화
+        m_ChunkToVoxelIndices.clear();
+        int chunkSize = m_CorridorField.GetChunkSize();
+
+
         for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
         {
             auto& c = m_VoxelCellCoords[i];
             m_VoxelCoordToIndex[MakeVoxelCoordKey(c.x, c.y, c.z)] = (int)i;
+
+            // TODO : FlowField를 2d->3d로 바꿀시, 해당 부분도 수정
+            int cx = c.x / chunkSize;
+            int cz = c.z / chunkSize;
+            m_ChunkToVoxelIndices[MakeChunkKey(cx, 0, cz)].push_back((int)i);
         }
     }
     else
@@ -341,8 +352,22 @@ void FlowField::HandlePicking()
                     auto mask = BuildChunkMask(path, margin);
 
                     m_CorridorField.Build(m_VoxelGrid, goal, mask);
-                    m_ConfirmedGoal = goal;
                     m_HasGoal = true;
+
+                    std::vector<int64_t> prevKeys = m_OccupiedChunkKeys;
+                    ReleaseChunks(0);      // TODO : GroupID로 바꾸기
+
+                    m_PathVoxelIndices.clear();
+                    for (const auto& node : path)
+                    {
+                        auto it = m_VoxelCoordToIndex.find(MakeVoxelCoordKey(node.x, node.y, node.z));
+                        if (it != m_VoxelCoordToIndex.end())
+                        {
+                            m_PathVoxelIndices.push_back(it->second);
+                        }
+                    }
+                    OccupyChunks(0);       // TODO : GroupID로 바꾸기
+                    RefreshDebugColors(prevKeys);
 
                     m_NpcCurrentCell = start;
                     m_NpcCellInitialized = true;
@@ -428,7 +453,22 @@ void FlowField::UpdateNpcMovement(float dt)
         return; // 이번 프레임은 스냅만 하고 종료 (다음 프레임부터 새 목표로 이동)
     }
 
-    if (alreadyAtGoal) return; // 최종 목적지 도착, 더 이상 이동 없음
+    // 최종 목적지 도착, 더 이상 이동 없음
+    if (alreadyAtGoal)
+    {
+        // m_HasGoal이 true인 동안만 한 번 실행 (매 프레임 재갱신 방지)
+        if (m_HasGoal)
+        {
+            m_HasGoal = false;
+
+            std::vector<int64_t> prevKeys = m_OccupiedChunkKeys;
+            ReleaseChunks(0);   // TODO : GroupID로 바꾸기
+            m_PathVoxelIndices.clear();
+
+            RefreshDebugColors(prevKeys);   // prevKeys가 기본색으로 리셋되고, 남은 그룹 색이 있으면 복원됨
+        }
+        return; 
+    }
 
     // 아직 목표 셀에 도착 전 -> 목표 셀 방향으로 계속 이동
     Math::Vector3 dirVec = Math::Normalize(targetWorldPos - curPos);
@@ -440,18 +480,124 @@ void FlowField::UpdateNpcMovement(float dt)
     NPCRenderer::UpdateInstances(m_NpcInstances);
 }
 
+uint32_t FlowField::GetBaseColorType(int instanceIndex) const
+{
+    auto& c = m_VoxelCellCoords[instanceIndex];
+    return (m_VoxelGrid.GetCell(c.x, c.y, c.z) == VoxelGrid::CellType::Walkable) ? 0u : 1u;
+}
+
+void FlowField::OccupyChunks(int groupId)
+{
+    ReleaseChunks(groupId);
+
+    m_OccupiedChunkKeys.clear();
+    for (const auto& kv : m_CorridorField.GetChunks())
+    {
+        m_ChunkOccupants[kv.first].push_back(groupId);
+        m_OccupiedChunkKeys.push_back(kv.first);
+    }
+}
+
+void FlowField::ReleaseChunks(int groupId)
+{
+    for (auto key : m_OccupiedChunkKeys)
+    {
+        auto it = m_ChunkOccupants.find(key);
+        if (it == m_ChunkOccupants.end())    continue;
+
+        // 청크 vector에서 해당 groupId 지움
+        auto& occupants = it->second;
+        occupants.erase(std::remove(occupants.begin(), occupants.end(), groupId), occupants.end());
+
+        // 지워서 해당 청크에 대한 점유 그룹 없음면 청크 자체(점유에대한)를 지움
+        if (occupants.empty())
+        {
+            m_ChunkOccupants.erase(it);
+        }
+    }
+    m_OccupiedChunkKeys.clear();
+}
+
+void FlowField::RefreshDebugColors(const std::vector<int64_t>& extraKeys)
+{
+    std::vector<int> changed;
+
+    // 예상 크기 계산
+    size_t reserveCount = 0;
+    for (auto key : m_OccupiedChunkKeys)
+    {
+        auto it = m_ChunkToVoxelIndices.find(key);
+        if (it != m_ChunkToVoxelIndices.end())   reserveCount += it->second.size();
+    }
+    for (auto key : extraKeys)
+    {
+        auto it = m_ChunkToVoxelIndices.find(key);
+        if (it != m_ChunkToVoxelIndices.end())   reserveCount += it->second.size();
+    }
+    changed.reserve(reserveCount + m_PathVoxelIndices.size() + 2);      // 청크 + 경로 + 호버링셀
+
+    // 0. 리셋 - 기본 복셀 색 먼저 씌운다
+    auto paintChunk = [&](int64_t key)
+    {
+        auto it = m_ChunkToVoxelIndices.find(key);
+        if (it == m_ChunkToVoxelIndices.end()) return;
+
+        bool useGroupColor = false;
+        uint32_t groupColor = 0;
+
+        if (true == m_DebugShowChunks)
+        {
+            auto occIt = m_ChunkOccupants.find(key);
+            if (occIt != m_ChunkOccupants.end() && !occIt->second.empty())
+            {
+                useGroupColor = true;
+                groupColor = 10u + (uint32_t)(occIt->second.back() % 8);
+            }
+        }
+
+        for (int idx : it->second)
+        {
+            m_VoxelInstances[idx].colorType = useGroupColor ? groupColor : GetBaseColorType(idx);
+            changed.push_back(idx);
+        }
+    };
+
+    //
+    for (int64_t key : m_OccupiedChunkKeys) paintChunk(key);
+    for (int64_t key : extraKeys)           paintChunk(key);
+
+    // 1 - 호버 / 확정 목적지
+    if (m_ConfirmedCellIndex >= 0)
+    {
+        m_VoxelInstances[m_ConfirmedCellIndex].colorType = 2;
+        changed.push_back(m_ConfirmedCellIndex);
+    }
+    if (m_HoverCellIndex >= 0)
+    {
+        m_VoxelInstances[m_HoverCellIndex].colorType = 2;
+        changed.push_back(m_HoverCellIndex);
+    }
+
+
+    // 2 - A* 경로
+    for (int idx : m_PathVoxelIndices)
+    {
+        m_VoxelInstances[idx].colorType = 3;        // 빨간색으로 일단 지정
+        changed.push_back(idx);
+    }
+
+    FlushVoxelInstanceChanges(changed);
+}
+
 void FlowField::RestoreCellColor(int instanceIndex)
 {
     if (instanceIndex < 0 || instanceIndex >= (int)m_VoxelCellCoords.size()) return;
-
-    auto& c = m_VoxelCellCoords[instanceIndex];
-    m_VoxelInstances[instanceIndex].colorType = (m_VoxelGrid.GetCell(c.x, c.y, c.z) == VoxelGrid::CellType::Walkable) ? 0 : 1;
+    m_VoxelInstances[instanceIndex].colorType = GetBaseColorType(instanceIndex);
 }
 
-// 변경된 인스턴스 인덱스들을 정렬 후 "연속 구간"으로 묶어서,
-// 구간 하나당 GPU 호출 1번(UpdateInstanceRange)만 발생하도록 최소화.
-// GPU 갱신 호출은 매번 CPU-GPU 동기화(Finish(true))를 동반하므로,
-// 변경된 셀 개수만큼 호출을 반복하면 오히려 손해 -> 반드시 묶어서 호출해야 함.
+// GPU 갱신 호출은 매번 CPU-GPU 동기화를 동반하므로, 호출 횟수가 곧 비용.
+// 변경 인덱스가 배열 전체에 흩어져 있으면 연속 구간이 잘게 쪼개져 호출이 폭증함.
+// 이 경우 차라리 전체를 한 번에 올리는 게 훨씬 빠름 (동기화 1번 vs N번)
 void FlowField::FlushVoxelInstanceChanges(std::vector<int>& changedIndices)
 {
     if (changedIndices.empty()) return;
@@ -460,6 +606,30 @@ void FlowField::FlushVoxelInstanceChanges(std::vector<int>& changedIndices)
     // 중복 인덱스 제거 (한 프레임에 같은 셀이 두 번 바뀐 경우 대비)
     changedIndices.erase(std::unique(changedIndices.begin(), changedIndices.end()), changedIndices.end());
 
+    // 구간 개수가 이 값을 넘으면 부분 갱신을 포기하고 전체 업로드로 전환.
+    const int MAX_RANGES = 32;
+
+    // 1단계: 실제 업로드 전에 구간 개수만 먼저 셈
+    int rangeCount = 0;
+    {
+        size_t i = 0;
+        while (i < changedIndices.size())
+        {
+            while (i + 1 < changedIndices.size() && changedIndices[i + 1] == changedIndices[i] + 1)
+                i++;
+            rangeCount++;
+            i++;
+        }
+    }
+
+    // 2단계: 구간이 너무 많으면 전체 업로드 1회로 대체
+    if (rangeCount > MAX_RANGES)
+    {
+        VoxelRenderer::UpdateInstances(m_VoxelInstances);
+        return;
+    }
+
+    // 구간이 적으면 부분로직
     size_t i = 0;
     while (i < changedIndices.size())
     {
@@ -477,7 +647,14 @@ void FlowField::FlushVoxelInstanceChanges(std::vector<int>& changedIndices)
         // 포인터 하나로 count개를 통째로 넘길 수 있음
         VoxelRenderer::UpdateInstanceRange((uint32_t)startIndex, (uint32_t)count, &m_VoxelInstances[startIndex]);
         i++;
+
+        rangeCount++;
     }
+
+    char buf[128]; 
+    sprintf_s(buf, "FlushVoxelInstanceChanges: %zu indices -> %d ranges\n",
+        changedIndices.size(), rangeCount);
+    OutputDebugStringA(buf);
 }
 
 
@@ -510,6 +687,13 @@ void FlowField::Update(float dt)
     {
         VoxelRenderer::ToggleWireframe();
         NPCRenderer::ToggleWireframe();
+    }
+
+    // F2 - flowfield 색 바꾸기
+    if (GameInput::IsFirstPressed(GameInput::kKey_f2))
+    {
+        m_DebugShowChunks = !m_DebugShowChunks;
+        RefreshDebugColors();   // 켜고 끌 때 즉시 반영
     }
 }
 
