@@ -219,3 +219,12 @@ bool CorridorFlowField::SampleDirection(const VoxelGrid& grid, int x, int y, int
     outDir = col->direction[slot];
     return true;
 }
+
+bool CorridorFlowField::IsVisited(const VoxelGrid& grid, int x, int y, int z) const
+{
+    int slotIdx;
+    ChunkCache chunkcache;
+    const FlowFieldChunk::ColumnData* col = FindColumn(grid, x, y, z, slotIdx, chunkcache);
+    if (!col || slotIdx < 0) return false;
+    return col->visited[slotIdx];
+}

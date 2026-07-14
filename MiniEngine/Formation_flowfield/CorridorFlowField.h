@@ -71,6 +71,9 @@ public:
     // const는 위치 조회로 새로운 청크 할당 방지
     bool SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMFLOAT3& outDir) const;
 
+    // 해당 (xyz)가 실제로 방문되었는지 검사
+    bool IsVisited(const VoxelGrid& grid, int x, int y, int z) const;
+
     // 청크 순회용 getter
     const std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>>& GetChunks() const { return m_Chunks; }
     const int GetChunkSize() { return FlowFieldChunk::SIZE; }

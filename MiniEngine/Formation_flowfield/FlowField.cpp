@@ -66,6 +66,8 @@ void FlowField::Startup(void)
 
     VoxelRenderer::Initialize();
     NPCRenderer::Initialize();
+    FlowFieldArrowRenderer::Initialize();
+
 
     // BMP 로드 → 복셀 생성 → GPU 업로드
     // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
@@ -178,6 +180,7 @@ void FlowField::Cleanup(void)
 {
     VoxelRenderer::Shutdown();
     NPCRenderer::Shutdown();
+    FlowFieldArrowRenderer::Shutdown();
 }
 
 
@@ -371,6 +374,7 @@ void FlowField::HandlePicking()
                     }
                     OccupyChunks(0);       // TODO : GroupID로 바꾸기
                     RefreshDebugColors(prevKeys);
+                    BuildArrowInstances();
 
                     m_NpcCurrentCell = start;
                     m_NpcCellInitialized = true;
@@ -469,6 +473,7 @@ void FlowField::UpdateNpcMovement(float dt)
             m_PathVoxelIndices.clear();
 
             RefreshDebugColors(prevKeys);   // prevKeys가 기본색으로 리셋되고, 남은 그룹 색이 있으면 복원됨
+            BuildArrowInstances();          // npc 도착시, 화살표 비워주기
         }
         return; 
     }
@@ -481,6 +486,47 @@ void FlowField::UpdateNpcMovement(float dt)
     inst.position[2] += dirVec.GetZ() * NPC_SPEED * dt;
 
     NPCRenderer::UpdateInstances(m_NpcInstances);
+}
+
+void FlowField::BuildArrowInstances()
+{
+    std::vector<FlowFieldArrowRenderer::InstanceData> instances;
+
+    if (false == m_DebugShowArrows)   return;
+
+    float cellSize = m_VoxelGrid.GetCellSize();
+    const float ARROW_LENGTH = cellSize * 0.8f;     // 셀보다 살짝 작게함 -> 옆셀 침범 안하게
+    const float HEIGHT_OFFSET = cellSize * 0.8f;    // 지면 띄울 높이
+
+    for (int64_t key : m_OccupiedChunkKeys)
+    {
+        auto it = m_ChunkToVoxelIndices.find(key);
+        if (it == m_ChunkToVoxelIndices.end())   continue;
+
+        for (int idx : it->second)
+        {
+            const auto& c = m_VoxelCellCoords[idx];
+
+            DirectX::XMFLOAT3 dir;
+            if (false == m_CorridorField.SampleDirection(m_VoxelGrid, c.x, c.y, c.z, dir))  continue;
+
+            Math::Vector3 worldPos = m_VoxelGrid.GetWorldPos(c.x, c.y, c.z);
+
+            FlowFieldArrowRenderer::InstanceData inst{};
+            inst.position[0] = worldPos.GetX();
+            inst.position[1] = worldPos.GetY() + HEIGHT_OFFSET;
+            inst.position[2] = worldPos.GetZ();
+            inst.length = ARROW_LENGTH;
+            inst.direction[0] = dir.x;
+            inst.direction[1] = dir.y;
+            inst.direction[2] = dir.z;
+
+            instances.emplace_back(inst);
+        }
+        
+    }
+
+    FlowFieldArrowRenderer::UpdateInstances(instances);
 }
 
 uint32_t FlowField::GetBaseColorType(int instanceIndex) const
@@ -560,7 +606,14 @@ void FlowField::RefreshDebugColors(const std::vector<int64_t>& extraKeys)
 
         for (int idx : it->second)
         {
-            m_VoxelInstances[idx].colorType = useGroupColor ? groupColor : GetBaseColorType(idx);
+            bool isVisit = false;
+            if (true == useGroupColor)
+            {
+                const auto& c = m_VoxelCellCoords[idx];
+                isVisit = m_CorridorField.IsVisited(m_VoxelGrid, c.x, c.y, c.z);
+            }
+
+            m_VoxelInstances[idx].colorType = isVisit ? groupColor : GetBaseColorType(idx);
             changed.push_back(idx);
         }
     };
@@ -654,10 +707,10 @@ void FlowField::FlushVoxelInstanceChanges(std::vector<int>& changedIndices)
         rangeCount++;
     }
 
-    char buf[128]; 
-    sprintf_s(buf, "FlushVoxelInstanceChanges: %zu indices -> %d ranges\n",
-        changedIndices.size(), rangeCount);
-    OutputDebugStringA(buf);
+    //char buf[128]; 
+    //sprintf_s(buf, "FlushVoxelInstanceChanges: %zu indices -> %d ranges\n",
+    //    changedIndices.size(), rangeCount);
+    //OutputDebugStringA(buf);
 }
 
 
@@ -698,6 +751,13 @@ void FlowField::Update(float dt)
         m_DebugShowChunks = !m_DebugShowChunks;
         RefreshDebugColors();   // 켜고 끌 때 즉시 반영
     }
+    // F3 - flowfield dir 시각화
+    if (GameInput::IsFirstPressed(GameInput::kKey_f3))
+    {
+        m_DebugShowArrows = !m_DebugShowArrows;
+        FlowFieldArrowRenderer::SetEnabled(m_DebugShowArrows);
+        BuildArrowInstances();
+    }
 }
 
 void FlowField::RenderScene(void)
@@ -721,6 +781,9 @@ void FlowField::RenderScene(void)
 
     // NPC 드로우
     NPCRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
+
+    // flowfield 화살표
+    FlowFieldArrowRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
 
     // Present 전이
     ctx.TransitionResource(g_SceneColorBuffer, D3D12_RESOURCE_STATE_PRESENT);

@@ -16,6 +16,7 @@
 #include "PathCorridor.h"
 #include "CorridorFlowField.h"
 #include "ChunkKey.h"
+#include "FlowFieldArrowRenderer.h"
 
 class FlowField : public GameCore::IGameApp
 {
@@ -49,7 +50,7 @@ private:
     DirectX::XMINT3     m_NpcTargetCell{ -1, -1, -1 };   // 지금 이동해서 향하고 있는 다음 셀
     bool                m_NpcCellInitialized = false;
 
-    // ------------ 청크 시각화 관련 ----------------
+    // ------------ flowfield 시각화 관련 ----------------
     // 
     // 청크 디버그 시각화(f2)
     bool                m_DebugShowChunks = false;
@@ -75,6 +76,11 @@ private:
     // 레이어 순서대로 덮어써서 디버그 색을 갱신하고 GPU에 반영.
     // extraKeys: 이번에 해제되어 기본색으로 돌려놔야 하는 청크 키들 (없으면 비워서 호출)
     void RefreshDebugColors(const std::vector<int64_t>& extraKeys = {});
+
+    //----------------- flowfield dir 시각화----------------
+    bool m_DebugShowArrows = false;
+    int m_ArrowStride = 2;
+    void BuildArrowInstances();
 
 
     // ----------------- 목적지 복셀 선택 관련 --------------

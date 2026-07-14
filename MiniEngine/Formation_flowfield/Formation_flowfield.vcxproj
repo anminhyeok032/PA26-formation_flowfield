@@ -153,6 +153,7 @@
     <ClCompile Include="AStarPathfinder.cpp" />
     <ClCompile Include="CorridorFlowField.cpp" />
     <ClCompile Include="FlowField.cpp" />
+    <ClCompile Include="FlowFieldArrowRenderer.cpp" />
     <ClCompile Include="GridNeighbors.cpp" />
     <ClCompile Include="HeightMap.cpp" />
     <ClCompile Include="NPCRenderer.cpp" />
@@ -233,6 +234,7 @@
     <ClInclude Include="ChunkKey.h" />
     <ClInclude Include="CorridorFlowField.h" />
     <ClInclude Include="FlowField.h" />
+    <ClInclude Include="FlowFieldArrowRenderer.h" />
     <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
     <ClInclude Include="NPCRenderer.h" />
@@ -278,6 +280,46 @@
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)CompiledShaders\NpcVS.h</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)CompiledShaders\NpcVS.h</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)CompiledShaders\NpcVS.h</Outputs>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="FlowFieldArrowPS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h" /Vn g_pFlowFieldArrowPS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling FlowFieldArrowPS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h" /Vn g_pFlowFieldArrowPS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling FlowFieldArrowPS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h" /Vn g_pFlowFieldArrowPS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling FlowFieldArrowPS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">fxc /nologo /T ps_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h" /Vn g_pFlowFieldArrowPS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling FlowFieldArrowPS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)CompiledShaders\FlowFieldArrowPS.h;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="FlowFieldArrowVS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h" /Vn g_pFlowFieldArrowVS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compiling FlowFieldArrowVS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h" /Vn g_pFlowFieldArrowVS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compiling FlowFieldArrowVS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h" /Vn g_pFlowFieldArrowVS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling FlowFieldArrowVS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">fxc /nologo /T vs_5_1 /E main /Fh "$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h" /Vn g_pFlowFieldArrowVS "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling FlowFieldArrowVS.hlsl</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h;%(Outputs)</Outputs>
     </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

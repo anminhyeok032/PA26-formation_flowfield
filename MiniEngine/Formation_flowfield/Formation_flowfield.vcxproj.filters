@@ -40,6 +40,9 @@
     <Filter Include="NPC\FlowField">
       <UniqueIdentifier>{f81cf28f-af33-4617-97d5-55bba11ba604}</UniqueIdentifier>
     </Filter>
+    <Filter Include="NPC\FlowField\Shaders">
+      <UniqueIdentifier>{c098d818-ec34-458d-aa2b-b4ec260b758e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -69,6 +72,9 @@
     <ClCompile Include="CorridorFlowField.cpp">
       <Filter>NPC\FlowField</Filter>
     </ClCompile>
+    <ClCompile Include="FlowFieldArrowRenderer.cpp">
+      <Filter>NPC\FlowField</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -85,6 +91,12 @@
     </CustomBuild>
     <CustomBuild Include="NpcVS.hlsl">
       <Filter>NPC\Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="FlowFieldArrowPS.hlsl">
+      <Filter>NPC\FlowField\Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="FlowFieldArrowVS.hlsl">
+      <Filter>NPC\FlowField\Shaders</Filter>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
@@ -117,6 +129,9 @@
     </ClInclude>
     <ClInclude Include="FlowField.h">
       <Filter>소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="FlowFieldArrowRenderer.h">
+      <Filter>NPC\FlowField</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
