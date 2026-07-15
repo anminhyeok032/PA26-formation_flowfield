@@ -23,7 +23,7 @@ namespace NPCRenderer
     static StructuredBuffer  s_InstanceBuffer;
     static uint32_t          s_InstanceCount = 0;
     static uint32_t          s_IndexCount = 0;
-    static bool              s_IsWireframe = false;                     // F1키 누르면 중첩 렌더
+    static bool              s_IsWireframe = true;                     // F1키 누르면 중첩 렌더
 
     static void GenerateSphere(int segments, int rings, std::vector<Vertex>& outVerts, std::vector<uint16_t>& outIndices)
     { 

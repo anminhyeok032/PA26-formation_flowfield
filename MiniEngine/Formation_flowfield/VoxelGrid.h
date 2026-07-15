@@ -126,9 +126,10 @@ public:
     int  GetSurfaceY(int x, int z) const;
 
 
-
+    // Y List를 받아 순회용 구조체
     struct SurfaceSpan
     {
+        // y들어있는 list
         const int16_t* data;
         int count;
         // range 기반 탐색용 - std::span 패턴

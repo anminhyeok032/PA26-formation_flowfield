@@ -86,3 +86,13 @@ void GetWalkableNeighbors(const VoxelGrid& grid, const DirectX::XMINT3& curr, st
         }
     }
 }
+
+int FindSurfaceSlot(const VoxelGrid& grid, int x, int y, int z)
+{
+    VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
+    for (int i = 0; i < surfaces.count; ++i)
+    {
+        if (surfaces.data[i] == y)   return i;
+    }
+    return -1;
+}

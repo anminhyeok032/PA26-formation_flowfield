@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "VoxelGrid.h"
+#include "PathCorridor.h"
 #include <DirectXMath.h>
 #include <vector>
 #include <array>
@@ -20,7 +21,7 @@ private:
         static constexpr int AREA = SIZE * SIZE; // 256
         static constexpr int MAX_SLOTS = SurfaceChunk::SurfaceColumn::INLINE_CAPACITY;
 
-
+        // 각 xz + y_slot좌표의 SoA구조 - cost, visited, dir값
         struct ColumnData
         {
             std::array<float, MAX_SLOTS>                cost;

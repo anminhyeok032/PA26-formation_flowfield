@@ -34,7 +34,7 @@ namespace FlowFieldArrowRenderer
     static ByteAddressBuffer s_VertexBuffer;
     static StructuredBuffer  s_InstanceBuffer;
     static uint32_t          s_InstanceCount = 0;
-    static bool              s_Enabled = false;
+    static bool              s_Enabled = true;
 
     void Initialize()
     {

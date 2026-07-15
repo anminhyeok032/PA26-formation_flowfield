@@ -1,46 +1,65 @@
 ﻿#include "PathCorridor.h"
 #include "VoxelGrid.h"
+#include "GridNeighbors.h"
 #include "ChunkKey.h"
 #include <algorithm>
+#include <queue>
+#include <unordered_map>
+#include <cmath>
 
-int ComputeMarginChunks(int memberCount, int chunkSize, int bufferCells)
+int ComputeMarginCells(int memberCount, int bufferCells)
 {
-    const int MIN_MARGIN = 0;
+    const int MIN_MARGIN = 2;
 
     if (memberCount <= 1)   return MIN_MARGIN;
 
     float side = std::sqrt((float)memberCount);
-    float radiusCells = side * 0.5f + bufferCells;
 
-    int margin = (int)std::ceil(radiusCells / (float)chunkSize);
+    // 셀 단위 반지름 청크 단위로 올림
+    int margin = (int)std::ceil(side * 0.5f) + bufferCells;
     return std::max(margin, MIN_MARGIN);
 }
 
-std::unordered_set<int64_t> BuildChunkMask(const std::vector<DirectX::XMINT3>& path, int marginChunks, int chunkSize)
+std::unordered_set<int64_t> BuildLayerMask(const VoxelGrid& grid,
+    const std::vector<DirectX::XMINT3>& path, int marginCells)
 {
+    // 청크 key 집합
     std::unordered_set<int64_t> mask;
+    std::queue<DirectX::XMINT3> q;
+    std::unordered_map<int64_t, int> dist;
 
     for (const auto& node : path)
     {
-        int cx = node.x / chunkSize;
-        int cz = node.z / chunkSize;
-
-        // 수평(XZ) 방향으로만 margin을 확장. Y는 지형 표면이 몇 층 없어서
-        // 확장할 필요가 크지 않고(그룹이 위아래로 퍼질 일은 없음), 옆으로만 퍼지므로
-        // XZ만 넓혀서 그룹 대형이 지나갈 폭을 확보함.
-        for (int dx = -marginChunks; dx <= marginChunks; dx++)
+        int64_t key = MakeCellKey(node.x, node.y, node.z);
+        if (dist.emplace(key, 0).second)
         {
-            for (int dz = -marginChunks; dz <= marginChunks; dz++)
-            {
-                // 음수 청크 좌표는 실제로 존재하지 않는(맵 밖) 청크이므로 0으로 클램프.
-                // (맵 가장자리 근처 경로일 때 margin이 맵 밖으로 나가는 걸 방지)
-                int mcx = std::max(0, cx + dx);
-                int mcz = std::max(0, cz + dz);
+            mask.insert(key);
+            q.push(node);
+        }
+    }
 
-                mask.insert(MakeChunkKey(mcx, 0, mcz));
+    std::vector<NeighborInfo> neighbors;
+    while (!q.empty())
+    {
+        DirectX::XMINT3 curr = q.front();
+        q.pop();
+
+        int currDist = dist[MakeCellKey(curr.x, curr.y, curr.z)];
+        if (currDist >= marginCells) continue;
+
+        GetWalkableNeighbors(grid, curr, neighbors);
+
+        for (const auto& n : neighbors)
+        {
+            int64_t nKey = MakeCellKey(n.pos.x, n.pos.y, n.pos.z);
+            if (dist.emplace(nKey, currDist + 1).second)
+            {
+                mask.insert(nKey);
+                q.push(n.pos);
             }
         }
     }
+
 
     return mask;
 }

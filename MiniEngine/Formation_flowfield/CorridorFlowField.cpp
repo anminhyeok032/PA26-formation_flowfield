@@ -23,20 +23,11 @@ CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindOrCreateCo
         cache.chunk = it->second.get();
     }
 
+    outSlotIdx = FindSurfaceSlot(grid, x, y, z);
+    if (outSlotIdx < 0) return nullptr;             // 슬롯 없으면 컬럼도 의미 없음
+
     int lx = x % FlowFieldChunk::SIZE;
     int lz = z % FlowFieldChunk::SIZE;
-
-    VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
-    outSlotIdx = -1;
-    for (int i = 0; i < surfaces.count; ++i)
-    {
-        if (surfaces.data[i] == y)
-        {
-            outSlotIdx = i;
-            break;
-        }
-    }
-
     return &cache.chunk->At(lx, lz);
 }
 
@@ -61,22 +52,12 @@ const CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindColu
         cache.chunk = const_cast<FlowFieldChunk*>(it->second.get());
     }
 
+    outSlotIdx = FindSurfaceSlot(grid, x, y, z);
+    if (outSlotIdx < 0) return nullptr;             // 슬롯 없으면 컬럼도 의미 없음
+
     int lx = x % FlowFieldChunk::SIZE;
     int lz = z % FlowFieldChunk::SIZE;
-
-    VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
-    outSlotIdx = -1;
-
-    for (int i = 0; i < surfaces.count; ++i)
-    {
-        if (surfaces.data[i] == y)
-        {
-            outSlotIdx = i;
-            break;
-        }
-    }
-
-    return &cache.chunk->At(lx,lz);
+    return &cache.chunk->At(lx, lz);
 }
 
 void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask)
@@ -93,37 +74,41 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
 
     ChunkCache chunkcache;
 
+    // 기준 시작점이 목적지로 -> goal에서 퍼저나가면서 방향을 세기기 위해
+    // 따라서 목적지의 비용인 0으로 초기화
     int goalIdx;
     FlowFieldChunk::ColumnData* goalChunk = FindOrCreateColumn(grid, goal.x, goal.y, goal.z, goalIdx, chunkcache);
+    if (!goalChunk)  return;    // 목적지 못가는지 체크
+
     goalChunk->cost[goalIdx] = 0.0f;
     openList.push({ goal, 0.0f });
 
     std::vector<NeighborInfo> neighbors;
     while (!openList.empty())
     {
+        // 가장 낮은 비용부터 뽑기
         DirectX::XMINT3 curr = openList.top().pos;
         openList.pop();
 
         int currIdx;
         FlowFieldChunk::ColumnData* currChunk = FindOrCreateColumn(grid, curr.x, curr.y, curr.z, currIdx, chunkcache);
 
+        // 같은 좌표 뽑기 방지
         if (true == currChunk->visited[currIdx]) continue;
         currChunk->visited[currIdx] = true;
 
         float currCost = currChunk->cost[currIdx];
-
+        // 걸어서 갈 수 있는 이웃좌표
         GetWalkableNeighbors(grid, curr, neighbors);
 
         for (const auto& n : neighbors)
         {
-            int next_x = n.pos.x / FlowFieldChunk::SIZE;
-            int next_z = n.pos.z / FlowFieldChunk::SIZE;
-
-            if (mask.find(MakeChunkKey(next_x, 0, next_z)) == mask.end())   continue;
+            // 해당 y에 mask없으면 continue
+            if (mask.find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) == mask.end())  continue;
 
             int next_idx;
             FlowFieldChunk::ColumnData* nChunk = FindOrCreateColumn(grid, n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
-            if (next_idx < 0) continue;
+            if (!nChunk) continue;
             if (nChunk->visited[next_idx]) continue;   // 이미 확정된 노드는 더 나아질 수 없음
 
             float predCost = currCost + n.cost;
@@ -145,7 +130,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
 {
     std::vector<NeighborInfo> neighbors;
 
-    // 만들어진 청크 기준으로 탐색
+    // 다익스트라로 만들어둔 chunk(cost가 계산되어있는) 순회
     for (auto& k : m_Chunks)
     {
         auto& key = k.first;
@@ -155,13 +140,15 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
 
         ChunkCache chunkCache;
 
+        // 청크 내부 로컬 좌표 순회 (8*8)
         for (int lz = 0; lz < FlowFieldChunk::SIZE; lz++)
         {
             for (int lx = 0; lx < FlowFieldChunk::SIZE; lx++)
             {
+                // 월드좌표화
                 int x = cx * FlowFieldChunk::SIZE + lx;
                 int z = cz * FlowFieldChunk::SIZE + lz;
-                
+                // 해당 타일 SoA
                 VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
                 FlowFieldChunk::ColumnData& col = chunkPtr->At(lx, lz);
 
@@ -177,6 +164,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                     // 해당 셀의 이웃 후보 neighbors에 저장
                     GetWalkableNeighbors(grid, { x, y, z }, neighbors);
 
+                    // 자신의 비용을 기준으로 가장 비용이 낮은 이웃 찾기
                     float bestCost = myCost;
                     DirectX::XMINT3 bestNeighbor{ x, y, z };
                     bool found = false;
@@ -185,6 +173,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                     {
                         int nIdx;
                         const FlowFieldChunk::ColumnData* nChunk = FindColumn(grid, n.pos.x, n.pos.y, n.pos.z, nIdx, chunkCache);
+                        // 해당 이웃이 방문했고, 찾은것중(나포함) 더 비용이 낮고(목표에 가깝고) 
                         if (nChunk && nChunk->visited[nIdx] && nChunk->cost[nIdx] < bestCost)
                         {
                             bestCost = nChunk->cost[nIdx];
@@ -193,6 +182,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                         }
                     }
 
+                    // 더 비용이 낮은 이웃으로 향함
                     if (true == found)
                     {
                         Math::Vector3 selfPos = grid.GetWorldPos(x, y, z);

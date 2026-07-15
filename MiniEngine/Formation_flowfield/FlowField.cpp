@@ -106,7 +106,7 @@ void FlowField::Startup(void)
         for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
         {
             auto& c = m_VoxelCellCoords[i];
-            m_VoxelCoordToIndex[MakeVoxelCoordKey(c.x, c.y, c.z)] = (int)i;
+            m_VoxelCoordToIndex[MakeCellKey(c.x, c.y, c.z)] = (int)i;
 
             // TODO : FlowField를 2d->3d로 바꿀시, 해당 부분도 수정
             int cx = c.x / chunkSize;
@@ -277,7 +277,7 @@ void FlowField::HandlePicking()
         int newHoverIndex = -1;
         if (hit)
         {
-            auto it = m_VoxelCoordToIndex.find(MakeVoxelCoordKey(hx, hy, hz));
+            auto it = m_VoxelCoordToIndex.find(MakeChunkKey(hx, hy, hz));
             if (it != m_VoxelCoordToIndex.end())
                 newHoverIndex = it->second;
         }
@@ -354,8 +354,8 @@ void FlowField::HandlePicking()
                     int memberCount = 1;
                     const int chunkSize = m_CorridorField.GetChunkSize();   // = FlowFieldChunk::SIZE
 
-                    int margin = ComputeMarginChunks(memberCount, chunkSize);
-                    auto mask = BuildChunkMask(path, margin, chunkSize);
+                    int margin = ComputeMarginCells(memberCount, chunkSize);
+                    auto mask = BuildLayerMask(m_VoxelGrid, path, margin);
 
                     m_CorridorField.Build(m_VoxelGrid, goal, mask);
                     m_HasGoal = true;
@@ -366,7 +366,7 @@ void FlowField::HandlePicking()
                     m_PathVoxelIndices.clear();
                     for (const auto& node : path)
                     {
-                        auto it = m_VoxelCoordToIndex.find(MakeVoxelCoordKey(node.x, node.y, node.z));
+                        auto it = m_VoxelCoordToIndex.find(MakeCellKey(node.x, node.y, node.z));
                         if (it != m_VoxelCoordToIndex.end())
                         {
                             m_PathVoxelIndices.push_back(it->second);

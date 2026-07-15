@@ -45,7 +45,7 @@ namespace VoxelRenderer
     static ByteAddressBuffer s_VertexBuffer;
     static ByteAddressBuffer s_IndexBuffer;
     static StructuredBuffer  s_InstanceBuffer;
-    static bool              s_IsWireframe = false;                     // F1키 누르면 중첩 렌더
+    static bool              s_IsWireframe = true;                     // F1키 누르면 중첩 렌더
 
     // CPU 사이드 인스턴스 목록
     static uint32_t s_InstanceCount = 0;

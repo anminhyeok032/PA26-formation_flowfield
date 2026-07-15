@@ -53,7 +53,7 @@ private:
     // ------------ flowfield 시각화 관련 ----------------
     // 
     // 청크 디버그 시각화(f2)
-    bool                m_DebugShowChunks = false;
+    bool                m_DebugShowChunks = true;
     // 청크 key / 청크 내부 복셀 인스턴스 인덱스 목록
     std::unordered_map<int64_t, std::vector<int>> m_ChunkToVoxelIndices;
 
@@ -78,7 +78,7 @@ private:
     void RefreshDebugColors(const std::vector<int64_t>& extraKeys = {});
 
     //----------------- flowfield dir 시각화----------------
-    bool m_DebugShowArrows = false;
+    bool m_DebugShowArrows = true;
     int m_ArrowStride = 2;
     void BuildArrowInstances();
 
@@ -90,14 +90,6 @@ private:
     // (x,y,z) 좌표 -> m_VoxelInstances 배열의 인덱스로 즉시 찾아가기 위한 색인.
     // BuildInstanceList 직후 딱 한 번만 만들고, 그 이후로는 조회만 함.
     std::unordered_map<int64_t, int> m_VoxelCoordToIndex;
-
-    // 좌표 세 개(x,y,z)를 해시맵 키로 쓸 숫자 하나로 합치는 함수
-    static int64_t MakeVoxelCoordKey(int x, int y, int z)
-    {
-        return (int64_t)(x & 0x1FFFFF) |
-            ((int64_t)(y & 0x1FFFFF) << 21) |
-            ((int64_t)(z & 0x1FFFFF) << 42);
-    }
 
     int  m_HoverCellIndex = -1;      // 지금 마우스가 가리키는 셀 (매 프레임 갱신)
     int  m_ConfirmedCellIndex = -1;  // 우클릭으로 확정된 목적지 (다음 확정 전까지 유지)
