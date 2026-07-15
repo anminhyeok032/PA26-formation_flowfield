@@ -7,7 +7,7 @@
 
 class GraphicsContext;
 
-namespace NPCRenderer
+namespace NpcRenderer
 {
     struct InstanceData
     {

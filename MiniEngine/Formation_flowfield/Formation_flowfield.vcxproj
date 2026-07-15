@@ -156,7 +156,8 @@
     <ClCompile Include="FlowFieldArrowRenderer.cpp" />
     <ClCompile Include="GridNeighbors.cpp" />
     <ClCompile Include="HeightMap.cpp" />
-    <ClCompile Include="NPCRenderer.cpp" />
+    <ClCompile Include="NpcManager.cpp" />
+    <ClCompile Include="NpcRenderer.cpp" />
     <ClCompile Include="PathCorrider.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
     <ClCompile Include="VoxelRenderer.cpp" />
@@ -237,7 +238,8 @@
     <ClInclude Include="FlowFieldArrowRenderer.h" />
     <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
-    <ClInclude Include="NPCRenderer.h" />
+    <ClInclude Include="NpcManager.h" />
+    <ClInclude Include="NpcRenderer.h" />
     <ClInclude Include="PathCorridor.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClInclude Include="VoxelRenderer.h" />

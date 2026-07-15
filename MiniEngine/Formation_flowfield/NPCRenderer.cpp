@@ -1,4 +1,4 @@
-﻿#include "NPCRenderer.h"
+﻿#include "NpcRenderer.h"
 #include "CommandContext.h"
 #include "BufferManager.h"
 #include "GraphicsCommon.h"
@@ -11,7 +11,7 @@
 using namespace Math;
 using namespace Graphics;
 
-namespace NPCRenderer
+namespace NpcRenderer
 {
     struct Vertex { float x, y, z; };
 

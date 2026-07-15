@@ -12,17 +12,11 @@
     <Filter Include="Render">
       <UniqueIdentifier>{7765d3c0-5eea-4c50-a26c-91f312e512ba}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Render\Shaders">
-      <UniqueIdentifier>{df4a0896-19f6-4b72-911b-ef6b7f6f88b9}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Simulation">
       <UniqueIdentifier>{dcee7ef4-fc11-43c7-956f-d06b31d61bd0}</UniqueIdentifier>
     </Filter>
     <Filter Include="NPC">
       <UniqueIdentifier>{eb01e8a5-873b-4d1c-9ad3-c2c9c319e569}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="NPC\Shaders">
-      <UniqueIdentifier>{eaee7eca-4b04-4e9a-aa00-ce4bd6ef3361}</UniqueIdentifier>
     </Filter>
     <Filter Include="리소스 파일">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
@@ -40,7 +34,7 @@
     <Filter Include="NPC\FlowField">
       <UniqueIdentifier>{f81cf28f-af33-4617-97d5-55bba11ba604}</UniqueIdentifier>
     </Filter>
-    <Filter Include="NPC\FlowField\Shaders">
+    <Filter Include="Shaders">
       <UniqueIdentifier>{c098d818-ec34-458d-aa2b-b4ec260b758e}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -53,9 +47,6 @@
     </ClCompile>
     <ClCompile Include="HeightMap.cpp">
       <Filter>Simulation</Filter>
-    </ClCompile>
-    <ClCompile Include="NPCRenderer.cpp">
-      <Filter>NPC</Filter>
     </ClCompile>
     <ClCompile Include="VoxelGrid.cpp">
       <Filter>Simulation\Voxel</Filter>
@@ -73,30 +64,36 @@
       <Filter>NPC\FlowField</Filter>
     </ClCompile>
     <ClCompile Include="FlowFieldArrowRenderer.cpp">
-      <Filter>NPC\FlowField</Filter>
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="NpcRenderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="NpcManager.cpp">
+      <Filter>NPC</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="CubeVS.hlsl">
-      <Filter>Render\Shaders</Filter>
-    </CustomBuild>
-    <CustomBuild Include="CubePS.hlsl">
-      <Filter>Render\Shaders</Filter>
-    </CustomBuild>
-    <CustomBuild Include="NpcPS.hlsl">
-      <Filter>NPC\Shaders</Filter>
-    </CustomBuild>
-    <CustomBuild Include="NpcVS.hlsl">
-      <Filter>NPC\Shaders</Filter>
-    </CustomBuild>
     <CustomBuild Include="FlowFieldArrowPS.hlsl">
-      <Filter>NPC\FlowField\Shaders</Filter>
+      <Filter>Shaders</Filter>
     </CustomBuild>
     <CustomBuild Include="FlowFieldArrowVS.hlsl">
-      <Filter>NPC\FlowField\Shaders</Filter>
+      <Filter>Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="CubePS.hlsl">
+      <Filter>Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="CubeVS.hlsl">
+      <Filter>Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="NpcPS.hlsl">
+      <Filter>Shaders</Filter>
+    </CustomBuild>
+    <CustomBuild Include="NpcVS.hlsl">
+      <Filter>Shaders</Filter>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
@@ -105,9 +102,6 @@
     </ClInclude>
     <ClInclude Include="HeightMap.h">
       <Filter>Simulation</Filter>
-    </ClInclude>
-    <ClInclude Include="NPCRenderer.h">
-      <Filter>NPC</Filter>
     </ClInclude>
     <ClInclude Include="VoxelGrid.h">
       <Filter>Simulation\Voxel</Filter>
@@ -131,7 +125,13 @@
       <Filter>소스 파일</Filter>
     </ClInclude>
     <ClInclude Include="FlowFieldArrowRenderer.h">
-      <Filter>NPC\FlowField</Filter>
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcManager.h">
+      <Filter>NPC</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

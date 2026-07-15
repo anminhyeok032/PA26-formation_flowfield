@@ -77,5 +77,5 @@ public:
 
     // 청크 순회용 getter
     const std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>>& GetChunks() const { return m_Chunks; }
-    const int GetChunkSize() { return FlowFieldChunk::SIZE; }
+    static constexpr int CHUNK_SIZE = FlowFieldChunk::SIZE;
 };

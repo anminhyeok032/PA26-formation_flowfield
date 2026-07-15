@@ -5,7 +5,7 @@
 #include "HeightMap.h"
 #include "VoxelGrid.h"
 #include "VoxelRenderer.h"
-#include "NPCRenderer.h"
+#include "NpcRenderer.h"
 #include <d3d12.h>
 #include <vector>
 #include <unordered_map>
@@ -17,6 +17,8 @@
 #include "CorridorFlowField.h"
 #include "ChunkKey.h"
 #include "FlowFieldArrowRenderer.h"
+#include "NpcManager.h"
+
 
 class FlowField : public GameCore::IGameApp
 {
@@ -35,36 +37,21 @@ private:
     HeightMap                           m_HeightMap;
     VoxelGrid                           m_VoxelGrid;
 
-    // ---- NPC 선택 관련 ----
-    std::vector<NPCRenderer::InstanceData>  m_NpcInstances;             // 지속 보관 (색상만 바꿔 재업로드하기 위해)
-    int                                     m_SelectedNpcIndex = -1;    // 현재 선택된 NPC 인덱스, 없으면 -1
-
-    // ---- 길찾기(A* -> 마스크 -> CorridorFlowField) ----
-    // TODO: 지금은 NPC 1마리 선택만 가능하므로 인원수=1로 취급.
-    //       나중에 그룹(여러 NPC 선택)이 추가되면 memberCount를 실제 그룹 크기로 교체.
-    AStarPathfinder     m_Pathfinder;
-    CorridorFlowField   m_CorridorField;
-    bool                m_HasGoal = false;
-
-    DirectX::XMINT3     m_NpcCurrentCell{ -1, -1, -1 };  // 이미 도착해서 확정된 셀
-    DirectX::XMINT3     m_NpcTargetCell{ -1, -1, -1 };   // 지금 이동해서 향하고 있는 다음 셀
-    bool                m_NpcCellInitialized = false;
+    NpcManager                          m_Npc;
 
     // ------------ flowfield 시각화 관련 ----------------
     // 
     // 청크 디버그 시각화(f2)
     bool                m_DebugShowChunks = true;
     // 청크 key / 청크 내부 복셀 인스턴스 인덱스 목록
-    std::unordered_map<int64_t, std::vector<int>> m_ChunkToVoxelIndices;
-
+    std::unordered_map<int64_t, std::vector<int>>   m_ChunkToVoxelIndices;
     // 청크 key / 청크 점유중인 그룹 ID (진입 순서순)
     // back()으로 색 표시를 기준 - 해당 그룹 도착시, erase해라.
-    std::unordered_map<int64_t, std::vector<int>> m_ChunkOccupants;
-
+    std::unordered_map<int64_t, std::vector<int>>   m_ChunkOccupants;
     // 그룹들이 점유한 청크 키
-    std::vector<int64_t> m_OccupiedChunkKeys;
+    std::vector<int64_t>                            m_OccupiedChunkKeys;
     // A* 경로 복셀 인스턴스 인덱스 (진빨강 추가 표시용)
-    std::vector<int64_t> m_PathVoxelIndices;
+    std::vector<int>                                m_PathVoxelIndices;
 
     // 특정 청크 최종 colorType 우선순위 저장
     uint32_t GetBaseColorType(int instanceIndex) const;
@@ -74,12 +61,13 @@ private:
     void ReleaseChunks(int groupId);
 
     // 레이어 순서대로 덮어써서 디버그 색을 갱신하고 GPU에 반영.
-    // extraKeys: 이번에 해제되어 기본색으로 돌려놔야 하는 청크 키들 (없으면 비워서 호출)
+    // 디버그 색을 changed에 "모으기만" 함 (Flush 안 함). 밖에서 다른 변경과 합쳐 1회 Flush할 때 사용.
+    void CollectDebugColorChanges(std::vector<int>& changed, const std::vector<int64_t>& extraKeys);
+    // 모으고 즉시 Flush. 단독 호출(F2 등)용.
     void RefreshDebugColors(const std::vector<int64_t>& extraKeys = {});
 
     //----------------- flowfield dir 시각화----------------
     bool m_DebugShowArrows = true;
-    int m_ArrowStride = 2;
     void BuildArrowInstances();
 
 
@@ -107,13 +95,6 @@ private:
 
     // 매 프레임 좌/우클릭을 검사해서 NPC 선택 / 목적지 지정 처리
     void HandlePicking();
-
-
-    // --------------NPC 이동----------------
-    // 확정된 목적지를 향해 선택된 NPC를 매 프레임 이동시킴
-    void UpdateNpcMovement(float dt);
-    // 격자 셀 좌표 -> NPC가 실제로 서 있어야 할 월드 좌표.
-    Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float npcHalfHeight) const;
 
 
     // 바뀐 복셀 gpu 업로드
