@@ -21,22 +21,32 @@ int ComputeMarginCells(int memberCount, int bufferCells)
 }
 
 std::unordered_set<int64_t> BuildLayerMask(const VoxelGrid& grid,
-    const std::vector<DirectX::XMINT3>& path, int marginCells)
+    const std::vector<DirectX::XMINT3>& path, 
+    const std::vector<DirectX::XMINT3>& extraSeeds, 
+    int marginCells)
 {
     // 청크 key 집합
     std::unordered_set<int64_t> mask;
     std::queue<DirectX::XMINT3> q;
     std::unordered_map<int64_t, int> dist;
 
-    for (const auto& node : path)
-    {
+    auto seed = [&](const DirectX::XMINT3& node) {
         int64_t key = MakeCellKey(node.x, node.y, node.z);
-        if (dist.emplace(key, 0).second)
-        {
-            mask.insert(key);
-            q.push(node);
-        }
-    }
+        if (dist.emplace(key, 0).second) { mask.insert(key); q.push(node); }
+    };
+
+    for (const auto& node : path)       seed(node);
+    for (const auto& node : extraSeeds) seed(node);
+
+    //for (const auto& node : path)
+    //{
+    //    int64_t key = MakeCellKey(node.x, node.y, node.z);
+    //    if (dist.emplace(key, 0).second)
+    //    {
+    //        mask.insert(key);
+    //        q.push(node);
+    //    }
+    //}
 
     std::vector<NeighborInfo> neighbors;
     while (!q.empty())

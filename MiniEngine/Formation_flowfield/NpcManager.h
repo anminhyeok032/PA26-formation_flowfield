@@ -69,4 +69,6 @@ private:
     void SyncInstances();   // SoA position → m_NpcInstances → UpdateInstances
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const;
 
+    std::vector<DirectX::XMINT3> m_StartCells;
+
 };
