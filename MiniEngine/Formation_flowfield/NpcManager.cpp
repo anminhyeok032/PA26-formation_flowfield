@@ -1,40 +1,74 @@
 ﻿#include "NpcManager.h"
 #include "ChunkKey.h"
+#include "GridNeighbors.h"
 #include <cmath>
+#include <queue>
 
 void NpcManager::Init(const VoxelGrid& grid)
 {
     m_Grid = &grid;
-
     const float voxelSize = grid.GetCellSize();
-    const float NPC_WIDTH = voxelSize / 2.0f;        // 기존 상수와 동일
+    const float NPC_WIDTH = voxelSize / 2.0f;
     const float NPC_HEIGHT = voxelSize * 3.0f / 2.0f;
 
     m_NpcInstances.clear();
-    m_NpcInstances.reserve(100);
+    const int TARGET_COUNT = 1000;
+    //m_NpcInstances.reserve(TARGET_COUNT);
 
-    constexpr int INTER_NPC = 1;
-    // 지형 위에 10x10 격자로 100개 배치
-    for (int i = 0; i < 100; i++)
+    const int baseX = 100;
+    const int baseZ = 100;
+
+    // 시작 셀이 자체적으로 걸을 수 있는 표면인지 확인 후, 그 y를 구함
+    VoxelGrid::SurfaceSpan startSurfaces = grid.GetSurfaceYList(baseX, baseZ);
+    if (startSurfaces.count == 0)
     {
-        for (int j = 0; j < 100; j++)
+        // 시작점 자체가 허공/막힘이면 배치 불가 — 조용히 종료
+        NpcRenderer::UpdateInstances(m_NpcInstances);
+        return;
+    }
+    int startY = startSurfaces.data[0];   // 여러 표면이면 가장 아래(첫 번째)를 기준으로
+
+    // BFS: 시작 셀에서 실제로 걸어서(GetWalkableNeighbors) 도달 가능한 컬럼만 방문.
+    // 컬럼(x,z) 단위로 중복 방문 방지 (같은 컬럼의 다른 y는 배치 목적상 굳이 재방문 안 함).
+    std::unordered_set<int64_t> visitedColumns;
+    std::queue<DirectX::XMINT3> q;
+
+    DirectX::XMINT3 startCell{ baseX, startY, baseZ };
+    visitedColumns.insert(MakeCellKey(baseX, 0, baseZ));   // y는 0 고정 — 컬럼 단위 방문 표시용
+    q.push(startCell);
+
+    int placed = 0;
+    std::vector<NeighborInfo> neighbors;
+
+    while (!q.empty() && placed < TARGET_COUNT)
+    {
+        DirectX::XMINT3 cur = q.front();
+        q.pop();
+
+        // 현재 셀에 NPC 배치
+        float surfY = (float)cur.y * voxelSize;
+        NpcRenderer::InstanceData inst = {};
+        inst.scaleXZ = NPC_WIDTH;
+        inst.scaleY = NPC_HEIGHT;
+        inst.position[0] = cur.x * voxelSize;
+        inst.position[1] = surfY + (voxelSize / 2.0f) + inst.scaleY + 0.1f;
+        inst.position[2] = cur.z * voxelSize;
+        inst.colorType = 0;
+        m_NpcInstances.push_back(inst);
+        placed++;
+
+        if (placed >= TARGET_COUNT) break;
+
+        // 실제로 걸어서 갈 수 있는 이웃만 확장 (연결성 보장 — 고립 지형 배제)
+        GetWalkableNeighbors(*m_Grid, cur, neighbors);
+        for (const auto& n : neighbors)
         {
-            int gx = 100 + i * INTER_NPC;
-            int gz = 100 + j * INTER_NPC;
-
-            float surfY = (float)grid.GetSurfaceY(gx, gz) * voxelSize;
-
-            NpcRenderer::InstanceData inst = {};
-            inst.scaleXZ = NPC_WIDTH;
-            inst.scaleY = NPC_HEIGHT;
-            inst.position[0] = gx * voxelSize;
-            inst.position[1] = surfY + (voxelSize / 2.0f) + inst.scaleY + 0.1f;
-            inst.position[2] = gz * voxelSize;
-            inst.colorType = 0;
-            m_NpcInstances.push_back(inst);
+            int64_t colKey = MakeCellKey(n.pos.x, 0, n.pos.z);
+            if (visitedColumns.insert(colKey).second)   // 처음 방문하는 컬럼만
+                q.push(n.pos);
         }
     }
-
+    int size = m_NpcInstances.size();
     NpcRenderer::UpdateInstances(m_NpcInstances);
 }
 
@@ -54,19 +88,20 @@ bool NpcManager::TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector
         }
     }
 
-    if (m_SelectedNpcIndex >= 0 && m_SelectedNpcIndex < (int)m_NpcInstances.size())
-    {
-        m_NpcInstances[m_SelectedNpcIndex].colorType = 0;
-    }
+    // 아무도 안 맞았으면 기존 선택 상태 유지 (클릭이 허공을 쳤을 뿐, 해제 의도 아님)
+    if (hitIndex < 0)
+        return m_GroupSelected;
 
-    m_SelectedNpcIndex = (hitIndex == m_SelectedNpcIndex) ? -1 : hitIndex;
-    if (m_SelectedNpcIndex >= 0)
-    {
-        m_NpcInstances[m_SelectedNpcIndex].colorType = 2;
-    }
+    // 맞았으면 그룹 선택 토글 (누구를 맞췄는지는 무관 — 그룹 전체가 한 단위)
+    m_GroupSelected = !m_GroupSelected;
+    m_SelectedNpcIndex = m_GroupSelected ? hitIndex : -1;   // 필요 시 참조용으로만 보관
+
+    uint32_t color = m_GroupSelected ? 2u : 0u;
+    for (auto& inst : m_NpcInstances)
+        inst.colorType = color;
 
     NpcRenderer::UpdateInstances(m_NpcInstances);
-    return m_SelectedNpcIndex >= 0;
+    return m_GroupSelected;
 }
 
 //bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell, std::vector<DirectX::XMINT3>* outPath)

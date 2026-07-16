@@ -38,7 +38,7 @@ public:
 
 	// 좌클릭 선택
 	bool TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector3& rayDir);
-    bool HasSelection() const { return m_SelectedNpcIndex >= 0; }
+    bool HasSelection() const { return m_GroupSelected; }
 
 	// 우클릭 목적지 확정 -> A* -> 마스크 -> FlowField -> 이동초기화 파이프라인 전체 실행.
 	bool SetGroupDestination(const DirectX::XMINT3& goalCell, std::vector<DirectX::XMINT3>* outPath = nullptr);
@@ -56,6 +56,7 @@ private:
 
     std::vector<NpcRenderer::InstanceData> m_NpcInstances;
     int m_SelectedNpcIndex = -1;
+    bool m_GroupSelected = false;
 
     AStarPathfinder   m_Pathfinder;
     CorridorFlowField m_CorridorField;
