@@ -210,6 +210,17 @@ bool CorridorFlowField::SampleDirection(const VoxelGrid& grid, int x, int y, int
     return true;
 }
 
+bool CorridorFlowField::SampleCost(const VoxelGrid& grid, int x, int y, int z, float& outCost) const
+{
+    ChunkCache cache;
+    int slot;
+    const FlowFieldChunk::ColumnData* col = FindColumn(grid, x, y, z, slot, cache);
+    if (!col || slot < 0 || !col->visited[slot]) return false;
+
+    outCost = col->cost[slot];
+    return true;
+}
+
 bool CorridorFlowField::IsVisited(const VoxelGrid& grid, int x, int y, int z) const
 {
     int slotIdx;

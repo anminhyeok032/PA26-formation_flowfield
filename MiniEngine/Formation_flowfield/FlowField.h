@@ -20,6 +20,16 @@
 #include "NpcManager.h"
 
 
+
+// 색상 상수 정리
+static constexpr uint32_t kColorDefault     = 0;    // default
+static constexpr uint32_t kColorSelected    = 1;    // npc select
+static constexpr uint32_t kColorHover       = 2;    // hovering
+static constexpr uint32_t kColorPath        = 3;    // A* path
+static constexpr uint32_t kColorSlotEmpty   = 4;    // 빈 슬롯
+static constexpr uint32_t kColorSlotClaimed = 5;    // 청구됨(이동 중)
+static constexpr uint32_t kColorSlotArrived = 6;    // 도착 완료
+
 class FlowField : public GameCore::IGameApp
 {
 public:
@@ -65,6 +75,11 @@ private:
     void CollectDebugColorChanges(std::vector<int>& changed, const std::vector<int64_t>& extraKeys);
     // 모으고 즉시 Flush. 단독 호출(F2 등)용.
     void RefreshDebugColors(const std::vector<int64_t>& extraKeys = {});
+
+
+    // --도착지 시각화--
+    void CollectSlotColorChanges(std::vector<int>& changed);
+    int m_SlotDebugTimer = 0;
 
     //----------------- flowfield dir 시각화----------------
     bool m_DebugShowArrows = true;

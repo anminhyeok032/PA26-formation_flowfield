@@ -20,6 +20,14 @@ static int64_t MakeCellKey(int x, int y, int z)
         ((int64_t)(y & 0x1FFFFF) << 21) |
         ((int64_t)(z & 0x1FFFFF) << 42);
 }
+// XMINT3 오버로딩
+static int64_t MakeCellKey(const DirectX::XMINT3& v)
+{
+    // 만약 좌표가 2,097,151넘으면 21비트보다 크게 잡을것
+    return (int64_t)(v.x & 0x1FFFFF) |
+        ((int64_t)(v.y & 0x1FFFFF) << 21) |
+        ((int64_t)(v.z & 0x1FFFFF) << 42);
+}
 
 // MakeChunkKey의 역변환. 해시맵을 순회하며 "이 청크가 어느 좌표였는지" 되짚을 때 사용.
 inline void DecodeChunkKey(int64_t key, int& outCx, int& outCy, int& outCz)

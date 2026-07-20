@@ -232,6 +232,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AStarPathfinder.h" />
+    <ClInclude Include="CellReservation.h" />
     <ClInclude Include="ChunkKey.h" />
     <ClInclude Include="CorridorFlowField.h" />
     <ClInclude Include="FlowField.h" />

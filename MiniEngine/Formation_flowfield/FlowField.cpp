@@ -246,7 +246,7 @@ void FlowField::HandlePicking()
             // 새 호버 셀 초록 표시 (그게 이미 확정 목적지라면 어차피 초록이라 중복이어도 무해)
             if (m_HoverCellIndex >= 0)
             {
-                m_VoxelInstances[m_HoverCellIndex].colorType = 2;
+                m_VoxelInstances[m_HoverCellIndex].colorType = kColorHover;
                 changedVoxelIndices.push_back(m_HoverCellIndex);
             }
         }
@@ -274,7 +274,7 @@ void FlowField::HandlePicking()
         }
 
         m_ConfirmedCellIndex = m_HoverCellIndex;
-        m_VoxelInstances[m_ConfirmedCellIndex].colorType = 2; // 이미 초록이지만 명시적으로 재확인
+        m_VoxelInstances[m_ConfirmedCellIndex].colorType = kColorHover; // 이미 초록이지만 명시적으로 재확인
         changedVoxelIndices.push_back(m_HoverCellIndex);
 
         m_HoverActive = false; // 목적지 확정 -> 실시간 호버 종료
@@ -302,6 +302,7 @@ void FlowField::HandlePicking()
             ReleaseChunks(0);
             OccupyChunks(0);
             CollectDebugColorChanges(changedVoxelIndices, prevKeys);
+            CollectSlotColorChanges(changedVoxelIndices); // 도착 슬롯 표시
             BuildArrowInstances();
         }
     }
@@ -446,12 +447,12 @@ void FlowField::CollectDebugColorChanges(std::vector<int>& changed, const std::v
     // 1 - 호버 / 확정 목적지
     if (m_ConfirmedCellIndex >= 0)
     {
-        m_VoxelInstances[m_ConfirmedCellIndex].colorType = 2;
+        m_VoxelInstances[m_ConfirmedCellIndex].colorType = kColorHover;
         changed.push_back(m_ConfirmedCellIndex);
     }
     if (m_HoverCellIndex >= 0)
     {
-        m_VoxelInstances[m_HoverCellIndex].colorType = 2;
+        m_VoxelInstances[m_HoverCellIndex].colorType = kColorHover;
         changed.push_back(m_HoverCellIndex);
     }
 
@@ -460,7 +461,7 @@ void FlowField::CollectDebugColorChanges(std::vector<int>& changed, const std::v
     for (int idx : m_PathVoxelIndices)
     {
         if (idx == m_ConfirmedCellIndex) continue;
-        m_VoxelInstances[idx].colorType = 3;        // 빨간색으로 일단 지정
+        m_VoxelInstances[idx].colorType = kColorPath;        // 빨간색으로 지정
         changed.push_back(idx);
     }
 }
@@ -472,6 +473,21 @@ void FlowField::RefreshDebugColors(const std::vector<int64_t>& extraKeys)
     std::vector<int> changed;
     CollectDebugColorChanges(changed, extraKeys);
     FlushVoxelInstanceChanges(changed);
+}
+
+void FlowField::CollectSlotColorChanges(std::vector<int>& changed)
+{
+    const auto& slots = m_Npc.GetArrivalSlots();
+
+    for (const auto& cell : slots)
+    {
+        auto it = m_VoxelCoordToIndex.find(MakeCellKey(cell.x, cell.y, cell.z));
+        if (it == m_VoxelCoordToIndex.end()) continue;
+
+        int idx = it->second;
+        m_VoxelInstances[idx].colorType = kColorSlotClaimed;   // 단일 색이면 충분
+        changed.push_back(idx);
+    }
 }
 
 void FlowField::RestoreCellColor(int instanceIndex)

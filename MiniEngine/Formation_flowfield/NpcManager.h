@@ -4,7 +4,9 @@
 #include "AStarPathfinder.h"
 #include "PathCorridor.h"
 #include "CorridorFlowField.h"
+#include "CellReservation.h"
 #include <DirectXMath.h>
+#include <unordered_set>
 #include <vector>
 
 struct NpcMoveData
@@ -17,6 +19,8 @@ struct NpcMoveData
     std::vector<float>              halfHeight;         // scaleY 복사본
     size_t count = 0;
 
+    std::vector<int> claimedSlot;                       // -1 = 미청구
+
     void Resize(size_t n)
     {
         position.resize(n);
@@ -26,9 +30,29 @@ struct NpcMoveData
         active.resize(n);
         halfHeight.resize(n);
         count = n;
+        claimedSlot.assign(n, -1);
     }
 
 };
+
+struct ArrivalRegion
+{
+    std::vector<DirectX::XMINT3> slots;     // 채울 순서
+    std::unordered_set<int64_t> slotKeys;   // 영역 소속 o(1) 판정을 위해
+    int nextSlot = 0;                       // 청구 포인터 - 순서 담음
+    bool valid = false;                    
+
+    void Clear()
+    { 
+        slots.clear();
+        slotKeys.clear();
+        nextSlot = 0;
+        valid = false;
+    }
+
+};
+
+
 
 class NpcManager
 {
@@ -51,6 +75,11 @@ public:
     const std::vector<NpcRenderer::InstanceData>& GetInstances() const { return m_NpcInstances; }
     bool HasGoal() const { return m_HasGoal; }
 
+    //--- 슬롯 상태 조회용 (시각화 전용, 읽기 전용)----
+    enum class SlotState : uint8_t { Unclaimed, Claimed, Arrived };
+    const std::vector<DirectX::XMINT3>& GetArrivalSlots() const { return m_Arrival.slots; }
+    SlotState GetSlotState(int slotIdx) const;
+
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
 
@@ -64,6 +93,16 @@ private:
 
     NpcMoveData m_Move;   // SoA 이동 데이터
 
+    // --- NPC 이동을 위한 복셀 예약 ---
+    CellReservation m_Reserve;      // 각 복셀마다 npc 예약 리스트
+    std::vector<int> m_MoveOrder;   // 어디가 앞인지 정의할 npc 리스트
+    bool TryAdvanceTo(size_t i, const DirectX::XMINT3& next);
+
+    // 두 예약이 대각선 교차해서 지나가는지 확인
+    bool IsMoveCross(size_t i, const DirectX::XMINT3& curr,
+        const DirectX::XMINT3& next) const;
+
+
     // 내부 헬퍼
     void InitGroupMovement();
     void AdvanceCell(size_t i);
@@ -71,5 +110,11 @@ private:
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const;
 
     std::vector<DirectX::XMINT3> m_StartCells;
+
+
+    // ---- 도착 데이터 정의 ----
+    ArrivalRegion m_Arrival;    // 도착 데이터
+    void BuildArrivalRegion(const DirectX::XMINT3& goal, int npcCount, const Math::Vector3& groupCenter);
+    bool StepTowardSlot(size_t i, DirectX::XMINT3& outNext) const;
 
 };

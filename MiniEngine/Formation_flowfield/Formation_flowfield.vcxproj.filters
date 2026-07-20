@@ -133,5 +133,8 @@
     <ClInclude Include="NpcManager.h">
       <Filter>NPC</Filter>
     </ClInclude>
+    <ClInclude Include="CellReservation.h">
+      <Filter>소스 파일</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

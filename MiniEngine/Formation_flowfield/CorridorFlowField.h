@@ -71,6 +71,8 @@ public:
     // (x,y,z) 셀의 이동 방향을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.
     // const는 위치 조회로 새로운 청크 할당 방지
     bool SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMFLOAT3& outDir) const;
+    // (x,y,z) 셀의 flowfield 비용을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.
+    bool SampleCost(const VoxelGrid& grid, int x, int y, int z, float& outCost) const;
 
     // 해당 (xyz)가 실제로 방문되었는지 검사
     bool IsVisited(const VoxelGrid& grid, int x, int y, int z) const;
