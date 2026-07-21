@@ -4,6 +4,10 @@
 #include <cmath>
 #include <queue>
 
+constexpr float NPC_SPEED = 5.0f;
+constexpr float NPC_INER = 0.5f;
+const int TARGET_COUNT = 1000;
+
 void NpcManager::Init(const VoxelGrid& grid)
 {
     m_Grid = &grid;
@@ -12,7 +16,7 @@ void NpcManager::Init(const VoxelGrid& grid)
     const float NPC_HEIGHT = voxelSize * 3.0f / 2.0f;
 
     m_NpcInstances.clear();
-    const int TARGET_COUNT = 1'00;
+
     //m_NpcInstances.reserve(TARGET_COUNT);
 
     const int baseX = 100;
@@ -22,7 +26,7 @@ void NpcManager::Init(const VoxelGrid& grid)
     VoxelGrid::SurfaceSpan startSurfaces = grid.GetSurfaceYList(baseX, baseZ);
     if (startSurfaces.count == 0)
     {
-        // 시작점 자체가 허공/막힘이면 배치 불가 — 조용히 종료
+        // 시작점 자체가 허공/막힘이면 배치 불가 - 조용히 종료
         NpcRenderer::UpdateInstances(m_NpcInstances);
         return;
     }
@@ -34,7 +38,7 @@ void NpcManager::Init(const VoxelGrid& grid)
     std::queue<DirectX::XMINT3> q;
 
     DirectX::XMINT3 startCell{ baseX, startY, baseZ };
-    visitedColumns.insert(MakeCellKey(baseX, 0, baseZ));   // y는 0 고정 — 컬럼 단위 방문 표시용
+    visitedColumns.insert(MakeCellKey(baseX, 0, baseZ));   // y는 0 고정 - 컬럼 단위 방문 표시용
     q.push(startCell);
 
     int placed = 0;
@@ -59,7 +63,7 @@ void NpcManager::Init(const VoxelGrid& grid)
 
         if (placed >= TARGET_COUNT) break;
 
-        // 실제로 걸어서 갈 수 있는 이웃만 확장 (연결성 보장 — 고립 지형 배제)
+        // 실제로 걸어서 갈 수 있는 이웃만 확장 (연결성 보장 - 고립 지형 배제)
         GetWalkableNeighbors(*m_Grid, cur, neighbors);
         for (const auto& n : neighbors)
         {
@@ -92,7 +96,7 @@ bool NpcManager::TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector
     if (hitIndex < 0)
         return m_GroupSelected;
 
-    // 맞았으면 그룹 선택 토글 (누구를 맞췄는지는 무관 — 그룹 전체가 한 단위)
+    // 맞았으면 그룹 선택 토글 (누구를 맞췄는지는 무관 - 그룹 전체가 한 단위)
     m_GroupSelected = !m_GroupSelected;
     m_SelectedNpcIndex = m_GroupSelected ? hitIndex : -1;   // 필요 시 참조용으로만 보관
 
@@ -147,7 +151,7 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     if (outPath) *outPath = path;
 
     // --- 3. margin을 "그룹 분포 반경"으로 계산 (시드 간 공백 방지) ---
-    // 무게중심에서 가장 먼 NPC까지의 셀 거리 → 그만큼 margin을 확보해야
+    // 무게중심에서 가장 먼 NPC까지의 셀 거리 -> 그만큼 margin을 확보해야
     // 가장자리 NPC 시드와 경로 시드가 마스크 안에서 이어짐.
     int maxDistFromCentroid = 0;
     for (const auto& c : m_StartCells)
@@ -169,7 +173,7 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 
     // 무게중심 월드 좌표 (이미 계산된 centroid 셀 좌표 활용)
     Math::Vector3 centroidWorld2 = m_Grid->GetWorldPos(cx, cy, cz);
-    BuildArrivalRegion(goalCell, (int)n, centroidWorld2);
+    //BuildArrivalRegion(goalCell, (int)n, centroidWorld2);
 
     m_HasGoal = true;
     InitGroupMovement();   // m_StartCells 재사용
@@ -181,14 +185,13 @@ void NpcManager::Update(float dt)
 {
     if (false == m_HasGoal) return;
 
-    const float NPC_SPEED = 3.0f;
     const float ARRIVE_EPS_SQ = 0.05f * 0.05f;
     const size_t n = m_Move.count;
 
     bool anyMoved = false;
     bool anyActive = false;
 
-    for (size_t i = 0; i < n; ++i)
+    for (int i : m_MoveOrder)
     {
         if (!m_Move.active[i]) continue;
         anyActive = true;       // 살아있는지 체크
@@ -199,16 +202,18 @@ void NpcManager::Update(float dt)
 
         if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
         {
-            AdvanceCell(i);   // 도착 -> 셀 전환
+            AdvanceCell(i, dt);   // 도착 -> 셀 전환
         }
         else
         {
+            //if (true == WouldCollideTrajectory(i))   continue;  // 캡슐 충돌
             Math::Vector3 d = Math::Normalize(delta);
             m_Move.position[i] = pos + d * (NPC_SPEED * dt);
         }
         anyMoved = true;
     }
 
+    // 누군가 움직였을때만 이동
     if (true == anyMoved)
     {
         SyncInstances();
@@ -222,59 +227,38 @@ void NpcManager::Update(float dt)
     }
 }
 
-NpcManager::SlotState NpcManager::GetSlotState(int slotIdx) const
-{
-    // 이 슬롯을 청구한 NPC를 찾는다 (선형 탐색 — 시각화용이라 매 프레임 아님)
-    for (size_t i = 0; i < m_Move.count; ++i)
-    {
-        if (m_Move.claimedSlot[i] != slotIdx) continue;
 
-        const auto& slot = m_Arrival.slots[slotIdx];
-        bool arrived = (m_Move.currCell[i] == slot) && (m_Move.active[i] == 0);
-        return arrived ? SlotState::Arrived : SlotState::Claimed;
-    }
-    return SlotState::Unclaimed;
-}
-
-bool NpcManager::TryAdvanceTo(size_t i, const DirectX::XMINT3& next)
-{
-    const auto& curr = m_Move.currCell[i];
-    if (true == IsMoveCross(i, curr, next))  return false;           // 다른 npc와 크로스함
-    if (false == m_Reserve.TryReserve(MakeCellKey(next), (int)i))    // 다른 npc가 이미 점유
-        return false;
-
-    // 기존 셀 예약 즉시 해제
-    m_Reserve.Release(MakeCellKey(curr));
-
-    m_Move.targetCell[i] = next;
-    m_Move.targetWorldPos[i] = GetNpcStandPos(next, m_Move.halfHeight[i]);
-    return true;
-}
 
 bool NpcManager::IsMoveCross(size_t i, const DirectX::XMINT3& curr, const DirectX::XMINT3& next) const
 {
+    // 이동 방향(next)
     int dx = next.x - curr.x;
     int dz = next.z - curr.z;
+    // 대각선 아니면 검사x
     if (dx == 0 || dz == 0)  return false;
 
+    // 대각선 주변 복셀(어깨)
     const int sx[2] = { curr.x + dx, curr.x };
     const int sz[2] = { curr.z,      curr.z + dz };
     const int ys[2] = { curr.y,      next.y };
 
     for (int a = 0; a < 2; ++a)
     {
+        // a는 지금 내 대각선 <-> b는 반대쪽 대각선
         int b = 1 - a;
         for (int t = 0; t < 2; ++t)
         {
+            // 대각선에 점유한 npc가 없거나 자신이면 pass
             int occ = m_Reserve.Find(MakeCellKey(sx[a], ys[t], sz[a]));
             if (occ < 0 || occ == (int)i)    continue;
-
+            // 
             const auto& tc = m_Move.targetCell[occ];
             if (tc.x == sx[b] && tc.z == sz[b])  return true;
         }
     }
     return false;
 }
+
 
 void NpcManager::InitGroupMovement()
 {
@@ -324,14 +308,14 @@ void NpcManager::InitGroupMovement()
         float v;
         if (m_CorridorField.SampleCost(*m_Grid, c.x, c.y, c.z, v))   cost[i] = v;
     }
-    // 비용이 작은대로 오름차순
+    // 비용이 작은대로 오름차순 (거리 가까운게 그룹의 앞이 되도록)
     std::sort(m_MoveOrder.begin(), m_MoveOrder.end(), [&](int a, int b) {
         return cost[a] < cost[b];
         });
 }
 
 
-void NpcManager::AdvanceCell(size_t i)
+void NpcManager::AdvanceCell(size_t i, float dt)
 {
     // 목표 셀에 정확히 스냅 (연속 이동 누적 오차 제거 + 층 플립 방지)
     m_Move.position[i] = m_Move.targetWorldPos[i];
@@ -339,54 +323,150 @@ void NpcManager::AdvanceCell(size_t i)
 
     const auto& curr = m_Move.currCell[i];
 
-    // 도착영역 첫 진입시, 슬롯을 청구
-    if (m_Move.claimedSlot[i] < 0 && m_Arrival.valid)
-    {
-        if (m_Arrival.slotKeys.count(MakeCellKey(curr)) && m_Arrival.nextSlot < (int)m_Arrival.slots.size())
-        {
-            m_Move.claimedSlot[i] = m_Arrival.nextSlot++;
-        }
-    }
-    DirectX::XMINT3 next;
-    bool hasNext = false;
-    if (m_Move.claimedSlot[i] >= 0)
-    {
-        const auto& goal = m_Arrival.slots[m_Move.claimedSlot[i]];
-        // 자기 슬롯 도달
-        if (curr == goal)
-        {
-            m_Move.active[i] = 0; 
-            return;
-        }
-        hasNext = StepTowardSlot(i, next);  // false면 갇힘 상태
-    }
-
-    // 아니면 이동
-    else
-    {
-        DirectX::XMFLOAT3 dir;
-        if (m_CorridorField.SampleDirection(*m_Grid, curr.x, curr.y, curr.z, dir))
-        {
-            if (dir.x * dir.x + dir.y * dir.y + dir.z * dir.z >= 1e-6f)
-            {
-                next = { curr.x + (int)std::round(dir.x),
-                         curr.y + (int)std::round(dir.y),
-                         curr.z + (int)std::round(dir.z) };
-                hasNext = true;
-               
-            }
-        }
-    }
-
-    if (false == hasNext)
+    float currCost;
+    if (false == m_CorridorField.SampleCost(*m_Grid, curr.x, curr.y, curr.z, currCost))
     {
         m_Move.active[i] = 0;
         return;
     }
+    // 목적지 도달 (cost가 0에 가까움)
+    if (currCost < 1e-4f)
+    { 
+        m_Move.active[i] = 0; 
+        return;
+    }
 
-    // 막혀서 제자리 대기
-    if (false == TryAdvanceTo(i, next))
+
+    // ---- 1순위: FlowField가 가리키는 방향 ----
+    DirectX::XMFLOAT3 fdir;
+    DirectX::XMINT3 desired{ 0, 0, 0 };
+    bool hasDesired = false;
+    if (m_CorridorField.SampleDirection(*m_Grid, curr.x, curr.y, curr.z, fdir))
     {
+        if (fdir.x * fdir.x + fdir.y * fdir.y + fdir.z * fdir.z >= 1e-6f)
+        {
+            desired = { (int)std::round(fdir.x), (int)std::round(fdir.y), (int)std::round(fdir.z) };
+            hasDesired = true;
+        }
+    }
+
+    // 특정 이웃 셀이 지금 이동 가능한 유효 후보인지 검사하는 헬퍼
+    // (cost 낮아짐 + 미점유 + 비교차). walkable 여부는 m_NeighborScratch에 있는지로 판단
+    auto tryCandidate = [&](const DirectX::XMINT3& cand, DirectX::XMINT3& out) -> bool
+    {
+        // walkable 이웃 목록에 실제로 존재하는지 확인 (지형/코너컷 통과 보장)
+        bool isNeighbor = false;
+        for (const auto& n : m_NeighborScratch)
+        {
+            if (n.pos.x == cand.x && n.pos.y == cand.y && n.pos.z == cand.z) { isNeighbor = true; break; }
+        }
+        if (!isNeighbor)                                                        return false;
+
+        float nc;
+        if (false == m_CorridorField.SampleCost(*m_Grid, cand.x, cand.y, cand.z, nc)) return false; // flowfield 아님
+        if (nc >= currCost)                                                    return false;    // 목적지로 안 가까워짐
+        if (m_Reserve.Find(MakeCellKey(cand.x, cand.y, cand.z)) >= 0)          return false;    // 점유됨
+        if (true == IsMoveCross(i, curr, cand))                               return false;     // 교차
+
+        out = cand;
+        return true;
+    };
+
+    m_NeighborScratch.clear();
+    GetWalkableNeighbors(*m_Grid, curr, m_NeighborScratch);
+
+    DirectX::XMINT3 best{ curr.x, curr.y, curr.z };
+    bool found = false;
+
+    // desired 방향의 목표 셀 계산 (y는 desired 그대로 사용)
+    if (hasDesired)
+    {
+        DirectX::XMINT3 desiredCell{ curr.x + desired.x, curr.y + desired.y, curr.z + desired.z };
+
+        // (1) 1순위 방향이 바로 가능하면 그대로
+        if (tryCandidate(desiredCell, best))
+        {
+            found = true;
+        }
+        // (2) 1순위가 대각선인데 막혔으면 -> 성분 분해 대안
+        else if (desired.x != 0 && desired.z != 0)
+        {
+            // 어느 축이 막혔는지: 두 카디널 성분 어깨셀의 점유 여부로 판단
+            // x성분 어깨 = (curr.x+dx, curr.z),  z성분 어깨 = (curr.x, curr.z+dz)
+            DirectX::XMINT3 zKeep{ curr.x,             curr.y + desired.y, curr.z + desired.z }; // x 버림 (직진 z)
+            DirectX::XMINT3 xKeep{ curr.x + desired.x, curr.y + desired.y, curr.z };             // z 버림 (직진 x)
+
+            // x성분 어깨셀이 점유됐으면(=x방향 충돌 유발) x를 버리고 zKeep 우선
+            bool xShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x + desired.x, curr.y, curr.z)) >= 0);
+            bool zShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x, curr.y, curr.z + desired.z)) >= 0);
+
+            // 막힘 유발 축의 반대 성분을 우선 시도, 그 다음 나머지 성분
+            if (xShoulderBlocked && !zShoulderBlocked)
+            {
+                if (tryCandidate(zKeep, best)) found = true;
+                else if (tryCandidate(xKeep, best)) found = true;
+            }
+            else if (zShoulderBlocked && !xShoulderBlocked)
+            {
+                if (tryCandidate(xKeep, best)) found = true;
+                else if (tryCandidate(zKeep, best)) found = true;
+            }
+            else
+            {
+                // 판별 애매(둘 다 막힘/둘 다 안 막힘) -> 둘 다 순서대로 시도
+                if (tryCandidate(zKeep, best)) found = true;
+                else if (tryCandidate(xKeep, best)) found = true;
+            }
+        }
+    }
+
+    // (3) 위에서 못 찾았으면 이웃 중 cost가 낮아지는 셀들을 모아, 예약 가능한 것 중 가장 좋은 걸 고름
+    if (!found)
+    {
+        float bestCost = currCost;
+        for (const auto& n : m_NeighborScratch)
+        {
+            float nc;
+            if (false == m_CorridorField.SampleCost(*m_Grid, n.pos.x, n.pos.y, n.pos.z, nc)) continue;
+            if (nc >= currCost)                                                 continue;
+            if (m_Reserve.Find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) >= 0)    continue;
+            if (true == IsMoveCross(i, curr, n.pos))                            continue;
+
+            int dx = n.pos.x - curr.x, dz = n.pos.z - curr.z;
+            const auto& ld = m_Move.lastDir[i];
+            float score = nc;
+            if (dx == ld.x && dz == ld.z) score -= NPC_INER;
+            if (score < bestCost)
+            {
+                bestCost = score;
+                best = n.pos;
+                found = true;
+            }
+        }
+    }
+
+    if (!found)
+    {
+        // 갈 곳 없음 -> 제자리 대기 (다음 프레임 재시도)
+        m_Move.targetCell[i] = curr;
+        m_Move.targetWorldPos[i] = m_Move.position[i];
+        return;
+    }
+    
+
+    // 예약 전환
+    if (m_Reserve.TryReserve(MakeCellKey(best), (int)i))
+    {
+        m_Reserve.Release(MakeCellKey(curr.x, curr.y, curr.z));
+
+        m_Move.targetCell[i] = best;
+        m_Move.lastDir[i] = { best.x - curr.x, best.y - curr.y, best.z - curr.z };
+        m_Move.targetWorldPos[i] = GetNpcStandPos(best, m_Move.halfHeight[i]);
+    }
+    else
+    {
+        // 이론상 발생하면 안 되지만(루프에서 이미 미점유 확인), 방어적으로 처리
+        // 예약 실패 시 !found와 동일하게 제자리 대기 -> 다음 프레임 재시도
         m_Move.targetCell[i] = curr;
         m_Move.targetWorldPos[i] = m_Move.position[i];
     }
@@ -412,115 +492,5 @@ Math::Vector3 NpcManager::GetNpcStandPos(const DirectX::XMINT3& cell, float half
     float standY = cellCenter.GetY() + (cellSize * 0.5f) + halfHeight + 0.1f;
 
     return Math::Vector3(cellCenter.GetX(), standY, cellCenter.GetZ());
-}
-
-void NpcManager::BuildArrivalRegion(const DirectX::XMINT3& goal, int npcCount, const Math::Vector3& groupCenter)
-{
-    m_Arrival.Clear();
-    constexpr float MARGIN_NPC = 1.0f;
-
-    const int target = static_cast<int>(npcCount * MARGIN_NPC) + 1;
-
-    // BFS - 슬롯과 홉수 수집
-    struct Entry
-    {
-        DirectX::XMINT3 cell;
-        int hop;
-    };
-    std::vector<Entry> collected;
-    std::queue<Entry> q;
-    std::unordered_set<int64_t> visited;
-
-    collected.reserve(target);
-    q.push({ goal, 0 });
-    visited.insert(MakeCellKey(goal));
-
-
-    // bfs로 주변 갈수 있는 복셀 추가
-    std::vector<NeighborInfo> neighbors;
-    while (!q.empty() && (int)collected.size() < target)
-    {
-        Entry curr = q.front(); q.pop();
-        collected.push_back(curr);
-
-        GetWalkableNeighbors(*m_Grid, curr.cell, neighbors);
-        for (const auto& n : neighbors)
-        {
-            int64_t key = MakeCellKey(n.pos);
-            if (visited.insert(key).second)
-            {
-                q.push({ n.pos, curr.hop + 1 });
-            }
-        }
-    }
-
-    if (collected.empty())   return;
-
-    // bfs로 찾은 범위에 대한 순서 정하기
-    Math::Vector3 goalPos = m_Grid->GetWorldPos(goal.x, goal.y, goal.z);
-    // TODO - 그룹이 어디 방향에서 오는지 정의인데, 현재는 하나의 방향으로만 정함
-    float ax = goalPos.GetX() - groupCenter.GetX();
-    float az = goalPos.GetZ() - groupCenter.GetZ();
-    float len = std::sqrt(ax * ax + az * az);
-    bool hasAxis = (len > 1e-3f);   // 근거리 확인용
-    if (hasAxis)
-    {
-        ax /= len;
-        az /= len;
-    }
-
-    std::stable_sort(collected.begin(), collected.end(),
-        [&](const Entry& a, const Entry& b)
-        {
-            if (a.hop != b.hop) return a.hop < b.hop;       // 1차 - 목적지에 가까운거부터
-            if (false == hasAxis) return false;
-
-            // 축에다 위치 투영해서
-            Math::Vector3 pa = m_Grid->GetWorldPos(a.cell.x, a.cell.y, a.cell.z);
-            Math::Vector3 pb = m_Grid->GetWorldPos(b.cell.x, b.cell.y, b.cell.z);
-            float da = (pa.GetX() - goalPos.GetX()) * ax + (pa.GetZ() - goalPos.GetZ()) * az;
-            float db = (pb.GetX() - goalPos.GetX()) * ax + (pb.GetZ() - goalPos.GetZ()) * az;
-            return da < db; // 투영값 작은거(진입방향) 우선순위
-        });
-    
-    m_Arrival.slots.reserve(collected.size());
-    for (const auto& e : collected)
-    {
-        m_Arrival.slots.push_back(e.cell);
-        m_Arrival.slotKeys.insert(MakeCellKey(e.cell));
-    }
-    m_Arrival.valid = true;
-
-}
-
-bool NpcManager::StepTowardSlot(size_t i, DirectX::XMINT3& outNext) const
-{
-    const auto& curr = m_Move.currCell[i];
-    const auto& goal = m_Arrival.slots[m_Move.claimedSlot[i]];
-    
-    auto dist2 = [](const DirectX::XMINT3& a, const DirectX::XMINT3& b)
-    {
-        float dx = (float)(a.x - b.x);
-        float dy = (float)(a.y - b.y);
-        float dz = (float)(a.z - b.z);
-        return dx * dx + dy * dy + dz * dz;
-    };
-
-    std::vector<NeighborInfo> neighbors;
-    GetWalkableNeighbors(*m_Grid, curr, neighbors);
-
-    float best = dist2(curr, goal);
-    bool found = false;
-    for (const auto& n : neighbors)
-    {
-        float d = dist2(n.pos, goal);
-        if (d < best)
-        {
-            best = d;
-            outNext = n.pos;
-            found = true;
-        }
-    }
-    return found;
 }
 

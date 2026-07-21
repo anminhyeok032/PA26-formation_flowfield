@@ -32,8 +32,8 @@ constexpr float MAX_HEIGHT = 10.0f;
 constexpr float WORLD_SCALE = 1.0f;
 constexpr float VOXEL_SIZE = 0.5f;
 
-constexpr float NPC_HEIGHT = (VOXEL_SIZE * 3.0f) / 2.0f;
-constexpr float NPC_WIDTH = VOXEL_SIZE / 2.0f;
+//constexpr float NPC_HEIGHT = (VOXEL_SIZE * 3.0f) / 2.0f;
+//constexpr float NPC_WIDTH = VOXEL_SIZE / 10.0f;
 
 
 CREATE_APPLICATION(FlowField);
@@ -86,9 +86,9 @@ void FlowField::Startup(void)
             m_HeightMap,
             StartPos,
             EndPos,
-            15.0f,               // 터널 반지름
-            1.5,              
-            false, true);        // 양쪽 다 개방
+            5.0f,               // 터널 반지름
+            1.0,              
+            true, true);        // 양쪽 다 개방
 
         
         m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
@@ -139,7 +139,7 @@ void FlowField::Startup(void)
 
     float xz_position = m_HeightMap.GetWidth() * VOXEL_SIZE / 2;
     fpsCam->SetHeadingPitchAndPosition(
-        XM_PI,                          // 180도 — +Z 방향(큐브 있는 곳)을 바라봄
+        XM_PI,                          // 180도 - +Z 방향(큐브 있는 곳)을 바라봄
         -90.0f,                         // 아래를 봄
         Vector3(xz_position, MAX_HEIGHT * 2.0f, xz_position)    // 카메라 위치
     );
@@ -302,7 +302,6 @@ void FlowField::HandlePicking()
             ReleaseChunks(0);
             OccupyChunks(0);
             CollectDebugColorChanges(changedVoxelIndices, prevKeys);
-            CollectSlotColorChanges(changedVoxelIndices); // 도착 슬롯 표시
             BuildArrowInstances();
         }
     }
@@ -475,20 +474,7 @@ void FlowField::RefreshDebugColors(const std::vector<int64_t>& extraKeys)
     FlushVoxelInstanceChanges(changed);
 }
 
-void FlowField::CollectSlotColorChanges(std::vector<int>& changed)
-{
-    const auto& slots = m_Npc.GetArrivalSlots();
 
-    for (const auto& cell : slots)
-    {
-        auto it = m_VoxelCoordToIndex.find(MakeCellKey(cell.x, cell.y, cell.z));
-        if (it == m_VoxelCoordToIndex.end()) continue;
-
-        int idx = it->second;
-        m_VoxelInstances[idx].colorType = kColorSlotClaimed;   // 단일 색이면 충분
-        changed.push_back(idx);
-    }
-}
 
 void FlowField::RestoreCellColor(int instanceIndex)
 {
@@ -582,7 +568,7 @@ void FlowField::Update(float dt)
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
 
-    // F1: 솔리드 ↔ 와이어프레임 토글
+    // F1: 솔리드 <-> 와이어프레임 토글
     // IsFirstPressed = 키를 막 누른 순간 한 번만 true
     if (GameInput::IsFirstPressed(GameInput::kKey_f1))
     {

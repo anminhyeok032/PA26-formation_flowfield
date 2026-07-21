@@ -19,7 +19,7 @@ namespace NpcRenderer
     };
     static_assert(sizeof(InstanceData) % 16 == 0, "NPCInstanceData must be 16-byte aligned");
 
-    static const uint32_t MAX_NPCS = 2000;
+    static const uint32_t MAX_NPCS = 10'0000;
 
     // -----------------------------------------------------------------------
     // Capsule: NPC의 충돌/피킹 판정용 바운딩 볼륨.
@@ -35,6 +35,10 @@ namespace NpcRenderer
 
     // NPC 인스턴스 데이터로부터 캡슐 생성 (scaleXZ=반지름, scaleY=Y방향 절반 길이)
     Capsule MakeCapsule(const InstanceData& inst);
+
+    float ClosestPtSegmentSegment(const Math::Vector3& p1, const Math::Vector3& q1,
+        const Math::Vector3& p2, const Math::Vector3& q2,
+        float& s, float& t, Math::Vector3& c1, Math::Vector3& c2);
 
     // 레이(origin, dir)가 캡슐과 maxDistance 이내에서 교차하는지 검사.
     // 교차하면 true와 함께 outT(레이 파라미터, 실제 거리)를 채움.

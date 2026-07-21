@@ -77,10 +77,6 @@ private:
     void RefreshDebugColors(const std::vector<int64_t>& extraKeys = {});
 
 
-    // --도착지 시각화--
-    void CollectSlotColorChanges(std::vector<int>& changed);
-    int m_SlotDebugTimer = 0;
-
     //----------------- flowfield dir 시각화----------------
     bool m_DebugShowArrows = true;
     void BuildArrowInstances();

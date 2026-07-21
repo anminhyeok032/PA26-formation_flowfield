@@ -5,9 +5,12 @@
 #include "PathCorridor.h"
 #include "CorridorFlowField.h"
 #include "CellReservation.h"
+#include "GridNeighbors.h"
 #include <DirectXMath.h>
 #include <unordered_set>
 #include <vector>
+
+
 
 struct NpcMoveData
 {
@@ -20,6 +23,7 @@ struct NpcMoveData
     size_t count = 0;
 
     std::vector<int> claimedSlot;                       // -1 = 미청구
+    std::vector<DirectX::XMINT3> lastDir;               // 직전 이동 방향 (dx,dy,dz)
 
     void Resize(size_t n)
     {
@@ -31,6 +35,7 @@ struct NpcMoveData
         halfHeight.resize(n);
         count = n;
         claimedSlot.assign(n, -1);
+        lastDir.resize(n, { 0,0,0 });
     }
 
 };
@@ -75,10 +80,6 @@ public:
     const std::vector<NpcRenderer::InstanceData>& GetInstances() const { return m_NpcInstances; }
     bool HasGoal() const { return m_HasGoal; }
 
-    //--- 슬롯 상태 조회용 (시각화 전용, 읽기 전용)----
-    enum class SlotState : uint8_t { Unclaimed, Claimed, Arrived };
-    const std::vector<DirectX::XMINT3>& GetArrivalSlots() const { return m_Arrival.slots; }
-    SlotState GetSlotState(int slotIdx) const;
 
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
@@ -96,25 +97,20 @@ private:
     // --- NPC 이동을 위한 복셀 예약 ---
     CellReservation m_Reserve;      // 각 복셀마다 npc 예약 리스트
     std::vector<int> m_MoveOrder;   // 어디가 앞인지 정의할 npc 리스트
-    bool TryAdvanceTo(size_t i, const DirectX::XMINT3& next);
+
 
     // 두 예약이 대각선 교차해서 지나가는지 확인
     bool IsMoveCross(size_t i, const DirectX::XMINT3& curr,
         const DirectX::XMINT3& next) const;
+    std::vector<NeighborInfo> m_NeighborScratch;   // AdvanceCell 전용 임시 버퍼
 
 
     // 내부 헬퍼
     void InitGroupMovement();
-    void AdvanceCell(size_t i);
-    void SyncInstances();   // SoA position → m_NpcInstances → UpdateInstances
+    void AdvanceCell(size_t i, float dt);
+    void SyncInstances();   // SoA position -> m_NpcInstances -> UpdateInstances
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const;
 
     std::vector<DirectX::XMINT3> m_StartCells;
-
-
-    // ---- 도착 데이터 정의 ----
-    ArrivalRegion m_Arrival;    // 도착 데이터
-    void BuildArrivalRegion(const DirectX::XMINT3& goal, int npcCount, const Math::Vector3& groupCenter);
-    bool StepTowardSlot(size_t i, DirectX::XMINT3& outNext) const;
 
 };

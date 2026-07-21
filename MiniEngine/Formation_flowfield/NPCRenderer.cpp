@@ -80,7 +80,7 @@ namespace NpcRenderer
     // 두 선분(p1~q1, p2~q2) 사이의 최단 거리 제곱을 구하고, 각 선분 위의
     // 매개변수(s,t ∈ [0,1])와 최근접점(c1,c2)을 채움
     // 레이-캡슐, 나중에 캡슐-캡슐(NPC 충돌) 판정 모두 이 함수 하나로 처리 가능.
-    static float ClosestPtSegmentSegment(const Math::Vector3& p1, const Math::Vector3& q1,
+    float ClosestPtSegmentSegment(const Math::Vector3& p1, const Math::Vector3& q1,
         const Math::Vector3& p2, const Math::Vector3& q2,
         float& s, float& t, Math::Vector3& c1, Math::Vector3& c2)
     {
