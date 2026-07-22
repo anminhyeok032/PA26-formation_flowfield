@@ -65,6 +65,8 @@ private:
 
     // 특정 청크 최종 colorType 우선순위 저장
     uint32_t GetBaseColorType(int instanceIndex) const;
+    // 반영한 색. 호버가 지나간 자리를 원래 레이어 색으로 되돌릴 때 사용.
+    uint32_t GetLayeredColorType(int instanceIndex) const;
 
     // 점유 청크 등록 / 해제
     void OccupyChunks(int groupId);
@@ -81,6 +83,8 @@ private:
     bool m_DebugShowArrows = true;
     void BuildArrowInstances();
 
+    bool m_PrevHasGoal = false;   // HasGoal의 true->false 전환(전원 도착) 감지용
+    void OnGroupArrived();        // 도착 시 디버그 시각화 전체 해제
 
     // ----------------- 목적지 복셀 선택 관련 --------------
     std::vector<VoxelRenderer::InstanceData> m_VoxelInstances;  // 지속 보관

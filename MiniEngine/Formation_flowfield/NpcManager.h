@@ -24,7 +24,9 @@ struct NpcMoveData
     std::vector<int> claimedSlot;                       // -1 = 미청구
     std::vector<DirectX::XMINT3> lastDir;               // 직전 이동 방향 (dx,dy,dz)
 
-    size_t size() const { return position.size(); }
+    std::vector<uint16_t> blockedFrames;
+
+    size_t size() const { return position.size(); }     // 길막당한 프레임 체크용
 
     void Resize(size_t n)
     {
@@ -37,6 +39,8 @@ struct NpcMoveData
 
         claimedSlot.assign(n, -1);
         lastDir.resize(n, { 0,0,0 });
+
+        blockedFrames.assign(n, 0);
     }
 
 };

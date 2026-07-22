@@ -100,18 +100,13 @@ void FlowField::Startup(void)
 
         // 청크 시각화용 자료 초기화
         m_ChunkToVoxelIndices.clear();
-        int chunkSize = CorridorFlowField::CHUNK_SIZE;
 
 
         for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
         {
             auto& c = m_VoxelCellCoords[i];
             m_VoxelCoordToIndex[MakeCellKey(c.x, c.y, c.z)] = (int)i;
-
-            // TODO : FlowField를 2d->3d로 바꿀시, 해당 부분도 수정
-            int cx = c.x / chunkSize;
-            int cz = c.z / chunkSize;
-            m_ChunkToVoxelIndices[MakeChunkKey(cx, 0, cz)].push_back((int)i);
+            m_ChunkToVoxelIndices[CorridorFlowField::ChunkKeyOf(c.x, c.z)].push_back((int)i);
         }
     }
     else
@@ -351,10 +346,64 @@ void FlowField::BuildArrowInstances()
     FlowFieldArrowRenderer::UpdateInstances(instances);
 }
 
+void FlowField::OnGroupArrived()
+{
+    std::vector<int> changed;
+
+    // 1. 경로 / 확정 목적지 레이어 해제 (색 계산 전에 먼저 지워야 기본색이 나옴)
+    changed.insert(changed.end(), m_PathVoxelIndices.begin(), m_PathVoxelIndices.end());
+    m_PathVoxelIndices.clear();
+
+    if (m_ConfirmedCellIndex >= 0)
+    {
+        changed.push_back(m_ConfirmedCellIndex);
+        m_ConfirmedCellIndex = -1;
+    }
+
+    // 2. 청크 점유 해제 (해제 전 키를 남겨야 그 청크들도 다시 칠할 수 있음)
+    std::vector<int64_t> prevKeys = m_OccupiedChunkKeys;
+    ReleaseChunks(0);
+
+    // 3. 레이어가 전부 사라진 상태에서 색 재계산
+    for (int idx : changed)   RestoreCellColor(idx);
+    CollectDebugColorChanges(changed, prevKeys);
+
+    // 4. 화살표 제거 (m_OccupiedChunkKeys가 비었으므로 빈 인스턴스로 갱신됨)
+    BuildArrowInstances();
+
+    FlushVoxelInstanceChanges(changed);
+}
+
 uint32_t FlowField::GetBaseColorType(int instanceIndex) const
 {
     auto& c = m_VoxelCellCoords[instanceIndex];
     return (m_VoxelGrid.GetCell(c.x, c.y, c.z) == VoxelGrid::CellType::Walkable) ? 0u : 1u;
+}
+
+uint32_t FlowField::GetLayeredColorType(int instanceIndex) const
+{
+    if (instanceIndex < 0 || instanceIndex >= (int)m_VoxelCellCoords.size())
+        return kColorDefault;
+
+    // CollectDebugColorChanges의 레이어 순서와 동일한 우선순위
+    // (경로 루프가 확정 셀을 skip하므로 확정이 경로보다 우선)
+    if (instanceIndex == m_ConfirmedCellIndex)  return kColorHover;
+
+    if (std::find(m_PathVoxelIndices.begin(), m_PathVoxelIndices.end(), instanceIndex)
+        != m_PathVoxelIndices.end())            return kColorPath;
+
+    if (true == m_DebugShowChunks)
+    {
+        const auto& c = m_VoxelCellCoords[instanceIndex];
+        auto occIt = m_ChunkOccupants.find(CorridorFlowField::ChunkKeyOf(c.x, c.z));
+        if (occIt != m_ChunkOccupants.end() && !occIt->second.empty())
+        {
+            if (m_Npc.GetFlowField().IsVisited(m_VoxelGrid, c.x, c.y, c.z))
+                return 10u + (uint32_t)(occIt->second.back() % 8);
+        }
+    }
+
+    return GetBaseColorType(instanceIndex);
 }
 
 void FlowField::OccupyChunks(int groupId)
@@ -479,7 +528,7 @@ void FlowField::RefreshDebugColors(const std::vector<int64_t>& extraKeys)
 void FlowField::RestoreCellColor(int instanceIndex)
 {
     if (instanceIndex < 0 || instanceIndex >= (int)m_VoxelCellCoords.size()) return;
-    m_VoxelInstances[instanceIndex].colorType = GetBaseColorType(instanceIndex);
+    m_VoxelInstances[instanceIndex].colorType = GetLayeredColorType(instanceIndex);
 }
 
 // GPU 갱신 호출은 매번 CPU-GPU 동기화를 동반하므로, 호출 횟수가 곧 비용.
@@ -567,6 +616,10 @@ void FlowField::Update(float dt)
     }
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+    // 전원 도착(HasGoal true->false) 시 시각화 초기화
+    const bool hasGoal = m_Npc.HasGoal();
+    if (m_PrevHasGoal && !hasGoal)   OnGroupArrived();
+    m_PrevHasGoal = hasGoal;
 
     // F1: 솔리드 <-> 와이어프레임 토글
     // IsFirstPressed = 키를 막 누른 순간 한 번만 true

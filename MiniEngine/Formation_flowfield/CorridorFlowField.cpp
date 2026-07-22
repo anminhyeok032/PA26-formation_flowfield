@@ -9,9 +9,8 @@ CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindOrCreateCo
     const VoxelGrid& grid, int x, int y, int z,
     int& outSlotIdx, ChunkCache& cache) 
 {
-    int cx = x / FlowFieldChunk::SIZE;
-    int cz = z / FlowFieldChunk::SIZE;
-    int64_t key = MakeChunkKey(cx, 0, cz);  // y값은 청크 좌표 관여 x
+    // y값 관여 x
+    int64_t key = ChunkKeyOf(x, z);
 
     if (key != cache.key)
     {
@@ -35,9 +34,8 @@ const CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindColu
     const VoxelGrid& grid, int x, int y, int z,
     int& outSlotIdx, ChunkCache& cache) const 
 {
-    int cx = x / FlowFieldChunk::SIZE;
-    int cz = z / FlowFieldChunk::SIZE;
-    int64_t key = MakeChunkKey(cx, 0, cz);
+    // y값 관여 x
+    int64_t key = ChunkKeyOf(x, z);
 
     if (key != cache.key)
     {

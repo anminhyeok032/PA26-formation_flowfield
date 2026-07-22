@@ -4,8 +4,9 @@
 #include <cmath>
 #include <queue>
 
-constexpr float NPC_SPEED = 1.0f;
-constexpr float NPC_INER = 0.5f;
+constexpr float NPC_SPEED = 3.0f;
+constexpr float NPC_INER = 0.5f;                // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
+static constexpr uint16_t NPC_WAIT_FRAMES = 6; // 1순위 방향이 막혔을 때 슬라이딩 대신 버티는 최대 프레임 수
 const int TARGET_COUNT = 1000;
 
 void NpcManager::Init(const VoxelGrid& grid)
@@ -232,7 +233,6 @@ void NpcManager::Update(float dt)
         }
         else
         {
-            //if (true == WouldCollideTrajectory(i))   continue;  // 캡슐 충돌
             Math::Vector3 d = Math::Normalize(delta);
             m_Move.position[i] = pos + d * (NPC_SPEED * dt);
         }
@@ -422,8 +422,21 @@ void NpcManager::AdvanceCell(size_t i, float dt)
         {
             found = true;
         }
-        // (2) 1순위가 대각선인데 막혔으면 -> 성분 분해 대안
-        else if (desired.x != 0 && desired.z != 0)
+        // (2) 막힌 이유가 곧 비킬 npc 때문이면 방향 안바꾸고 대기
+        else
+        {
+            int occ = m_Reserve.Find(MakeCellKey(desiredCell));
+            bool waitable = (occ >= 0 && occ != (int)i && m_Move.active[occ] != 0);
+            if (waitable && m_Move.blockedFrames[i] < NPC_WAIT_FRAMES)
+            {
+                ++m_Move.blockedFrames[i];
+                m_Move.targetCell[i] = curr;
+                m_Move.targetWorldPos[i] = m_Move.position[i];
+                return; // 이번 프레임은 제자리
+            }
+        }
+        // (3) 1순위가 대각선인데 막혔으면 -> 성분 분해 대안
+        if (!found && desired.x != 0 && desired.z != 0)
         {
             // 어느 축이 막혔는지: 두 카디널 성분 어깨셀의 점유 여부로 판단
             // x성분 어깨 = (curr.x+dx, curr.z),  z성분 어깨 = (curr.x, curr.z+dz)
@@ -454,7 +467,8 @@ void NpcManager::AdvanceCell(size_t i, float dt)
         }
     }
 
-    // (3) 위에서 못 찾았으면 이웃 중 cost가 낮아지는 셀들을 모아, 예약 가능한 것 중 가장 좋은 걸 고름
+    // (4) 위에서 못 찾았으면 이웃 중 cost가 낮아지는 셀들을 모아, 예약 가능한 것 중 가장 좋은 걸 고름
+    bool hasActiveBlocker = false;   // 곧 비켜날 수 있는 상대가 있는지
     if (!found)
     {
         float bestCost = currCost;
@@ -463,8 +477,19 @@ void NpcManager::AdvanceCell(size_t i, float dt)
             float nc;
             if (false == m_CorridorField.SampleCost(*m_Grid, n.pos.x, n.pos.y, n.pos.z, nc)) continue; // flowfield 아님ㅁ
             if (nc >= currCost)                                                 continue;       // 목적지로 안 가까워짐
-            if (m_Reserve.Find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) >= 0)    continue;       // 점유됨
-            if (true == IsMoveCross(i, curr, n.pos))                            continue;       // 교차
+            // 점유자가 살아있는지
+            int occ = m_Reserve.Find(MakeCellKey(n.pos));
+            if (occ >= 0)
+            {
+                if (occ != (int)i && m_Move.active[occ]) hasActiveBlocker = true;
+                continue;
+            }
+            // 교차 거부도 살아있는 점유자 때문이라
+            if (true == IsMoveCross(i, curr, n.pos))
+            {
+                hasActiveBlocker = true;
+                continue;       
+            }
 
             int dx = n.pos.x - curr.x, dz = n.pos.z - curr.z;
             const auto& ld = m_Move.lastDir[i];
@@ -479,9 +504,17 @@ void NpcManager::AdvanceCell(size_t i, float dt)
         }
     }
 
+
+    // 더 이상 갈 곳 없음
     if (!found)
     {
-        // 갈 곳 없음 -> 제자리 대기 (다음 프레임 재시도)
+        if (!hasActiveBlocker)
+        {
+            // 도착 확정: 더 가까워지는 길이 없고, 비켜줄 수 있는 상대도 없음
+            m_Move.active[i] = 0;
+            return;
+        }
+        // -> 제자리 대기 (다음 프레임 재시도)
         m_Move.targetCell[i] = curr;
         m_Move.targetWorldPos[i] = m_Move.position[i];
         return;
@@ -496,6 +529,7 @@ void NpcManager::AdvanceCell(size_t i, float dt)
         m_Move.targetCell[i] = best;
         m_Move.lastDir[i] = { best.x - curr.x, best.y - curr.y, best.z - curr.z };
         m_Move.targetWorldPos[i] = GetNpcStandPos(best, m_Move.halfHeight[i]);
+        m_Move.blockedFrames[i] = 0;    // 이동 성공해서 대기 프레임 초기화
     }
     else
     {

@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "VoxelGrid.h"
 #include "PathCorridor.h"
+#include "ChunkKey.h"
 #include <DirectXMath.h>
 #include <vector>
 #include <array>
@@ -80,4 +81,10 @@ public:
     // 청크 순회용 getter
     const std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>>& GetChunks() const { return m_Chunks; }
     static constexpr int CHUNK_SIZE = FlowFieldChunk::SIZE;
+    // 셀 좌표 -> FlowField 청크 키. y는 청크 좌표에 관여하지 않음(2D + 슬롯 구조).
+    // TODO : FlowField를 2d->3d로 바꿀 때 이 함수만 고치면 전체가 따라옴
+    static int64_t ChunkKeyOf(int x, int z)
+    {
+        return MakeChunkKey(x / FlowFieldChunk::SIZE, 0, z / FlowFieldChunk::SIZE);
+    }
 };
