@@ -20,10 +20,11 @@ struct NpcMoveData
     std::vector<DirectX::XMINT3>    targetCell;         // 목표 셀
     std::vector<uint8_t>            active;             // 이동중 = 1;
     std::vector<float>              halfHeight;         // scaleY 복사본
-    size_t count = 0;
 
     std::vector<int> claimedSlot;                       // -1 = 미청구
     std::vector<DirectX::XMINT3> lastDir;               // 직전 이동 방향 (dx,dy,dz)
+
+    size_t size() const { return position.size(); }
 
     void Resize(size_t n)
     {
@@ -33,7 +34,7 @@ struct NpcMoveData
         targetCell.resize(n);
         active.resize(n);
         halfHeight.resize(n);
-        count = n;
+
         claimedSlot.assign(n, -1);
         lastDir.resize(n, { 0,0,0 });
     }

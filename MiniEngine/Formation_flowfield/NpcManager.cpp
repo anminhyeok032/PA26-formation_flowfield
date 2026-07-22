@@ -4,7 +4,7 @@
 #include <cmath>
 #include <queue>
 
-constexpr float NPC_SPEED = 5.0f;
+constexpr float NPC_SPEED = 1.0f;
 constexpr float NPC_INER = 0.5f;
 const int TARGET_COUNT = 1000;
 
@@ -116,23 +116,52 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     if (n == 0) return false;
 
     // --- 1. 각 NPC의 시작 셀 수집 (마스크 시드 + 이동 초기화에 공유) ---
-    // FindNearestWalkable을 여기서 1회만 돌리고, 결과를 멤버에 저장해 InitGroupMovement가 재사용.
+    // FindNearestWalkable을 여기서 1회만 돌리고, 결과를 멤버에 저장해 InitGroupMovement가 재사용
     m_StartCells.clear();
     m_StartCells.resize(n, { -1,-1,-1 });
 
     Math::Vector3 centroid(0.0f, 0.0f, 0.0f);
     int validCount = 0;
+
+    const bool hasPrevMove = (m_Move.size() > 0);   // 그룹 있는지 확인
+ 
+
     for (size_t i = 0; i < n; ++i)
     {
-        const auto& inst = m_NpcInstances[i];
-        Math::Vector3 p(inst.position[0], inst.position[1], inst.position[2]);
-        int sx, sy, sz;
-        if (m_Grid->FindNearestWalkable(p, sx, sy, sz))
+        DirectX::XMINT3 startCell{ -1, -1, -1 };
+        bool resolved = false;
+
+        // 1. 이전에 움직였으면, 기존의 타겟cell을 start로 설정
+        if (true == hasPrevMove)
         {
-            m_StartCells[i] = { sx, sy, sz };
-            centroid += Math::Vector3((float)sx, (float)sy, (float)sz);
+            const auto& tc = m_Move.targetCell[i];
+            if (m_Reserve.Find(MakeCellKey(tc)) == (int)i)
+            {
+                startCell = tc;
+                resolved = true;
+            }
+        }
+
+        // 2. 없으면 렌더 좌표로 역산하기
+        if (false == resolved)
+        {
+            const auto& inst = m_NpcInstances[i];
+            Math::Vector3 p(inst.position[0], inst.position[1], inst.position[2]);
+            int sx, sy, sz;
+            if (m_Grid->FindNearestWalkable(p, sx, sy, sz))
+            {
+                startCell = { sx, sy, sz };
+                resolved = true;
+            }
+        }
+
+        if (true == resolved)
+        {
+            m_StartCells[i] = startCell;
+            centroid += Math::Vector3((float)startCell.x, (float)startCell.y, (float)startCell.z);
             validCount++;
         }
+
     }
     if (validCount == 0) return false;
     centroid = Math::Vector3(centroid) / (float)validCount;   // 셀 좌표 평균
@@ -171,9 +200,6 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     // --- 5. FlowField 계산 ---
     m_CorridorField.Build(*m_Grid, goalCell, mask);
 
-    // 무게중심 월드 좌표 (이미 계산된 centroid 셀 좌표 활용)
-    Math::Vector3 centroidWorld2 = m_Grid->GetWorldPos(cx, cy, cz);
-    //BuildArrivalRegion(goalCell, (int)n, centroidWorld2);
 
     m_HasGoal = true;
     InitGroupMovement();   // m_StartCells 재사용
@@ -186,7 +212,7 @@ void NpcManager::Update(float dt)
     if (false == m_HasGoal) return;
 
     const float ARRIVE_EPS_SQ = 0.05f * 0.05f;
-    const size_t n = m_Move.count;
+    const size_t n = m_Move.size();
 
     bool anyMoved = false;
     bool anyActive = false;
@@ -263,12 +289,22 @@ bool NpcManager::IsMoveCross(size_t i, const DirectX::XMINT3& curr, const Direct
 void NpcManager::InitGroupMovement()
 {
     const size_t n = m_NpcInstances.size();
+    const bool firstTimeMove = (m_Move.size() == 0);   // Resize 전에 움직인적 있는지 판별
+
     m_Move.Resize(n);
     m_Reserve.Reset(n);
 
     for (size_t i = 0; i < n; ++i)
     {
         m_Move.halfHeight[i] = m_NpcInstances[i].scaleY;
+
+        // 최초 호출: m_Move.position이 아직 유효값 없음(0벡터) -> 실제 배치 위치로 시드
+        if (firstTimeMove)
+        {
+            const auto& inst = m_NpcInstances[i];
+            m_Move.position[i] = Math::Vector3(inst.position[0], inst.position[1], inst.position[2]);
+        }
+        // 두 번째 
 
         const auto& startCell = m_StartCells[i];   // FindNearestWalkable 재호출 안 함
         if (startCell.x < 0)
@@ -284,11 +320,8 @@ void NpcManager::InitGroupMovement()
         }
 
         m_Move.currCell[i] = startCell;
-        m_Move.position[i] = GetNpcStandPos(startCell, m_Move.halfHeight[i]);
-
-        // 첫 목표는 advanceCell에서
         m_Move.targetCell[i] = startCell;
-        m_Move.targetWorldPos[i] = m_Move.position[i];
+        m_Move.targetWorldPos[i] = GetNpcStandPos(startCell, m_Move.halfHeight[i]);
         m_Move.active[i] = 1;
     }
 
@@ -314,7 +347,8 @@ void NpcManager::InitGroupMovement()
         });
 }
 
-
+// 현재는 이동 예약시 바로 기존 cell 예약을 풀어버림
+// 이게 충돌 야기시, cell 예약 해제 시점을 조절할것
 void NpcManager::AdvanceCell(size_t i, float dt)
 {
     // 목표 셀에 정확히 스냅 (연속 이동 누적 오차 제거 + 층 플립 방지)
@@ -427,15 +461,15 @@ void NpcManager::AdvanceCell(size_t i, float dt)
         for (const auto& n : m_NeighborScratch)
         {
             float nc;
-            if (false == m_CorridorField.SampleCost(*m_Grid, n.pos.x, n.pos.y, n.pos.z, nc)) continue;
-            if (nc >= currCost)                                                 continue;
-            if (m_Reserve.Find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) >= 0)    continue;
-            if (true == IsMoveCross(i, curr, n.pos))                            continue;
+            if (false == m_CorridorField.SampleCost(*m_Grid, n.pos.x, n.pos.y, n.pos.z, nc)) continue; // flowfield 아님ㅁ
+            if (nc >= currCost)                                                 continue;       // 목적지로 안 가까워짐
+            if (m_Reserve.Find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) >= 0)    continue;       // 점유됨
+            if (true == IsMoveCross(i, curr, n.pos))                            continue;       // 교차
 
             int dx = n.pos.x - curr.x, dz = n.pos.z - curr.z;
             const auto& ld = m_Move.lastDir[i];
             float score = nc;
-            if (dx == ld.x && dz == ld.z) score -= NPC_INER;
+            if (dx == ld.x && dz == ld.z) score -= NPC_INER;    // 기존 방향으로 계속 가도록 보정값
             if (score < bestCost)
             {
                 bestCost = score;
@@ -475,7 +509,7 @@ void NpcManager::AdvanceCell(size_t i, float dt)
 
 void NpcManager::SyncInstances()
 {
-    for (size_t i = 0; i < m_Move.count; ++i)
+    for (size_t i = 0; i < m_Move.size(); ++i)
     {
         m_NpcInstances[i].position[0] = m_Move.position[i].GetX();
         m_NpcInstances[i].position[1] = m_Move.position[i].GetY();
