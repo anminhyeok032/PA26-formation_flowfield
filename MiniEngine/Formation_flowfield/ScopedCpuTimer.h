@@ -32,19 +32,48 @@ public:
         return s_Stats;
     }
 
-    static void Report()
-    {
-        Utility::Printf("---- CPU Timing ----\n");
-        for (const auto& kv : Stats())
-        {
-            Utility::Printf("%-40s total %8.2fms  calls %6llu  avg %7.4fms  max %7.4fms\n",
-                kv.first.c_str(), kv.second.totalMs, kv.second.calls,
-                kv.second.totalMs / (double)kv.second.calls, kv.second.maxMs);
-        }
-    }
+    //static void Report()
+    //{
+    //    Utility::Printf("---- CPU Timing ----\n");
+    //    for (const auto& kv : Stats())
+    //    {
+    //        Utility::Printf("%-40s total %8.2fms  calls %6llu  avg %7.4fms  max %7.4fms\n",
+    //            kv.first.c_str(), kv.second.totalMs, kv.second.calls,
+    //            kv.second.totalMs / (double)kv.second.calls, kv.second.maxMs);
+    //    }
+    //}
     static void Reset() { Stats().clear(); }
 
+    static void Report(const char* filePath = "perf_report.txt")
+    {
+        // 정렬: 총 시간 내림차순 (병목부터 보이게)
+        std::vector<std::pair<std::string, Stat>> sorted(Stats().begin(), Stats().end());
+        std::sort(sorted.begin(), sorted.end(),
+            [](const auto& a, const auto& b) { return a.second.totalMs > b.second.totalMs; });
 
+        FILE* fp = nullptr;
+        fopen_s(&fp, filePath, "w");
+
+        auto emit = [&](const char* line)
+        {
+            Utility::Print(line);          // 디버거 붙어 있으면 출력 창에도
+            if (fp) fputs(line, fp);       // 항상 파일에
+        };
+
+        char buf[256];
+        sprintf_s(buf, "%-40s %10s %8s %10s %10s\n", "scope", "total(ms)", "calls", "avg(ms)", "max(ms)");
+        emit(buf);
+
+        for (const auto& kv : sorted)
+        {
+            sprintf_s(buf, "%-40s %10.2f %8llu %10.4f %10.4f\n",
+                kv.first.c_str(), kv.second.totalMs, kv.second.calls,
+                kv.second.totalMs / (double)kv.second.calls, kv.second.maxMs);
+            emit(buf);
+        }
+
+        if (fp) fclose(fp);
+    }
 };
 
 #define CPU_SCOPE(name) ScopedCpuTimer _cpuTimer_##__LINE__(name)

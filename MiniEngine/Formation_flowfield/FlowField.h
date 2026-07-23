@@ -19,7 +19,7 @@
 #include "FlowFieldArrowRenderer.h"
 #include "NpcManager.h"
 
-
+#include "ScopedCpuTimer.h"
 
 // 색상 상수 정리
 static constexpr uint32_t kColorDefault     = 0;    // default
@@ -114,4 +114,6 @@ private:
 
     // 바뀐 복셀 gpu 업로드
     void FlushVoxelInstanceChanges(std::vector<int>& changedIndices);
+
+    int m_StatFrameCounter = 0;
 };

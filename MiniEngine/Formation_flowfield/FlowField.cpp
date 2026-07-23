@@ -71,32 +71,40 @@ void FlowField::Startup(void)
 
     // BMP 로드 → 복셀 생성 → GPU 업로드
     // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
-    bool loaded = m_HeightMap.LoadFromBMP("Heightmap02.bmp",
+    bool loaded = true;
+    { 
+        CPU_SCOPE("Startup/LoadBMP");  loaded = m_HeightMap.LoadFromBMP("Heightmap02.bmp",
         MAX_HEIGHT,     // 최대 높이 (월드 유닛)
         WORLD_SCALE,    // MapScale
         VOXEL_SIZE);    // 복셀 1개 크기 -> 복셀 수 = pow( (맵 크기 * MAP_SCALE) / VOXEL_SIZE), 2 )
-
+    }
 
     if (true == loaded)
     {
         DirectX::XMFLOAT3 StartPos { 70.0f, 0.0f, 90.0f };
         DirectX::XMFLOAT3 EndPos { 100.0f, 0.0f, 91.0f };
         // 관통 터널 생성
-        m_VoxelGrid.BuildFromHeightMapWithTunnel(
-            m_HeightMap,
-            StartPos,
-            EndPos,
-            5.0f,               // 터널 반지름
-            1.0,              
-            true, true);        // 양쪽 다 개방
+        { 
+            CPU_SCOPE("Startup/BuildTunnel");
+            m_VoxelGrid.BuildFromHeightMapWithTunnel(
+                m_HeightMap,
+                StartPos,
+                EndPos,
+                5.0f,               // 터널 반지름
+                1.0,
+                true, true);        // 양쪽 다 개방
+        }
+
 
         // 병목 협곡 지형 추가 (5주차 병목 테스트용)
         // 월드 좌표계: m_Size=514, cellSize=0.5 -> 유효 범위 0~257. 터널(z월드 90 부근)과 안 겹침.
         // 축 구간(z 150~190) 안에서는 통로 밖이 맵 경계까지 벽이므로 우회 불가.
         DirectX::XMFLOAT3 BottleneckStart{ 70.0f, 0.0f, 150.0f };
         DirectX::XMFLOAT3 BottleneckEnd{ 70.0f, 0.0f, 190.0f };
-        m_VoxelGrid.AddNarrowingCliffs(BottleneckStart, BottleneckEnd, 12.0f, 1.0f);
-
+        {
+            CPU_SCOPE("Startup/AddCliffs");
+            m_VoxelGrid.AddNarrowingCliffs(BottleneckStart, BottleneckEnd, 12.0f, 1.0f);
+        }
         
         m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
         VoxelRenderer::UpdateInstances(m_VoxelInstances);
@@ -156,6 +164,8 @@ void FlowField::Startup(void)
 
 void FlowField::Cleanup(void)
 {
+    ScopedCpuTimer::Report("perf_report.txt");   // 종료 시 전체 통계 저장
+
     VoxelRenderer::Shutdown();
     NpcRenderer::Shutdown();
     FlowFieldArrowRenderer::Shutdown();
@@ -623,6 +633,13 @@ void FlowField::Update(float dt)
     }
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+    if (++m_StatFrameCounter >= 300)
+    {
+        m_Npc.ReportAndResetStats();
+        m_StatFrameCounter = 0;
+    }
+
+
     // 전원 도착(HasGoal true->false) 시 시각화 초기화
     const bool hasGoal = m_Npc.HasGoal();
     if (m_PrevHasGoal && !hasGoal)   OnGroupArrived();

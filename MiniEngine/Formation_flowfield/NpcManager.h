@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-
+#include "ScopedCpuTimer.h"
 
 struct NpcMoveData
 {
@@ -86,6 +86,27 @@ public:
     bool HasGoal() const { return m_HasGoal; }
 
 
+    void ReportAndResetStats(const char* filePath = "advancecell_stats.txt")
+    {
+        auto& s = m_Stats;
+        char buf[512];
+        sprintf_s(buf,
+            "AdvanceCell calls=%llu\n"
+            "  SampleCost=%llu SampleDir=%llu ReserveFind=%llu  (avg hash/call=%.2f)\n"
+            "  primaryHit=%llu waited=%llu fallbackHit=%llu arrived=%llu stuck=%llu\n",
+            s.calls,
+            s.sampleCostCalls, s.sampleDirCalls, s.reserveFindCalls,
+            s.calls ? (double)(s.sampleCostCalls + s.sampleDirCalls + s.reserveFindCalls) / s.calls : 0.0,
+            s.primaryHit, s.waited, s.fallbackHit, s.arrived, s.stuck);
+
+        Utility::Print(buf);
+        FILE* fp = nullptr;
+        fopen_s(&fp, filePath, "w");
+        if (fp) { fputs(buf, fp); fclose(fp); }
+
+        s = AdvanceCellStats{};   // 리셋
+    }
+
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
 
@@ -135,5 +156,45 @@ private:
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const;
 
     std::vector<DirectX::XMINT3> m_StartCells;
+
+
+    void ReportMemory() const
+    {
+        auto vecBytes = [](auto& v) { return v.capacity() * sizeof(typename std::decay_t<decltype(v)>::value_type); };
+
+        size_t move = vecBytes(m_Move.position) + vecBytes(m_Move.targetWorldPos)
+            + vecBytes(m_Move.currCell) + vecBytes(m_Move.targetCell)
+            + vecBytes(m_Move.active) + vecBytes(m_Move.halfHeight)
+            + vecBytes(m_Move.lastDir) + vecBytes(m_Move.blockedTime);
+
+        Utility::Printf("NpcMoveData      : %8.1f KB (%zu명)\n", move / 1024.0, m_Move.size());
+        Utility::Printf("m_NpcInstances   : %8.1f KB\n", vecBytes(m_NpcInstances) / 1024.0);
+        Utility::Printf("FlowFieldChunks  : %8.1f MB (%zu개)\n",
+            m_CorridorField.GetChunks().size() * 4352 / 1e6, m_CorridorField.GetChunks().size());
+    }
+
+
+    // ---- AdvanceCell 계측용 카운터 (디버그) ----
+ // 타이머 오버헤드(~100~160ns)가 AdvanceCell 자체 비용(~280ns)의 35~55%를 차지해
+ // CPU_SCOPE로는 못 재므로, 정수 증가(1~2ns, 무시 가능)로 호출 빈도/분기 분포를 잰다.
+    struct AdvanceCellStats
+    {
+        uint64_t calls = 0;          // AdvanceCell 진입 횟수
+        uint64_t sampleCostCalls = 0;    // CorridorFlowField::SampleCost 호출 횟수
+        uint64_t sampleDirCalls = 0;     // CorridorFlowField::SampleDirection 호출 횟수
+        uint64_t reserveFindCalls = 0;   // CellReservation::Find 호출 횟수 (IsMoveCross 내부 포함)
+
+        uint64_t primaryHit = 0;     // 1순위(FlowField 방향) 즉시 성공
+        uint64_t waited = 0;         // 활성 상대에게 막혀 대기
+        uint64_t slideHit = 0;       // 성분 분해(zKeep/xKeep)로 성공
+        uint64_t fallbackHit = 0;    // 3순위 cost 폴백으로 성공
+        uint64_t arrived = 0;        // 도착 확정 (active=0)
+        uint64_t stuck = 0;          // 폴백도 실패, 활성 방해자 있어 제자리 대기
+    };
+    AdvanceCellStats m_Stats;
+
+    bool SampleCostCounted(int x, int y, int z, float& outCost);
+    bool SampleDirectionCounted(int x, int y, int z, DirectX::XMFLOAT3& outDir);
+    int ReserveFindCounted(int64_t key);
 
 };

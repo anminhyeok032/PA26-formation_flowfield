@@ -4,7 +4,7 @@
 #include <cmath>
 #include <queue>
 
-constexpr float NPC_SPEED = 1.5f;
+constexpr float NPC_SPEED = 10.5f;
 constexpr float NPC_INER = 0.5f;                // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
 
 
@@ -185,7 +185,9 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     if (!m_Grid->FindNearestWalkable(centroidWorld, asx, asy, asz)) return false;
 
     std::vector<DirectX::XMINT3> path;
-    if (!m_Pathfinder.FindPath(*m_Grid, { asx,asy,asz }, goalCell, path)) return false;
+    { CPU_SCOPE("Dest/AStar");
+        if (!m_Pathfinder.FindPath(*m_Grid, { asx,asy,asz }, goalCell, path)) return false;
+    }
     if (outPath) *outPath = path;
 
     // --- 3. margin을 "그룹 분포 반경"으로 계산 (시드 간 공백 방지) ---
@@ -204,20 +206,26 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     int margin = std::max(formationMargin, maxDistFromCentroid) + 2;
 
     // --- 4. 마스크: A* 경로 + 모든 NPC 시작 셀을 시드로 ---
-    auto mask = BuildLayerMask(*m_Grid, path, m_StartCells, margin);
-
+    std::unordered_set<int64_t> mask;
+    { CPU_SCOPE("Dest/BuildMask");
+        mask = BuildLayerMask(*m_Grid, path, m_StartCells, margin);
+    }
+    { CPU_SCOPE("Dest/FieldBuild");
     // --- 5. FlowField 계산 ---
     m_CorridorField.Build(*m_Grid, goalCell, mask);
-
+    }
 
     m_HasGoal = true;
+    { CPU_SCOPE("Dest/InitMovement");
     InitGroupMovement();   // m_StartCells 재사용
+    }
     return true;
 }
 
 
 void NpcManager::Update(float dt)
 {
+    CPU_SCOPE("Frame/NpcUpdate");
     if (false == m_HasGoal) return;
 
     const float ARRIVE_EPS_SQ = 0.05f * 0.05f;
@@ -262,8 +270,8 @@ void NpcManager::Update(float dt)
     // 누군가 움직였을때만 이동
     if (true == anyMoved)
     {
-        SyncInstances();
-        NpcRenderer::UpdateInstances(m_NpcInstances);
+        { CPU_SCOPE("Frame/SyncInstances");   SyncInstances(); }
+        { CPU_SCOPE("Frame/UploadInstances"); NpcRenderer::UpdateInstances(m_NpcInstances); }
     }
 
     // 전원 도착시 목표 종료
@@ -374,18 +382,21 @@ void NpcManager::InitGroupMovement()
 //---------------------------------------------------------------------
 void NpcManager::AdvanceCell(size_t i, float dt)
 {
+    ++m_Stats.calls;
+
     SnapToTargetCell(i);
-    const DirectX::XMINT3 curr = m_Move.currCell[i];   // 값 복사 - 이하 안 바뀜
+    const DirectX::XMINT3 curr = m_Move.currCell[i];
 
     float currCost;
-    if (false == m_CorridorField.SampleCost(*m_Grid, curr.x, curr.y, curr.z, currCost))
+    if (false == SampleCostCounted(curr.x, curr.y, curr.z, currCost))
     {
         m_Move.active[i] = 0;
         return;
     }
-    if (currCost < 1e-4f)   // 목적지 도달
+    if (currCost < 1e-4f)
     {
         m_Move.active[i] = 0;
+        ++m_Stats.arrived;
         return;
     }
 
@@ -394,28 +405,29 @@ void NpcManager::AdvanceCell(size_t i, float dt)
 
     DirectX::XMINT3 best{ curr.x, curr.y, curr.z };
 
-    // 1순위(FlowField 방향) + 대기 판정 + 성분 분해 슬라이딩 담당
     bool waited = false;
     bool found = TryPrimaryDirection(i, curr, currCost, best, waited, dt);
-    if (waited) return;   // 1순위 방향 대기 중 - 이번 프레임은 여기서 끝
+    if (waited) { ++m_Stats.waited; return; }
+    if (found) { ++m_Stats.primaryHit; }   // 1순위 or 성분분해 성공 (TryPrimaryDirection 내부에서 세분화 가능)
 
-    // 2순위(cost 최소 + lastDir 정렬) 폴백
     bool hasActiveBlocker = false;
     if (!found)
     {
         found = PickFallbackCell(i, curr, currCost, best, hasActiveBlocker);
+        if (found) ++m_Stats.fallbackHit;
     }
 
     if (!found)
     {
         if (!hasActiveBlocker)
         {
-            // 도착 확정: 더 가까워지는 길이 없고, 비켜줄 상대도 없음
             m_Move.active[i] = 0;
-            m_Move.blockedTime[i] = 0;
+            m_Move.blockedTime[i] = 0.0f;
+            ++m_Stats.arrived;
             return;
         }
-        HoldPosition(i, curr);   // 곧 비킬 상대에게 막힘 - 다음 프레임 재시도
+        HoldPosition(i, curr);
+        ++m_Stats.stuck;
         return;
     }
 
@@ -598,3 +610,18 @@ Math::Vector3 NpcManager::GetNpcStandPos(const DirectX::XMINT3& cell, float half
     return Math::Vector3(cellCenter.GetX(), standY, cellCenter.GetZ());
 }
 
+bool NpcManager::SampleCostCounted(int x, int y, int z, float& outCost)
+{
+    ++m_Stats.sampleCostCalls;
+    return m_CorridorField.SampleCost(*m_Grid, x, y, z, outCost);
+}
+bool NpcManager::SampleDirectionCounted(int x, int y, int z, DirectX::XMFLOAT3& outDir)
+{
+    ++m_Stats.sampleDirCalls;
+    return m_CorridorField.SampleDirection(*m_Grid, x, y, z, outDir);
+}
+int NpcManager::ReserveFindCounted(int64_t key)
+{
+    ++m_Stats.reserveFindCalls;
+    return m_Reserve.Find(key);
+}

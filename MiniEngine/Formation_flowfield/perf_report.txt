@@ -1,0 +1,11 @@
+scope                                     total(ms)    calls    avg(ms)    max(ms)
+Frame/NpcUpdate                            24958.82    15108     1.6520     2.8497
+Frame/UploadInstances                      23862.44    12928     1.8458     2.8097
+Startup/BuildTunnel                          123.87        1   123.8717   123.8717
+Startup/AddCliffs                             20.74        1    20.7427    20.7427
+Frame/SyncInstances                           10.76    12928     0.0008     0.0267
+Dest/FieldBuild                                5.51        2     2.7553     2.9954
+Dest/BuildMask                                 4.80        2     2.3983     2.4535
+Startup/LoadBMP                                0.42        1     0.4234     0.4234
+Dest/AStar                                     0.37        2     0.1874     0.1935
+Dest/InitMovement                              0.18        2     0.0891     0.0913
