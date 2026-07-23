@@ -24,7 +24,7 @@ struct NpcMoveData
     std::vector<int> claimedSlot;                       // -1 = 미청구
     std::vector<DirectX::XMINT3> lastDir;               // 직전 이동 방향 (dx,dy,dz)
 
-    std::vector<uint16_t> blockedFrames;
+    std::vector<float> blockedTime;
 
     size_t size() const { return position.size(); }     // 길막당한 프레임 체크용
 
@@ -40,7 +40,7 @@ struct NpcMoveData
         claimedSlot.assign(n, -1);
         lastDir.resize(n, { 0,0,0 });
 
-        blockedFrames.assign(n, 0);
+        blockedTime.assign(n, 0.0f);
     }
 
 };
@@ -104,7 +104,7 @@ private:
     std::vector<int> m_MoveOrder;   // 어디가 앞인지 정의할 npc 리스트
 
     // 조건 조립 함수
-    void AdvanceCell(size_t i);
+    void AdvanceCell(size_t i, float dt);
     void SnapToTargetCell(size_t i);                                // 이동
     void HoldPosition(size_t i, const DirectX::XMINT3& curr);       // 제자리 대기
     // 특정 이웃 셀이 지금 이동 가능한 유효 후보인지 검사
@@ -114,7 +114,7 @@ private:
     // 1순위(FlowField 방향) + 대기 판정 + 성분 분해 슬라이딩 담당
     // return true = best에 후보 확정 / outWaited = true면 이번 프레임 대기 확정
     bool TryPrimaryDirection(size_t i, const DirectX::XMINT3& curr, float currCost,
-        DirectX::XMINT3& best, bool& outWaited);
+        DirectX::XMINT3& best, bool& outWaited, float dt);
 
     // 2순위(cost 최소 + lastDir 정렬) 폴백
     bool PickFallbackCell(size_t i, const DirectX::XMINT3& curr, float currCost,

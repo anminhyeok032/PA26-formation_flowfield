@@ -6,7 +6,15 @@
 
 constexpr float NPC_SPEED = 1.5f;
 constexpr float NPC_INER = 0.5f;                // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
-static constexpr uint16_t NPC_WAIT_FRAMES = 12; // 1순위 방향이 막혔을 때 슬라이딩 대신 버티는 최대 프레임 수
+
+
+//static constexpr float NPC_WAIT_SECONDS = 0.167f / 2.0f; // 한 칸 통과 시간(~0.167초) 기준
+constexpr float NPC_WAIT_RATIO = 0.3f;   // 1칸 움직이는데 비율 (x / 1.0f)%
+constexpr float VOXEL_SIZE_REF = 0.5f;   // VoxelGrid::GetCellSize()와 반드시 일치해야 함
+constexpr float NPC_CARDINAL_WAIT_SECONDS = (VOXEL_SIZE_REF / NPC_SPEED) * NPC_WAIT_RATIO;
+constexpr float NPC_DIAGONAL_WAIT_SECONDS = (VOXEL_SIZE_REF * 1.41421356f / NPC_SPEED) * NPC_WAIT_RATIO;
+
+
 const int TARGET_COUNT = 1000;
 
 void NpcManager::Init(const VoxelGrid& grid)
@@ -230,7 +238,7 @@ void NpcManager::Update(float dt)
         if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
         {
 
-            AdvanceCell(i);   // 도착 -> 셀 전환
+            AdvanceCell(i, dt);   // 도착 -> 셀 전환
         }
         else
         {
@@ -364,7 +372,7 @@ void NpcManager::InitGroupMovement()
 //	이동시 규율
 //
 //---------------------------------------------------------------------
-void NpcManager::AdvanceCell(size_t i)
+void NpcManager::AdvanceCell(size_t i, float dt)
 {
     SnapToTargetCell(i);
     const DirectX::XMINT3 curr = m_Move.currCell[i];   // 값 복사 - 이하 안 바뀜
@@ -388,7 +396,7 @@ void NpcManager::AdvanceCell(size_t i)
 
     // 1순위(FlowField 방향) + 대기 판정 + 성분 분해 슬라이딩 담당
     bool waited = false;
-    bool found = TryPrimaryDirection(i, curr, currCost, best, waited);
+    bool found = TryPrimaryDirection(i, curr, currCost, best, waited, dt);
     if (waited) return;   // 1순위 방향 대기 중 - 이번 프레임은 여기서 끝
 
     // 2순위(cost 최소 + lastDir 정렬) 폴백
@@ -404,7 +412,7 @@ void NpcManager::AdvanceCell(size_t i)
         {
             // 도착 확정: 더 가까워지는 길이 없고, 비켜줄 상대도 없음
             m_Move.active[i] = 0;
-            m_Move.blockedFrames[i] = 0;
+            m_Move.blockedTime[i] = 0;
             return;
         }
         HoldPosition(i, curr);   // 곧 비킬 상대에게 막힘 - 다음 프레임 재시도
@@ -449,7 +457,7 @@ bool NpcManager::TryCandidate(size_t i, const DirectX::XMINT3& curr, float currC
 }
 
 bool NpcManager::TryPrimaryDirection(size_t i, const DirectX::XMINT3& curr, float currCost,
-    DirectX::XMINT3& best, bool& outWaited)
+    DirectX::XMINT3& best, bool& outWaited, float dt)
 {
     outWaited = false;
 
@@ -468,12 +476,18 @@ bool NpcManager::TryPrimaryDirection(size_t i, const DirectX::XMINT3& curr, floa
     // (2) 막힌 이유가 곧 비킬 npc 때문이면 방향 안 바꾸고 대기
     int occ = m_Reserve.Find(MakeCellKey(desiredCell));
     bool waitable = (occ >= 0 && occ != (int)i && m_Move.active[occ] != 0);
-    if (waitable && m_Move.blockedFrames[i] < NPC_WAIT_FRAMES)
+    if (waitable)
     {
-        ++m_Move.blockedFrames[i];
-        HoldPosition(i, curr);
-        outWaited = true;
-        return false;
+        bool isDiagonal = (desired.x != 0 && desired.z != 0);
+        float waitLimit = isDiagonal ? NPC_DIAGONAL_WAIT_SECONDS : NPC_CARDINAL_WAIT_SECONDS;
+
+        if (m_Move.blockedTime[i] < waitLimit)
+        {
+            m_Move.blockedTime[i] += dt;
+            HoldPosition(i, curr);
+            outWaited = true;
+            return false;
+        }
     }
 
     // (3) 1순위가 대각선인데 막혔으면 -> 성분 분해 대안
@@ -552,7 +566,7 @@ void NpcManager::CommitMove(size_t i, const DirectX::XMINT3& curr, const DirectX
         m_Move.targetCell[i] = best;
         m_Move.lastDir[i] = { best.x - curr.x, best.y - curr.y, best.z - curr.z };
         m_Move.targetWorldPos[i] = GetNpcStandPos(best, m_Move.halfHeight[i]);
-        m_Move.blockedFrames[i] = 0;   // 이동 성공해서 대기 프레임 초기화
+        m_Move.blockedTime[i] = 0;   // 이동 성공해서 대기 프레임 초기화
     }
     else
     {
