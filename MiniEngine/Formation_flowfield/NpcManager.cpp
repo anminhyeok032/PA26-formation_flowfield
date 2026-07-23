@@ -4,16 +4,16 @@
 #include <cmath>
 #include <queue>
 
-constexpr float NPC_SPEED = 3.0f;
+constexpr float NPC_SPEED = 1.5f;
 constexpr float NPC_INER = 0.5f;                // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
-static constexpr uint16_t NPC_WAIT_FRAMES = 6; // 1순위 방향이 막혔을 때 슬라이딩 대신 버티는 최대 프레임 수
+static constexpr uint16_t NPC_WAIT_FRAMES = 12; // 1순위 방향이 막혔을 때 슬라이딩 대신 버티는 최대 프레임 수
 const int TARGET_COUNT = 1000;
 
 void NpcManager::Init(const VoxelGrid& grid)
 {
     m_Grid = &grid;
     const float voxelSize = grid.GetCellSize();
-    const float NPC_WIDTH = voxelSize / 2.0f;
+    const float NPC_WIDTH = voxelSize / 2.5f;
     const float NPC_HEIGHT = voxelSize * 3.0f / 2.0f;
 
     m_NpcInstances.clear();
@@ -229,12 +229,24 @@ void NpcManager::Update(float dt)
 
         if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
         {
-            AdvanceCell(i, dt);   // 도착 -> 셀 전환
+
+            AdvanceCell(i);   // 도착 -> 셀 전환
         }
         else
         {
-            Math::Vector3 d = Math::Normalize(delta);
-            m_Move.position[i] = pos + d * (NPC_SPEED * dt);
+            float distSq = Math::LengthSquare(delta);
+            float step = NPC_SPEED * dt;
+
+            if (step * step >= distSq)
+            {
+                // 이번 프레임 이동량이 남은 거리 이상 -> 목표에 정확히 스냅 (오버슈트 방지)
+                m_Move.position[i] = tgt;
+            }
+            else
+            {
+                Math::Vector3 d = Math::Normalize(delta);
+                m_Move.position[i] = pos + d * step;
+            }
         }
         anyMoved = true;
     }
@@ -347,15 +359,15 @@ void NpcManager::InitGroupMovement()
         });
 }
 
-// 현재는 이동 예약시 바로 기존 cell 예약을 풀어버림
-// 이게 충돌 야기시, cell 예약 해제 시점을 조절할것
-void NpcManager::AdvanceCell(size_t i, float dt)
+//---------------------------------------------------------------------
+//
+//	이동시 규율
+//
+//---------------------------------------------------------------------
+void NpcManager::AdvanceCell(size_t i)
 {
-    // 목표 셀에 정확히 스냅 (연속 이동 누적 오차 제거 + 층 플립 방지)
-    m_Move.position[i] = m_Move.targetWorldPos[i];
-    m_Move.currCell[i] = m_Move.targetCell[i];
-
-    const auto& curr = m_Move.currCell[i];
+    SnapToTargetCell(i);
+    const DirectX::XMINT3 curr = m_Move.currCell[i];   // 값 복사 - 이하 안 바뀜
 
     float currCost;
     if (false == m_CorridorField.SampleCost(*m_Grid, curr.x, curr.y, curr.z, currCost))
@@ -363,165 +375,176 @@ void NpcManager::AdvanceCell(size_t i, float dt)
         m_Move.active[i] = 0;
         return;
     }
-    // 목적지 도달 (cost가 0에 가까움)
-    if (currCost < 1e-4f)
-    { 
-        m_Move.active[i] = 0; 
+    if (currCost < 1e-4f)   // 목적지 도달
+    {
+        m_Move.active[i] = 0;
         return;
     }
-
-
-    // ---- 1순위: FlowField가 가리키는 방향 ----
-    DirectX::XMFLOAT3 fdir;
-    DirectX::XMINT3 desired{ 0, 0, 0 };
-    bool hasDesired = false;
-    if (m_CorridorField.SampleDirection(*m_Grid, curr.x, curr.y, curr.z, fdir))
-    {
-        if (fdir.x * fdir.x + fdir.y * fdir.y + fdir.z * fdir.z >= 1e-6f)
-        {
-            desired = { (int)std::round(fdir.x), (int)std::round(fdir.y), (int)std::round(fdir.z) };
-            hasDesired = true;
-        }
-    }
-
-    // 특정 이웃 셀이 지금 이동 가능한 유효 후보인지 검사하는 헬퍼
-    // (cost 낮아짐 + 미점유 + 비교차). walkable 여부는 m_NeighborScratch에 있는지로 판단
-    auto tryCandidate = [&](const DirectX::XMINT3& cand, DirectX::XMINT3& out) -> bool
-    {
-        // walkable 이웃 목록에 실제로 존재하는지 확인 (지형/코너컷 통과 보장)
-        bool isNeighbor = false;
-        for (const auto& n : m_NeighborScratch)
-        {
-            if (n.pos.x == cand.x && n.pos.y == cand.y && n.pos.z == cand.z) { isNeighbor = true; break; }
-        }
-        if (!isNeighbor)                                                        return false;
-
-        float nc;
-        if (false == m_CorridorField.SampleCost(*m_Grid, cand.x, cand.y, cand.z, nc)) return false; // flowfield 아님
-        if (nc >= currCost)                                                    return false;    // 목적지로 안 가까워짐
-        if (m_Reserve.Find(MakeCellKey(cand.x, cand.y, cand.z)) >= 0)          return false;    // 점유됨
-        if (true == IsMoveCross(i, curr, cand))                               return false;     // 교차
-
-        out = cand;
-        return true;
-    };
 
     m_NeighborScratch.clear();
     GetWalkableNeighbors(*m_Grid, curr, m_NeighborScratch);
 
     DirectX::XMINT3 best{ curr.x, curr.y, curr.z };
-    bool found = false;
 
-    // desired 방향의 목표 셀 계산 (y는 desired 그대로 사용)
-    if (hasDesired)
-    {
-        DirectX::XMINT3 desiredCell{ curr.x + desired.x, curr.y + desired.y, curr.z + desired.z };
+    // 1순위(FlowField 방향) + 대기 판정 + 성분 분해 슬라이딩 담당
+    bool waited = false;
+    bool found = TryPrimaryDirection(i, curr, currCost, best, waited);
+    if (waited) return;   // 1순위 방향 대기 중 - 이번 프레임은 여기서 끝
 
-        // (1) 1순위 방향이 바로 가능하면 그대로
-        if (tryCandidate(desiredCell, best))
-        {
-            found = true;
-        }
-        // (2) 막힌 이유가 곧 비킬 npc 때문이면 방향 안바꾸고 대기
-        else
-        {
-            int occ = m_Reserve.Find(MakeCellKey(desiredCell));
-            bool waitable = (occ >= 0 && occ != (int)i && m_Move.active[occ] != 0);
-            if (waitable && m_Move.blockedFrames[i] < NPC_WAIT_FRAMES)
-            {
-                ++m_Move.blockedFrames[i];
-                m_Move.targetCell[i] = curr;
-                m_Move.targetWorldPos[i] = m_Move.position[i];
-                return; // 이번 프레임은 제자리
-            }
-        }
-        // (3) 1순위가 대각선인데 막혔으면 -> 성분 분해 대안
-        if (!found && desired.x != 0 && desired.z != 0)
-        {
-            // 어느 축이 막혔는지: 두 카디널 성분 어깨셀의 점유 여부로 판단
-            // x성분 어깨 = (curr.x+dx, curr.z),  z성분 어깨 = (curr.x, curr.z+dz)
-            DirectX::XMINT3 zKeep{ curr.x,             curr.y + desired.y, curr.z + desired.z }; // x 버림 (직진 z)
-            DirectX::XMINT3 xKeep{ curr.x + desired.x, curr.y + desired.y, curr.z };             // z 버림 (직진 x)
-
-            // x성분 어깨셀이 점유됐으면(=x방향 충돌 유발) x를 버리고 zKeep 우선
-            bool xShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x + desired.x, curr.y, curr.z)) >= 0);
-            bool zShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x, curr.y, curr.z + desired.z)) >= 0);
-
-            // 막힘 유발 축의 반대 성분을 우선 시도, 그 다음 나머지 성분
-            if (xShoulderBlocked && !zShoulderBlocked)
-            {
-                if (tryCandidate(zKeep, best)) found = true;
-                else if (tryCandidate(xKeep, best)) found = true;
-            }
-            else if (zShoulderBlocked && !xShoulderBlocked)
-            {
-                if (tryCandidate(xKeep, best)) found = true;
-                else if (tryCandidate(zKeep, best)) found = true;
-            }
-            else
-            {
-                // 판별 애매(둘 다 막힘/둘 다 안 막힘) -> 둘 다 순서대로 시도
-                if (tryCandidate(zKeep, best)) found = true;
-                else if (tryCandidate(xKeep, best)) found = true;
-            }
-        }
-    }
-
-    // (4) 위에서 못 찾았으면 이웃 중 cost가 낮아지는 셀들을 모아, 예약 가능한 것 중 가장 좋은 걸 고름
-    bool hasActiveBlocker = false;   // 곧 비켜날 수 있는 상대가 있는지
+    // 2순위(cost 최소 + lastDir 정렬) 폴백
+    bool hasActiveBlocker = false;
     if (!found)
     {
-        float bestCost = currCost;
-        for (const auto& n : m_NeighborScratch)
-        {
-            float nc;
-            if (false == m_CorridorField.SampleCost(*m_Grid, n.pos.x, n.pos.y, n.pos.z, nc)) continue; // flowfield 아님ㅁ
-            if (nc >= currCost)                                                 continue;       // 목적지로 안 가까워짐
-            // 점유자가 살아있는지
-            int occ = m_Reserve.Find(MakeCellKey(n.pos));
-            if (occ >= 0)
-            {
-                if (occ != (int)i && m_Move.active[occ]) hasActiveBlocker = true;
-                continue;
-            }
-            // 교차 거부도 살아있는 점유자 때문이라
-            if (true == IsMoveCross(i, curr, n.pos))
-            {
-                hasActiveBlocker = true;
-                continue;       
-            }
-
-            int dx = n.pos.x - curr.x, dz = n.pos.z - curr.z;
-            const auto& ld = m_Move.lastDir[i];
-            float score = nc;
-            if (dx == ld.x && dz == ld.z) score -= NPC_INER;    // 기존 방향으로 계속 가도록 보정값
-            if (score < bestCost)
-            {
-                bestCost = score;
-                best = n.pos;
-                found = true;
-            }
-        }
+        found = PickFallbackCell(i, curr, currCost, best, hasActiveBlocker);
     }
 
-
-    // 더 이상 갈 곳 없음
     if (!found)
     {
         if (!hasActiveBlocker)
         {
-            // 도착 확정: 더 가까워지는 길이 없고, 비켜줄 수 있는 상대도 없음
+            // 도착 확정: 더 가까워지는 길이 없고, 비켜줄 상대도 없음
             m_Move.active[i] = 0;
+            m_Move.blockedFrames[i] = 0;
             return;
         }
-        // -> 제자리 대기 (다음 프레임 재시도)
-        m_Move.targetCell[i] = curr;
-        m_Move.targetWorldPos[i] = m_Move.position[i];
+        HoldPosition(i, curr);   // 곧 비킬 상대에게 막힘 - 다음 프레임 재시도
         return;
     }
-    
 
-    // 예약 전환
+    CommitMove(i, curr, best);
+
+}
+
+void NpcManager::SnapToTargetCell(size_t i)
+{
+    m_Move.position[i] = m_Move.targetWorldPos[i];
+    m_Move.currCell[i] = m_Move.targetCell[i];
+}
+
+void NpcManager::HoldPosition(size_t i, const DirectX::XMINT3& curr)
+{
+    m_Move.targetCell[i] = curr;
+    m_Move.targetWorldPos[i] = m_Move.position[i];
+}
+
+// 특정 이웃 셀이 지금 이동 가능한 유효 후보인지 검사
+// (cost 낮아짐 + 미점유 + 비교차). walkable 여부는 m_NeighborScratch에 있는지로 판단
+bool NpcManager::TryCandidate(size_t i, const DirectX::XMINT3& curr, float currCost, const DirectX::XMINT3& cand, DirectX::XMINT3& out) const
+{
+    bool isNeighbor = false;
+    for (const auto& n : m_NeighborScratch)
+    {
+        if (n.pos.x == cand.x && n.pos.y == cand.y && n.pos.z == cand.z) { isNeighbor = true; break; }
+    }
+    if (!isNeighbor) return false;
+
+    float nc;
+    if (false == m_CorridorField.SampleCost(*m_Grid, cand.x, cand.y, cand.z, nc)) return false; // flowfield 아님
+    if (nc >= currCost)                                                    return false; // 목적지로 안 가까워짐
+    if (m_Reserve.Find(MakeCellKey(cand.x, cand.y, cand.z)) >= 0)          return false; // 점유됨
+    if (true == IsMoveCross(i, curr, cand))                                return false; // 교차
+
+    out = cand;
+    return true;
+}
+
+bool NpcManager::TryPrimaryDirection(size_t i, const DirectX::XMINT3& curr, float currCost,
+    DirectX::XMINT3& best, bool& outWaited)
+{
+    outWaited = false;
+
+    DirectX::XMFLOAT3 fdir;
+    if (false == m_CorridorField.SampleDirection(*m_Grid, curr.x, curr.y, curr.z, fdir))
+        return false;
+    if (fdir.x * fdir.x + fdir.y * fdir.y + fdir.z * fdir.z < 1e-6f)
+        return false;
+
+    DirectX::XMINT3 desired{ (int)std::round(fdir.x), (int)std::round(fdir.y), (int)std::round(fdir.z) };
+    DirectX::XMINT3 desiredCell{ curr.x + desired.x, curr.y + desired.y, curr.z + desired.z };
+
+    // (1) 1순위 방향이 바로 가능하면 그대로
+    if (TryCandidate(i, curr, currCost, desiredCell, best)) return true;
+
+    // (2) 막힌 이유가 곧 비킬 npc 때문이면 방향 안 바꾸고 대기
+    int occ = m_Reserve.Find(MakeCellKey(desiredCell));
+    bool waitable = (occ >= 0 && occ != (int)i && m_Move.active[occ] != 0);
+    if (waitable && m_Move.blockedFrames[i] < NPC_WAIT_FRAMES)
+    {
+        ++m_Move.blockedFrames[i];
+        HoldPosition(i, curr);
+        outWaited = true;
+        return false;
+    }
+
+    // (3) 1순위가 대각선인데 막혔으면 -> 성분 분해 대안
+    if (desired.x == 0 || desired.z == 0)   return false;
+
+    DirectX::XMINT3 zKeep{ curr.x,             curr.y + desired.y, curr.z + desired.z }; // x 버림 (직진 z)
+    DirectX::XMINT3 xKeep{ curr.x + desired.x, curr.y + desired.y, curr.z };             // z 버림 (직진 x)
+
+    bool xShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x + desired.x, curr.y, curr.z)) >= 0);
+    bool zShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x, curr.y, curr.z + desired.z)) >= 0);
+
+    // 막힘 유발 축의 반대 성분을 우선 시도 - 3갈래로 나뉘어 있던 분기를
+    // 시도 순서(first/second)를 정하는 것"과 시도 자체로 분리해 중복 제거
+    DirectX::XMINT3 first = zKeep;
+    DirectX::XMINT3 second = xKeep;
+    if (zShoulderBlocked && !xShoulderBlocked)
+    {
+        first = xKeep;
+        second = zKeep;
+    }
+    // xShoulderBlocked && !zShoulderBlocked, 그리고 "둘 다 막힘/둘 다 안 막힘" 모두 zKeep 우선(기본값)
+
+    if (TryCandidate(i, curr, currCost, first, best)) return true;
+    if (TryCandidate(i, curr, currCost, second, best)) return true;
+    return false;
+}
+
+bool NpcManager::PickFallbackCell(size_t i, const DirectX::XMINT3& curr, float currCost,
+    DirectX::XMINT3& best, bool& outHasActiveBlocker)
+{
+    outHasActiveBlocker = false;    // 점유자 다 죽어있으면 도착 판정용
+    float bestCost = currCost;
+    bool found = false;
+
+    for (const auto& n : m_NeighborScratch)
+    {
+        float nc;
+        if (false == m_CorridorField.SampleCost(*m_Grid, n.pos.x, n.pos.y, n.pos.z, nc)) continue;
+        if (nc >= currCost) continue;
+
+        // 점유자가 살아있는지
+        int occ = m_Reserve.Find(MakeCellKey(n.pos));
+        if (occ >= 0)
+        {
+            if (occ != (int)i && m_Move.active[occ]) outHasActiveBlocker = true;
+            continue;
+        }
+        // 교차 거부도 살아있는 점유자 때문
+        if (true == IsMoveCross(i, curr, n.pos))
+        {
+            outHasActiveBlocker = true;
+            continue;
+        }
+
+        int dx = n.pos.x - curr.x, dz = n.pos.z - curr.z;
+        const auto& ld = m_Move.lastDir[i];
+        float score = nc;
+        if (dx == ld.x && dz == ld.z) score -= NPC_INER;   // 기존 방향으로 계속 가도록 보정값
+        if (score < bestCost)
+        {
+            bestCost = score;
+            best = n.pos;
+            found = true;
+        }
+    }
+    return found;
+}
+
+
+void NpcManager::CommitMove(size_t i, const DirectX::XMINT3& curr, const DirectX::XMINT3& best)
+{
     if (m_Reserve.TryReserve(MakeCellKey(best), (int)i))
     {
         m_Reserve.Release(MakeCellKey(curr.x, curr.y, curr.z));
@@ -529,17 +552,16 @@ void NpcManager::AdvanceCell(size_t i, float dt)
         m_Move.targetCell[i] = best;
         m_Move.lastDir[i] = { best.x - curr.x, best.y - curr.y, best.z - curr.z };
         m_Move.targetWorldPos[i] = GetNpcStandPos(best, m_Move.halfHeight[i]);
-        m_Move.blockedFrames[i] = 0;    // 이동 성공해서 대기 프레임 초기화
+        m_Move.blockedFrames[i] = 0;   // 이동 성공해서 대기 프레임 초기화
     }
     else
     {
         // 이론상 발생하면 안 되지만(루프에서 이미 미점유 확인), 방어적으로 처리
-        // 예약 실패 시 !found와 동일하게 제자리 대기 -> 다음 프레임 재시도
-        m_Move.targetCell[i] = curr;
-        m_Move.targetWorldPos[i] = m_Move.position[i];
+        HoldPosition(i, curr);
     }
-
 }
+//-----------------------------------------------------------------
+
 
 void NpcManager::SyncInstances()
 {

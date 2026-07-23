@@ -105,6 +105,7 @@ public:
     void BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, int sizeY, int sizeZ, float cellSize);
 
 
+    // ---- 지형 생성 ----
     // 지형이 동굴 바닥과 같고 높이만 높힌 터널 제작 함수
     // 시작점(startX,startZ) ~ 끝점(endX,endZ) 사이에 직선 아치형 터널을 생성.
     // 지표면(ground)은 그대로 유지한 채, 그 위에 다리처럼 아치를 얹고
@@ -116,6 +117,26 @@ public:
         float shellThickness = 1.5f,    // 터널 벽/천장의 두께
         bool  openAtStart = true,
         bool  openAtEnd = true);
+
+    // 이미 만들어진 지형 위에 좌우 절벽을 추가해서 병목(허리 잘록한 협곡)을 만듦
+    // start~end 축을 따라 통로 반폭이 outerHalfWidth(양끝) -> minHalfWidth(중앙)로 좁아졌다 다시 넓어짐
+    // 축 구간 안에서는 통로 밖 전체가 맵 경계까지 벽이므로, 축을 가로지르려면 반드시
+    // 통로를 통과해야 함(우회 불가 = 진짜 병목) 축 구간 밖은 전혀 건드리지 않아 접근/이탈은 자유
+    void AddNarrowingCliffs(const DirectX::XMFLOAT3& start,
+        const DirectX::XMFLOAT3& end,
+        float outerHalfWidth = 12.0f,   // 양끝(넓은 구간) 통로 반폭
+        float minHalfWidth = 3.0f,      // 중앙(가장 좁은 지점) 통로 반폭
+        float cliffHeight = 4.0f);      // 절벽이 지면 위로 솟는 높이
+
+    // 해당 셀이 공기(Empty)에 노출됐는지: 바닥/맵 경계이거나 6방향 이웃 중 하나라도 Empty
+    // BuildFromVolumeSource와 AddNarrowingCliffs가 동일 로직을 공유하기 위한 헬퍼
+    bool IsCellExposed(int x, int y, int z) const;
+
+    // 컬럼의 최하단 표면 y. 다층 컬럼(터널 등)에서도 원래 지면을 잡기 위함
+    // 표면이 없으면 -1.
+    int  GetGroundY(int x, int z) const;
+
+
 
 
     // 패스 2 — 배치 완료 후 표면 복셀 walkable 재판정

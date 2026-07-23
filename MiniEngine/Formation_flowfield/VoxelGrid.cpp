@@ -1,7 +1,9 @@
 ﻿#include "VoxelGrid.h"
 #include "HeightMap.h"
+#include "ChunkKey.h"
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
 
 void VoxelGrid::Initialize(int sizeX, int sizeY, int sizeZ, float cellSize)
 {
@@ -78,31 +80,31 @@ void VoxelGrid::BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, i
             for (int x = 0; x < m_SizeX; x++)
             {
                 if (GetCell(x, y, z) == CellType::Empty) continue; // 빈 공간은 렌더 대상 아님
+                if (!IsCellExposed(x, y, z)) continue;             // 완전히 파묻힌 내부 복셀은 렌더 스킵
+                //bool isBottom = (y == 0);
+                //bool isWallX = (x == 0 || x == m_SizeX - 1);
+                //bool isWallZ = (z == 0 || z == m_SizeZ - 1);
 
-                bool isBottom = (y == 0);
-                bool isWallX = (x == 0 || x == m_SizeX - 1);
-                bool isWallZ = (z == 0 || z == m_SizeZ - 1);
+                //// 6방향 중 하나라도 Empty(또는 맵 밖)면 공기에 노출된 면이 있는 것
+                //bool isExposed = isBottom || isWallX || isWallZ;
+                //if (!isExposed)
+                //{
+                //    for (int d = 0; d < 6; d++)
+                //    {
+                //        int nx = x + dx[d];
+                //        int ny = y + dy[d];
+                //        int nz = z + dz[d];
+                //        if (nx < 0 || nx >= m_SizeX || ny < 0 || ny >= m_SizeY || nz < 0 || nz >= m_SizeZ)
+                //            continue;
+                //        if (GetCell(nx, ny, nz) == CellType::Empty)
+                //        {
+                //            isExposed = true;
+                //            break;
+                //        }
+                //    }
+                //}
 
-                // 6방향 중 하나라도 Empty(또는 맵 밖)면 공기에 노출된 면이 있는 것
-                bool isExposed = isBottom || isWallX || isWallZ;
-                if (!isExposed)
-                {
-                    for (int d = 0; d < 6; d++)
-                    {
-                        int nx = x + dx[d];
-                        int ny = y + dy[d];
-                        int nz = z + dz[d];
-                        if (nx < 0 || nx >= m_SizeX || ny < 0 || ny >= m_SizeY || nz < 0 || nz >= m_SizeZ)
-                            continue;
-                        if (GetCell(nx, ny, nz) == CellType::Empty)
-                        {
-                            isExposed = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!isExposed) continue; // 완전히 파묻힌 내부 복셀은 렌더 스킵
+                //if (!isExposed) continue; // 완전히 파묻힌 내부 복셀은 렌더 스킵
 
                 VoxelCell cell;
                 cell.x = x;
@@ -533,4 +535,128 @@ bool VoxelGrid::IsWalkable(int x, int y, int z) const
 Math::Vector3 VoxelGrid::GetWorldPos(int x, int y, int z) const
 {
     return Math::Vector3(x * m_CellSize, y * m_CellSize,z * m_CellSize);
+}
+
+
+
+bool VoxelGrid::IsCellExposed(int x, int y, int z) const
+{
+    // y == m_SizeY-1(맵 천장)은 자동 노출로 치지 않음 
+    // 그리드 상한에 닿은 셀은 렌더에서 빠질 수 있음.
+    bool isBottom = (y == 0);
+    bool isWallX = (x == 0 || x == m_SizeX - 1);
+    bool isWallZ = (z == 0 || z == m_SizeZ - 1);
+    if (isBottom || isWallX || isWallZ) return true;
+
+    static const int dx[] = { 1, -1, 0, 0, 0, 0 };
+    static const int dy[] = { 0, 0, 1, -1, 0, 0 };
+    static const int dz[] = { 0, 0, 0, 0, 1, -1 };
+
+    for (int d = 0; d < 6; d++)
+    {
+        int nx = x + dx[d];
+        int ny = y + dy[d];
+        int nz = z + dz[d];
+        if (nx < 0 || nx >= m_SizeX || ny < 0 || ny >= m_SizeY || nz < 0 || nz >= m_SizeZ)
+            continue;
+        if (GetCell(nx, ny, nz) == CellType::Empty) return true;
+    }
+    return false;
+}
+
+int VoxelGrid::GetGroundY(int x, int z) const
+{
+    // RefreshSurfaceColumn이 아래->위 순서로 채우므로 data[0]이 최하단 표면.
+    // 터널처럼 컬럼에 표면이 여러 개여도 원래 지면을 잡는다.
+    SurfaceSpan span = GetSurfaceYList(x, z);
+    return (span.count > 0) ? (int)span.data[0] : -1;
+}
+
+void VoxelGrid::AddNarrowingCliffs(const DirectX::XMFLOAT3& start, const DirectX::XMFLOAT3& end,
+    float outerHalfWidth, float minHalfWidth, float cliffHeight)
+{
+    // BuildFromVolumeSource와 달리 그리드를 다시 채우지 않음
+    // 이미 완성된 지형(터널 등) 위에 절벽 복셀만 추가하는 증분 방식
+    const float cellSize = m_CellSize;
+
+    const float dirX = end.x - start.x;
+    const float dirZ = end.z - start.z;
+    const float axisLenSq = dirX * dirX + dirZ * dirZ;
+    if (axisLenSq < 1e-6f)
+    {
+        return;
+    }
+    const float axisLen = std::sqrt(axisLenSq);
+    const int   cliffCells = std::max(1, (int)std::round(cliffHeight / cellSize));
+
+    std::vector<std::pair<int, int>> touchedColumns;   // 절벽을 세운 컬럼들
+    std::unordered_set<int64_t>      touchedSet;       // 위 목록의 멤버십 검사용(y=0 고정 컬럼 키)
+    int clampedCount = 0;                              // 그리드 상한에 잘린 컬럼 수
+
+    // 통로 밖을 맵 경계까지 채우므로 x/z 전체를 순회한다.
+    // rawT 필터가 대부분을 즉시 걸러내고, Startup에서 1회만 도는 비용이라 허용
+    for (int z = 0; z < m_SizeZ; ++z)
+    {
+        for (int x = 0; x < m_SizeX; ++x)
+        {
+            const float wx = x * cellSize;
+            const float wz = z * cellSize;
+
+            // start->end 축에 투영해 진행률(t)과 축까지의 수직거리 구하기 (2D, xz만)
+            const float toPx = wx - start.x;
+            const float toPz = wz - start.z;
+            const float rawT = (toPx * dirX + toPz * dirZ) / axisLenSq;
+            if (rawT < 0.0f || rawT > 1.0f) continue;   // 축 구간 밖 - 자유 통행 유지
+
+            const float dist = std::abs(toPx * dirZ - toPz * dirX) / axisLen;
+
+            // 대칭 깔때기: t=0.5(중앙)에서 minHalfWidth, t=0/1(양끝)에서 outerHalfWidth
+            const float shape = std::abs(rawT - 0.5f) * 2.0f;   // 0(중앙) ~ 1(양끝)
+            const float halfWidth = minHalfWidth + (outerHalfWidth - minHalfWidth) * shape;
+
+            if (dist <= halfWidth) continue;   // 통로 내부 - 건드리지 않음
+
+            // --- 통로 밖: 이 컬럼의 현재 지면 위로 절벽을 쌓음 ---
+            const int groundY = GetGroundY(x, z);
+            if (groundY < 0) continue;         // 표면 없는 컬럼(빈 공간) - 스킵
+
+            int topY = groundY + cliffCells;
+            if (topY >= m_SizeY) { topY = m_SizeY - 1; ++clampedCount; }
+
+            for (int y = groundY; y <= topY; ++y)
+                SetCell(x, y, z, CellType::Blocked);
+
+            touchedColumns.push_back({ x, z });
+            touchedSet.insert(MakeCellKey(x, 0, z));
+        }
+    }
+
+    if (touchedColumns.empty())
+    {
+        return;
+    }
+
+    // 영향받은 컬럼들의 기존 렌더 엔트리를 한 번에 제거 (컬럼마다 스캔하지 않도록)
+    // 이 과정에서 m_Cells 순서가 바뀐다 -> BuildInstanceList 이전에만 호출할 것
+    m_Cells.erase(std::remove_if(m_Cells.begin(), m_Cells.end(), [&](const VoxelCell& c) {
+        return touchedSet.count(MakeCellKey(c.x, 0, c.z)) > 0;
+        }), m_Cells.end());
+
+    // 해당 컬럼만 재스캔해서 노출된 셀만 렌더 목록에 재등록 + 표면 캐시 갱신
+    // (벽에 가려진 이웃 컬럼의 셀이 렌더 목록에 남을 수 있으나, 보이지 않으므로 시각적 무해)
+    for (const auto& col : touchedColumns)
+    {
+        const int x = col.first, z = col.second;
+        for (int y = 0; y < m_SizeY; ++y)
+        {
+            CellType type = GetCell(x, y, z);
+            if (type == CellType::Empty) continue;
+            if (!IsCellExposed(x, y, z))  continue;
+            m_Cells.push_back({ x, y, z, type });
+        }
+        RefreshSurfaceColumn(x, z);
+    }
+
+    // ValidateWalkable()은 호출하지 않음 - 절벽 셀은 Blocked로 직접 지정했고,
+    // 재호출하면 절벽 꼭대기가 Walkable로 승격되어 NPC가 절벽 위로 올라가버린다.
 }

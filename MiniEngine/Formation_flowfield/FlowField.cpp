@@ -90,6 +90,13 @@ void FlowField::Startup(void)
             1.0,              
             true, true);        // 양쪽 다 개방
 
+        // 병목 협곡 지형 추가 (5주차 병목 테스트용)
+        // 월드 좌표계: m_Size=514, cellSize=0.5 -> 유효 범위 0~257. 터널(z월드 90 부근)과 안 겹침.
+        // 축 구간(z 150~190) 안에서는 통로 밖이 맵 경계까지 벽이므로 우회 불가.
+        DirectX::XMFLOAT3 BottleneckStart{ 70.0f, 0.0f, 150.0f };
+        DirectX::XMFLOAT3 BottleneckEnd{ 70.0f, 0.0f, 190.0f };
+        m_VoxelGrid.AddNarrowingCliffs(BottleneckStart, BottleneckEnd, 12.0f, 1.0f);
+
         
         m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
         VoxelRenderer::UpdateInstances(m_VoxelInstances);
