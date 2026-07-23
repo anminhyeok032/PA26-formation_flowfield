@@ -242,6 +242,7 @@
     <ClInclude Include="NpcManager.h" />
     <ClInclude Include="NpcRenderer.h" />
     <ClInclude Include="PathCorridor.h" />
+    <ClInclude Include="ScopedCpuTimer.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClInclude Include="VoxelRenderer.h" />
   </ItemGroup>

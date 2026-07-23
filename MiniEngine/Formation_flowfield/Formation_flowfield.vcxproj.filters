@@ -136,5 +136,8 @@
     <ClInclude Include="CellReservation.h">
       <Filter>소스 파일</Filter>
     </ClInclude>
+    <ClInclude Include="ScopedCpuTimer.h">
+      <Filter>Simulation</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
