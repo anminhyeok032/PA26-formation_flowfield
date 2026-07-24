@@ -40,6 +40,7 @@ CREATE_APPLICATION(FlowField);
 
 void FlowField::Startup(void)
 {
+    MemoryProbe totalProbe("Startup 전체");
     m_Camera.SetZRange(1.0f, 20000.0f); // 1-20000까지만 그려짐
 
     m_CameraController.reset(
@@ -86,6 +87,7 @@ void FlowField::Startup(void)
         // 관통 터널 생성
         { 
             CPU_SCOPE("Startup/BuildTunnel");
+            MemoryProbe p("BuildTunnel");
             m_VoxelGrid.BuildFromHeightMapWithTunnel(
                 m_HeightMap,
                 StartPos,
@@ -103,6 +105,7 @@ void FlowField::Startup(void)
         DirectX::XMFLOAT3 BottleneckEnd{ 70.0f, 0.0f, 190.0f };
         {
             CPU_SCOPE("Startup/AddCliffs");
+            MemoryProbe p("AddCliffs");
             m_VoxelGrid.AddNarrowingCliffs(BottleneckStart, BottleneckEnd, 12.0f, 1.0f);
         }
         
@@ -160,6 +163,13 @@ void FlowField::Startup(void)
     // m_MouseCaptured 기본값(true)과 맞춰 커서를 처음부터 숨김 상태로 시작
     ShowCursor(FALSE);
     GameInput::SetMouseExclusiveMode(true);
+
+
+    // 계산치와 실측치 대조
+    m_VoxelGrid.ReportMemory();
+
+    //m_Npc.ReportMemory();
+    ReportMemory();
 }
 
 void FlowField::Cleanup(void)
@@ -633,6 +643,8 @@ void FlowField::Update(float dt)
     }
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+    if (m_Npc.HasGoal() && ++m_StatDelayCounter == 60)
+        m_Npc.ReportMemory("mem_npc_moving.txt");
     if (++m_StatFrameCounter >= 300)
     {
         m_Npc.ReportAndResetStats();
@@ -642,7 +654,11 @@ void FlowField::Update(float dt)
 
     // 전원 도착(HasGoal true->false) 시 시각화 초기화
     const bool hasGoal = m_Npc.HasGoal();
-    if (m_PrevHasGoal && !hasGoal)   OnGroupArrived();
+    if (m_PrevHasGoal && !hasGoal)
+    {
+        OnGroupArrived();
+        m_Npc.ReportMemory("mem_npc_arrived.txt");
+    }
     m_PrevHasGoal = hasGoal;
 
     // F1: 솔리드 <-> 와이어프레임 토글
@@ -696,4 +712,36 @@ void FlowField::RenderScene(void)
     // Present 전이
     ctx.TransitionResource(g_SceneColorBuffer, D3D12_RESOURCE_STATE_PRESENT);
     ctx.Finish();
+}
+
+void FlowField::ReportMemory(const char* filePath) const
+{
+    auto vecB = [](const auto& v) {
+        return v.capacity() * sizeof(typename std::decay_t<decltype(v)>::value_type);
+    };
+
+    size_t instances = vecB(m_VoxelInstances);
+    size_t coords = vecB(m_VoxelCellCoords);
+
+    // m_ChunkToVoxelIndices: 바깥 맵 + 안쪽 vector들 각각
+    size_t chunkIdx = m_ChunkToVoxelIndices.bucket_count() * 16;
+    for (const auto& kv : m_ChunkToVoxelIndices)
+        chunkIdx += 48 /*노드 오버헤드 근사*/ + vecB(kv.second);
+
+    char buf[1024];
+    int n = sprintf_s(buf,
+        "[FlowField]\n"
+        "  m_VoxelInstances       : %8.1f KB\n"
+        "  m_VoxelCellCoords      : %8.1f KB\n"
+        "  m_ChunkToVoxelIndices  : %8.1f KB\n"
+        "  --- 합계               : %8.1f KB\n",
+        instances / 1024.0, coords / 1024.0, chunkIdx / 1024.0,
+        (instances + coords  + chunkIdx) / 1024.0);
+
+    Utility::Print(buf);
+    FILE* fp = nullptr; fopen_s(&fp, filePath, "a");
+    if (fp) { fputs(buf, fp); fclose(fp); }
+
+    m_VoxelGrid.ReportMemory(filePath);
+    m_Npc.ReportMemory();
 }

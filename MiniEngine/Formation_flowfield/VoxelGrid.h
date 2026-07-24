@@ -128,6 +128,8 @@ public:
         float minHalfWidth = 3.0f,      // 중앙(가장 좁은 지점) 통로 반폭
         float cliffHeight = 4.0f);      // 절벽이 지면 위로 솟는 높이
 
+    void ReportMemory(const char* filePath = "mem_VoxelGrid.txt") const;
+
     // 해당 셀이 공기(Empty)에 노출됐는지: 바닥/맵 경계이거나 6방향 이웃 중 하나라도 Empty
     // BuildFromVolumeSource와 AddNarrowingCliffs가 동일 로직을 공유하기 위한 헬퍼
     bool IsCellExposed(int x, int y, int z) const;

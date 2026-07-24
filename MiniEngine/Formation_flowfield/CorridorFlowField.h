@@ -78,6 +78,8 @@ public:
     // 해당 (xyz)가 실제로 방문되었는지 검사
     bool IsVisited(const VoxelGrid& grid, int x, int y, int z) const;
 
+    void ReportMemory(const char* filePath = "mem_dji_flowfield.txt") const;
+
     // 청크 순회용 getter
     const std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>>& GetChunks() const { return m_Chunks; }
     static constexpr int CHUNK_SIZE = FlowFieldChunk::SIZE;

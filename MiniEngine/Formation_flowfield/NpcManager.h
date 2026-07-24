@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "ScopedCpuTimer.h"
+#include "MemoryProbe.h"
 
 struct NpcMoveData
 {
@@ -106,6 +107,7 @@ public:
 
         s = AdvanceCellStats{};   // 리셋
     }
+    void ReportMemory(const char* filePath = "mem_npc.txt") const;
 
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
@@ -158,20 +160,6 @@ private:
     std::vector<DirectX::XMINT3> m_StartCells;
 
 
-    void ReportMemory() const
-    {
-        auto vecBytes = [](auto& v) { return v.capacity() * sizeof(typename std::decay_t<decltype(v)>::value_type); };
-
-        size_t move = vecBytes(m_Move.position) + vecBytes(m_Move.targetWorldPos)
-            + vecBytes(m_Move.currCell) + vecBytes(m_Move.targetCell)
-            + vecBytes(m_Move.active) + vecBytes(m_Move.halfHeight)
-            + vecBytes(m_Move.lastDir) + vecBytes(m_Move.blockedTime);
-
-        Utility::Printf("NpcMoveData      : %8.1f KB (%zu명)\n", move / 1024.0, m_Move.size());
-        Utility::Printf("m_NpcInstances   : %8.1f KB\n", vecBytes(m_NpcInstances) / 1024.0);
-        Utility::Printf("FlowFieldChunks  : %8.1f MB (%zu개)\n",
-            m_CorridorField.GetChunks().size() * 4352 / 1e6, m_CorridorField.GetChunks().size());
-    }
 
 
     // ---- AdvanceCell 계측용 카운터 (디버그) ----

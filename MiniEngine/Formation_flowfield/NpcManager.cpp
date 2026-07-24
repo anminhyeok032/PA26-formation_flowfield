@@ -120,6 +120,7 @@ bool NpcManager::TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector
 bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     std::vector<DirectX::XMINT3>* outPath)
 {
+    MemoryProbe probe("SetGroupDestination");
     m_HasGoal = false;
     const size_t n = m_NpcInstances.size();
     if (n == 0) return false;
@@ -219,6 +220,9 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     { CPU_SCOPE("Dest/InitMovement");
     InitGroupMovement();   // m_StartCells 재사용
     }
+
+    probe.Report();
+    m_CorridorField.ReportMemory();
     return true;
 }
 
@@ -278,6 +282,7 @@ void NpcManager::Update(float dt)
     if (false == anyActive)
     {
         m_HasGoal = false;
+        MemoryProbe("전원 도착 후").Report();   // ReleaseChunks가 실제로 반납했는지
     }
 }
 
@@ -373,6 +378,8 @@ void NpcManager::InitGroupMovement()
     std::sort(m_MoveOrder.begin(), m_MoveOrder.end(), [&](int a, int b) {
         return cost[a] < cost[b];
         });
+
+    ReportMemory();
 }
 
 //---------------------------------------------------------------------
@@ -624,4 +631,45 @@ int NpcManager::ReserveFindCounted(int64_t key)
 {
     ++m_Stats.reserveFindCalls;
     return m_Reserve.Find(key);
+}
+
+
+void NpcManager::ReportMemory(const char* filePath) const
+{
+    auto vecB = [](const auto& v) {
+        return v.capacity() * sizeof(typename std::decay_t<decltype(v)>::value_type);
+    };
+
+    size_t moveData = vecB(m_Move.position) + vecB(m_Move.targetWorldPos)
+        + vecB(m_Move.currCell) + vecB(m_Move.targetCell)
+        + vecB(m_Move.active) + vecB(m_Move.halfHeight)
+        + vecB(m_Move.lastDir) + vecB(m_Move.blockedTime);
+
+    size_t instances = vecB(m_NpcInstances);
+    size_t moveOrder = vecB(m_MoveOrder);
+    size_t startCells = vecB(m_StartCells);
+
+    // unordered_map/set 근사: bucket_count()*16(포인터 배열) + size()*(노드+오버헤드)
+    auto mapB = [](size_t bucketCount, size_t count, size_t nodePayload) {
+        return bucketCount * 16 + count * (nodePayload + 16);
+    };
+    size_t reserve = mapB(m_Reserve.BucketCount(), m_Reserve.Size(), 12); // CellReservation 내부 접근자 필요
+
+    char buf[1024];
+    int n = sprintf_s(buf,
+        "[NpcManager] NPC=%zu\n"
+        "  NpcMoveData(SoA)   : %8.1f KB\n"
+        "  m_NpcInstances     : %8.1f KB\n"
+        "  m_MoveOrder        : %8.1f KB\n"
+        "  m_StartCells       : %8.1f KB\n"
+        "  CellReservation    : %8.1f KB (bucket=%zu size=%zu)\n"
+        "  --- 합계           : %8.1f KB\n",
+        m_Move.size(),
+        moveData / 1024.0, instances / 1024.0, moveOrder / 1024.0, startCells / 1024.0,
+        reserve / 1024.0, m_Reserve.BucketCount(), m_Reserve.Size(),
+        (moveData + instances + moveOrder + startCells + reserve) / 1024.0);
+
+    Utility::Print(buf);
+    FILE* fp = nullptr; fopen_s(&fp, filePath, "a");
+    if (fp) { fputs(buf, fp); fclose(fp); }
 }

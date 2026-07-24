@@ -139,5 +139,8 @@
     <ClInclude Include="ScopedCpuTimer.h">
       <Filter>Simulation</Filter>
     </ClInclude>
+    <ClInclude Include="MemoryProbe.h">
+      <Filter>Simulation</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

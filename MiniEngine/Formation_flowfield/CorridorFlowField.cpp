@@ -227,3 +227,14 @@ bool CorridorFlowField::IsVisited(const VoxelGrid& grid, int x, int y, int z) co
     if (!col || slotIdx < 0) return false;
     return col->visited[slotIdx];
 }
+
+
+void CorridorFlowField::ReportMemory(const char* filePath) const
+{
+    size_t chunks = m_Chunks.bucket_count() * 16 + m_Chunks.size() * (4352 + 16 + 8);
+    char buf[256];
+    sprintf_s(buf, "[CorridorFlowField] chunks=%zu  --- %8.1f KB\n", m_Chunks.size(), chunks / 1024.0);
+    Utility::Print(buf);
+    FILE* fp = nullptr; fopen_s(&fp, filePath, "a");
+    if (fp) { fputs(buf, fp); fclose(fp); }
+}

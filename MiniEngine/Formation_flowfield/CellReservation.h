@@ -32,6 +32,9 @@ public:
         return it != m_Map.end() ? it->second : kEmpty;
     }
 
+    size_t BucketCount() const { return m_Map.bucket_count(); }
+    size_t Size() const { return m_Map.size(); }
+
 private:
     std::unordered_map<int64_t, int> m_Map;
 };

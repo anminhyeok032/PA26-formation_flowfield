@@ -239,6 +239,7 @@
     <ClInclude Include="FlowFieldArrowRenderer.h" />
     <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
+    <ClInclude Include="MemoryProbe.h" />
     <ClInclude Include="NpcManager.h" />
     <ClInclude Include="NpcRenderer.h" />
     <ClInclude Include="PathCorridor.h" />

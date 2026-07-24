@@ -20,6 +20,7 @@
 #include "NpcManager.h"
 
 #include "ScopedCpuTimer.h"
+#include "MemoryProbe.h"
 
 // 색상 상수 정리
 static constexpr uint32_t kColorDefault     = 0;    // default
@@ -37,6 +38,8 @@ public:
     virtual void Cleanup(void) override;
     virtual void Update(float deltaT) override;
     virtual void RenderScene(void) override;
+
+    void ReportMemory(const char* filePath = "mem_flowfield.txt") const;
 
 private:
     Camera                              m_Camera;
@@ -116,4 +119,5 @@ private:
     void FlushVoxelInstanceChanges(std::vector<int>& changedIndices);
 
     int m_StatFrameCounter = 0;
+    int m_StatDelayCounter = 0;
 };

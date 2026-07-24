@@ -660,3 +660,28 @@ void VoxelGrid::AddNarrowingCliffs(const DirectX::XMFLOAT3& start, const DirectX
     // ValidateWalkable()은 호출하지 않음 - 절벽 셀은 Blocked로 직접 지정했고,
     // 재호출하면 절벽 꼭대기가 Walkable로 승격되어 NPC가 절벽 위로 올라가버린다.
 }
+
+
+void VoxelGrid::ReportMemory(const char* filePath) const
+{
+    size_t voxelChunks = m_Chunks.capacity() * sizeof(VoxelChunk);
+    size_t surfChunks = m_SurfaceChunks.capacity() * sizeof(SurfaceChunk);
+    size_t cells = m_Cells.capacity() * sizeof(VoxelCell);
+
+    char buf[512];
+    sprintf_s(buf,
+        "[VoxelGrid] %dx%dx%d\n"
+        "  VoxelChunk    : %8.1f KB (%zu개)\n"
+        "  SurfaceChunk  : %8.1f KB (%zu개)\n"
+        "  m_Cells       : %8.1f KB (%zu개)\n"
+        "  --- 합계      : %8.1f KB\n",
+        m_SizeX, m_SizeY, m_SizeZ,
+        voxelChunks / 1024.0, m_Chunks.size(),
+        surfChunks / 1024.0, m_SurfaceChunks.size(),
+        cells / 1024.0, m_Cells.size(),
+        (voxelChunks + surfChunks + cells) / 1024.0);
+
+    Utility::Print(buf);
+    FILE* fp = nullptr; fopen_s(&fp, filePath, "a");
+    if (fp) { fputs(buf, fp); fclose(fp); }
+}
