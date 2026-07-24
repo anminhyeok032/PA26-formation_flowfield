@@ -74,7 +74,8 @@ void FlowField::Startup(void)
     // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
     bool loaded = true;
     { 
-        CPU_SCOPE("Startup/LoadBMP");  loaded = m_HeightMap.LoadFromBMP("Heightmap02.bmp",
+       // CPU_SCOPE("Startup/LoadBMP");  
+        loaded = m_HeightMap.LoadFromBMP("Heightmap02.bmp",
         MAX_HEIGHT,     // 최대 높이 (월드 유닛)
         WORLD_SCALE,    // MapScale
         VOXEL_SIZE);    // 복셀 1개 크기 -> 복셀 수 = pow( (맵 크기 * MAP_SCALE) / VOXEL_SIZE), 2 )
@@ -86,7 +87,7 @@ void FlowField::Startup(void)
         DirectX::XMFLOAT3 EndPos { 100.0f, 0.0f, 91.0f };
         // 관통 터널 생성
         { 
-            CPU_SCOPE("Startup/BuildTunnel");
+           // CPU_SCOPE("Startup/BuildTunnel");
             MemoryProbe p("BuildTunnel");
             m_VoxelGrid.BuildFromHeightMapWithTunnel(
                 m_HeightMap,
@@ -104,7 +105,7 @@ void FlowField::Startup(void)
         DirectX::XMFLOAT3 BottleneckStart{ 70.0f, 0.0f, 150.0f };
         DirectX::XMFLOAT3 BottleneckEnd{ 70.0f, 0.0f, 190.0f };
         {
-            CPU_SCOPE("Startup/AddCliffs");
+            //CPU_SCOPE("Startup/AddCliffs");
             MemoryProbe p("AddCliffs");
             m_VoxelGrid.AddNarrowingCliffs(BottleneckStart, BottleneckEnd, 12.0f, 1.0f);
         }
@@ -174,7 +175,7 @@ void FlowField::Startup(void)
 
 void FlowField::Cleanup(void)
 {
-    ScopedCpuTimer::Report("perf_report.txt");   // 종료 시 전체 통계 저장
+    CoreTimer::Report("core_timing.txt");  // 종료 시 전체 통계 저장
 
     VoxelRenderer::Shutdown();
     NpcRenderer::Shutdown();

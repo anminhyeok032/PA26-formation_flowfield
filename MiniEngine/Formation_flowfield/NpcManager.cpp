@@ -132,46 +132,48 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 
     Math::Vector3 centroid(0.0f, 0.0f, 0.0f);
     int validCount = 0;
-
-    const bool hasPrevMove = (m_Move.size() > 0);   // 그룹 있는지 확인
- 
-
-    for (size_t i = 0; i < n; ++i)
     {
-        DirectX::XMINT3 startCell{ -1, -1, -1 };
-        bool resolved = false;
+        CORE_SCOPE(DestCollectStart);
+        const bool hasPrevMove = (m_Move.size() > 0);   // 그룹 있는지 확인
 
-        // 1. 이전에 움직였으면, 기존의 타겟cell을 start로 설정
-        if (true == hasPrevMove)
+
+        for (size_t i = 0; i < n; ++i)
         {
-            const auto& tc = m_Move.targetCell[i];
-            if (m_Reserve.Find(MakeCellKey(tc)) == (int)i)
+            DirectX::XMINT3 startCell{ -1, -1, -1 };
+            bool resolved = false;
+
+            // 1. 이전에 움직였으면, 기존의 타겟cell을 start로 설정
+            if (true == hasPrevMove)
             {
-                startCell = tc;
-                resolved = true;
+                const auto& tc = m_Move.targetCell[i];
+                if (m_Reserve.Find(MakeCellKey(tc)) == (int)i)
+                {
+                    startCell = tc;
+                    resolved = true;
+                }
             }
-        }
 
-        // 2. 없으면 렌더 좌표로 역산하기
-        if (false == resolved)
-        {
-            const auto& inst = m_NpcInstances[i];
-            Math::Vector3 p(inst.position[0], inst.position[1], inst.position[2]);
-            int sx, sy, sz;
-            if (m_Grid->FindNearestWalkable(p, sx, sy, sz))
+            // 2. 없으면 렌더 좌표로 역산하기
+            if (false == resolved)
             {
-                startCell = { sx, sy, sz };
-                resolved = true;
+                const auto& inst = m_NpcInstances[i];
+                Math::Vector3 p(inst.position[0], inst.position[1], inst.position[2]);
+                int sx, sy, sz;
+                if (m_Grid->FindNearestWalkable(p, sx, sy, sz))
+                {
+                    startCell = { sx, sy, sz };
+                    resolved = true;
+                }
             }
-        }
 
-        if (true == resolved)
-        {
-            m_StartCells[i] = startCell;
-            centroid += Math::Vector3((float)startCell.x, (float)startCell.y, (float)startCell.z);
-            validCount++;
-        }
+            if (true == resolved)
+            {
+                m_StartCells[i] = startCell;
+                centroid += Math::Vector3((float)startCell.x, (float)startCell.y, (float)startCell.z);
+                validCount++;
+            }
 
+        }
     }
     if (validCount == 0) return false;
     centroid = Math::Vector3(centroid) / (float)validCount;   // 셀 좌표 평균
@@ -186,7 +188,9 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     if (!m_Grid->FindNearestWalkable(centroidWorld, asx, asy, asz)) return false;
 
     std::vector<DirectX::XMINT3> path;
-    { CPU_SCOPE("Dest/AStar");
+    { //CPU_SCOPE("Dest/AStar");
+        
+        CORE_SCOPE(DestAStar);
         if (!m_Pathfinder.FindPath(*m_Grid, { asx,asy,asz }, goalCell, path)) return false;
     }
     if (outPath) *outPath = path;
@@ -208,16 +212,18 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 
     // --- 4. 마스크: A* 경로 + 모든 NPC 시작 셀을 시드로 ---
     std::unordered_set<int64_t> mask;
-    { CPU_SCOPE("Dest/BuildMask");
+    { 
+        CORE_SCOPE(DestBuildMask);
         mask = BuildLayerMask(*m_Grid, path, m_StartCells, margin);
     }
-    { CPU_SCOPE("Dest/FieldBuild");
+    { 
+        CORE_SCOPE(DestFieldBuild);
     // --- 5. FlowField 계산 ---
-    m_CorridorField.Build(*m_Grid, goalCell, mask);
+        m_CorridorField.Build(*m_Grid, goalCell, mask);
     }
 
     m_HasGoal = true;
-    { CPU_SCOPE("Dest/InitMovement");
+    { CORE_SCOPE(DestInitMovement);
     InitGroupMovement();   // m_StartCells 재사용
     }
 
@@ -229,7 +235,7 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 
 void NpcManager::Update(float dt)
 {
-    CPU_SCOPE("Frame/NpcUpdate");
+    //CPU_SCOPE("Frame/NpcUpdate");
     if (false == m_HasGoal) return;
 
     const float ARRIVE_EPS_SQ = 0.05f * 0.05f;
@@ -237,45 +243,46 @@ void NpcManager::Update(float dt)
 
     bool anyMoved = false;
     bool anyActive = false;
-
-    for (int i : m_MoveOrder)
     {
-        if (!m_Move.active[i]) continue;
-        anyActive = true;       // 살아있는지 체크
-
-        Math::Vector3 pos = m_Move.position[i];
-        Math::Vector3 tgt = m_Move.targetWorldPos[i];
-        Math::Vector3 delta = tgt - pos;
-
-        if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
+        CORE_SCOPE(NpcUpdateCore);          // ← 여기서 열고
+        for (int i : m_MoveOrder)
         {
+            if (!m_Move.active[i]) continue;
+            anyActive = true;       // 살아있는지 체크
 
-            AdvanceCell(i, dt);   // 도착 -> 셀 전환
-        }
-        else
-        {
-            float distSq = Math::LengthSquare(delta);
-            float step = NPC_SPEED * dt;
+            Math::Vector3 pos = m_Move.position[i];
+            Math::Vector3 tgt = m_Move.targetWorldPos[i];
+            Math::Vector3 delta = tgt - pos;
 
-            if (step * step >= distSq)
+            if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
             {
-                // 이번 프레임 이동량이 남은 거리 이상 -> 목표에 정확히 스냅 (오버슈트 방지)
-                m_Move.position[i] = tgt;
+
+                AdvanceCell(i, dt);   // 도착 -> 셀 전환
             }
             else
             {
-                Math::Vector3 d = Math::Normalize(delta);
-                m_Move.position[i] = pos + d * step;
-            }
-        }
-        anyMoved = true;
-    }
+                float distSq = Math::LengthSquare(delta);
+                float step = NPC_SPEED * dt;
 
+                if (step * step >= distSq)
+                {
+                    // 이번 프레임 이동량이 남은 거리 이상 -> 목표에 정확히 스냅 (오버슈트 방지)
+                    m_Move.position[i] = tgt;
+                }
+                else
+                {
+                    Math::Vector3 d = Math::Normalize(delta);
+                    m_Move.position[i] = pos + d * step;
+                }
+            }
+            anyMoved = true;
+        }
+    }
     // 누군가 움직였을때만 이동
     if (true == anyMoved)
     {
-        { CPU_SCOPE("Frame/SyncInstances");   SyncInstances(); }
-        { CPU_SCOPE("Frame/UploadInstances"); NpcRenderer::UpdateInstances(m_NpcInstances); }
+        {   SyncInstances(); }
+        {  NpcRenderer::UpdateInstances(m_NpcInstances); }
     }
 
     // 전원 도착시 목표 종료

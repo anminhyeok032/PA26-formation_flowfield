@@ -5,6 +5,8 @@
 #include <functional>   // std::greater
 #include <cmath>
 
+#include "ScopedCpuTimer.h"
+
 CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindOrCreateColumn(
     const VoxelGrid& grid, int x, int y, int z,
     int& outSlotIdx, ChunkCache& cache) 
@@ -82,45 +84,51 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
     openList.push({ goal, 0.0f });
 
     std::vector<NeighborInfo> neighbors;
-    while (!openList.empty())
     {
-        // 가장 낮은 비용부터 뽑기
-        DirectX::XMINT3 curr = openList.top().pos;
-        openList.pop();
-
-        int currIdx;
-        FlowFieldChunk::ColumnData* currChunk = FindOrCreateColumn(grid, curr.x, curr.y, curr.z, currIdx, chunkcache);
-
-        // 같은 좌표 뽑기 방지
-        if (true == currChunk->visited[currIdx]) continue;
-        currChunk->visited[currIdx] = true;
-
-        float currCost = currChunk->cost[currIdx];
-        // 걸어서 갈 수 있는 이웃좌표
-        GetWalkableNeighbors(grid, curr, neighbors);
-
-        for (const auto& n : neighbors)
+        CORE_SCOPE(FieldDijkstra);
+        while (!openList.empty())
         {
-            // 해당 y에 mask없으면 continue
-            if (mask.find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) == mask.end())  continue;
+            // 가장 낮은 비용부터 뽑기
+            DirectX::XMINT3 curr = openList.top().pos;
+            openList.pop();
 
-            int next_idx;
-            FlowFieldChunk::ColumnData* nChunk = FindOrCreateColumn(grid, n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
-            if (!nChunk) continue;
-            if (nChunk->visited[next_idx]) continue;   // 이미 확정된 노드는 더 나아질 수 없음
+            int currIdx;
+            FlowFieldChunk::ColumnData* currChunk = FindOrCreateColumn(grid, curr.x, curr.y, curr.z, currIdx, chunkcache);
 
-            float predCost = currCost + n.cost;
+            // 같은 좌표 뽑기 방지
+            if (true == currChunk->visited[currIdx]) continue;
+            currChunk->visited[currIdx] = true;
 
-            if (predCost < nChunk->cost[next_idx])
+            float currCost = currChunk->cost[currIdx];
+            // 걸어서 갈 수 있는 이웃좌표
+            GetWalkableNeighbors(grid, curr, neighbors);
+
+            for (const auto& n : neighbors)
             {
-                nChunk->cost[next_idx] = predCost;
-                openList.push({ n.pos, predCost });
-            }
+                // 해당 y에 mask없으면 continue
+                if (mask.find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) == mask.end())  continue;
 
+                int next_idx;
+                FlowFieldChunk::ColumnData* nChunk = FindOrCreateColumn(grid, n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
+                if (!nChunk) continue;
+                if (nChunk->visited[next_idx]) continue;   // 이미 확정된 노드는 더 나아질 수 없음
+
+                float predCost = currCost + n.cost;
+
+                if (predCost < nChunk->cost[next_idx])
+                {
+                    nChunk->cost[next_idx] = predCost;
+                    openList.push({ n.pos, predCost });
+                }
+
+            }
         }
     }
 
-    ComputeDirections(grid);
+    {
+        CORE_SCOPE(FieldComputeDir);
+        ComputeDirections(grid);
+    }
 
 }
 

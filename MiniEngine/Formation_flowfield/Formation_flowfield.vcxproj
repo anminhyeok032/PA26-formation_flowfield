@@ -159,6 +159,7 @@
     <ClCompile Include="NpcManager.cpp" />
     <ClCompile Include="NpcRenderer.cpp" />
     <ClCompile Include="PathCorrider.cpp" />
+    <ClCompile Include="ScopedCpuTimer.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
     <ClCompile Include="VoxelRenderer.cpp" />
   </ItemGroup>
