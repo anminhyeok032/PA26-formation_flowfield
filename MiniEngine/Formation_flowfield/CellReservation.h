@@ -8,8 +8,6 @@
 class CellReservation
 {
 public:
-    static constexpr int kEmpty = -1;
-
     void Reset(size_t npcCount)
     {
         m_Map.clear();
@@ -29,7 +27,7 @@ public:
     int Find(int64_t key) const
     {
         auto it = m_Map.find(key);
-        return it != m_Map.end() ? it->second : kEmpty;
+        return it != m_Map.end() ? it->second : -1;
     }
 
 private:

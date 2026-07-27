@@ -30,7 +30,7 @@ private:
         {
             std::array<float, MAX_SLOTS>                cost;
             // cold 데이터 - flowfield 값
-            //     진행 방향을 (dx,dy,dz) 각 -1/0/1로 2비트씩 packing한 1바이트
+            //     진행 방향을 (dx,dy,dz) 각 -1/0/1로 2비트씩 packing한 1바이트 - 2비트 남았음
             //     실수 단위벡터가 필요한 소비처(화살표 시각화)는 조회 시점에 정규화
             std::array<uint8_t, MAX_SLOTS>              direction;
 

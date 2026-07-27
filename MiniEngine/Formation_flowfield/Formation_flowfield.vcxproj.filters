@@ -54,7 +54,7 @@
     <ClCompile Include="AStarPathfinder.cpp">
       <Filter>NPC\PathFinding</Filter>
     </ClCompile>
-    <ClCompile Include="PathCorrider.cpp">
+    <ClCompile Include="PathCorridor.cpp">
       <Filter>NPC\PublicFunction</Filter>
     </ClCompile>
     <ClCompile Include="GridNeighbors.cpp">
@@ -71,6 +71,9 @@
     </ClCompile>
     <ClCompile Include="NpcManager.cpp">
       <Filter>NPC</Filter>
+    </ClCompile>
+    <ClCompile Include="PreviewRenderer.cpp">
+      <Filter>Render</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -138,6 +141,9 @@
     </ClInclude>
     <ClInclude Include="ScopedCpuTimer.h">
       <Filter>Simulation</Filter>
+    </ClInclude>
+    <ClInclude Include="PreviewRenderer.h">
+      <Filter>Render</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

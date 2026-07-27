@@ -67,7 +67,7 @@ void FlowField::Startup(void)
     VoxelRenderer::Initialize();
     NpcRenderer::Initialize();
     FlowFieldArrowRenderer::Initialize();
-
+    PreviewRenderer::Initialize();
 
     // BMP 로드 → 복셀 생성 → GPU 업로드
     // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
@@ -88,7 +88,7 @@ void FlowField::Startup(void)
             EndPos,
             5.0f,               // 터널 반지름
             1.0,              
-            true, true);        // 양쪽 다 개방
+            true, false);        // 양쪽 다 개방
 
         // 병목 협곡 지형 추가 (5주차 병목 테스트용)
         // 월드 좌표계: m_Size=514, cellSize=0.5 -> 유효 범위 0~257. 터널(z월드 90 부근)과 안 겹침.
@@ -146,6 +146,7 @@ void FlowField::Startup(void)
         Vector3(xz_position, MAX_HEIGHT * 2.0f, xz_position)    // 카메라 위치
     );
 
+
     // npc 배치
     m_Npc.Init(m_VoxelGrid);
 
@@ -188,17 +189,27 @@ bool FlowField::ScreenPointToRay(int mouseX, int mouseY, Math::Vector3& outOrigi
     return true;
 }
 
-
-
-void FlowField::HandlePicking()
+FlowField::PickResult FlowField::PickVoxel() const
 {
-    // Win32 절대 마우스 좌표 획득 (GameInput은 상대 델타만 제공하므로 별도 호출 필요)
     POINT pt;
     GetCursorPos(&pt);
     ScreenToClient(GameCore::g_hWnd, &pt);
 
-    Math::Vector3 rayOrigin, rayDir;
-    bool hasRay = ScreenPointToRay(pt.x, pt.y, rayOrigin, rayDir);
+    PickResult result;
+    result.hasRay = ScreenPointToRay(pt.x, pt.y, result.rayOrigin, result.rayDir);
+    if (result.hasRay)
+    {
+        result.hit = m_VoxelGrid.RaycastVoxel(result.rayOrigin, result.rayDir, 2000.0f,
+            result.cell.x, result.cell.y, result.cell.z);
+    }
+    return result;
+}
+
+
+void FlowField::HandleGroupMovePicking()
+{
+    // Win32 절대 마우스 좌표 획득 (GameInput은 상대 델타만 제공하므로 별도 호출 필요)
+    PickResult pick = PickVoxel();
 
     bool leftClicked = GameInput::IsFirstPressed(GameInput::kMouse0);
     bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
@@ -206,10 +217,10 @@ void FlowField::HandlePicking()
     std::vector<int> changedVoxelIndices;
 
     // 1. 좌클릭: NPC 선택
-    if (leftClicked && hasRay)
+    if (leftClicked && pick.hasRay)
     {
         // 선택, 색상, 업로드
-        m_Npc.TrySelectNpc(rayOrigin, rayDir);
+        m_Npc.TrySelectNpc(pick.rayOrigin, pick.rayDir);
 
         if (m_HoverCellIndex >= 0 && m_HoverCellIndex != m_ConfirmedCellIndex)
         {
@@ -221,15 +232,12 @@ void FlowField::HandlePicking()
     }
 
     // ---------- 2. 호버 프리뷰: NPC가 선택된 동안 매 프레임 갱신 ----------
-    if (true == m_Npc.HasSelection() && m_HoverActive && hasRay)
+    if (true == m_Npc.HasSelection() && m_HoverActive && pick.hasRay)
     {
-        int hx, hy, hz;
-        bool hit = m_VoxelGrid.RaycastVoxel(rayOrigin, rayDir, 2000.0f, hx, hy, hz);
-
         int newHoverIndex = -1;
-        if (hit)
+        if (pick.hit)
         {
-            auto it = m_VoxelCoordToIndex.find(MakeCellKey(hx, hy, hz));
+            auto it = m_VoxelCoordToIndex.find(MakeCellKey(pick.cell));
             if (it != m_VoxelCoordToIndex.end())
                 newHoverIndex = it->second;
         }
@@ -310,7 +318,126 @@ void FlowField::HandlePicking()
     FlushVoxelInstanceChanges(changedVoxelIndices);
 }
 
+void FlowField::HandleTerrainBuildPicking()
+{
+    PickResult pick = PickVoxel();
+    bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
 
+    if (!pick.hit)
+    {
+        // 허공 조준 -> 미리보기 끔 (이미 꺼져 있으면 재업로드 스킵)
+        if (m_PreviewVisible)
+        {
+            PreviewRenderer::UpdateInstances({});
+            m_PreviewVisible = false;
+            m_PreviewAnchor = { INT32_MIN, INT32_MIN, INT32_MIN };
+        }
+        return;
+    }
+
+    DirectX::XMINT3 anchor = pick.cell;
+
+    // 앵커가 안 바뀌었으면 미리보기 GPU 업로드 스킵 (매 프레임 업로드 방지)
+    bool anchorChanged = (anchor.x != m_PreviewAnchor.x ||
+                          anchor.y != m_PreviewAnchor.y ||
+                          anchor.z != m_PreviewAnchor.z);
+
+    if (anchorChanged)
+    {
+        std::vector<DirectX::XMINT3> boxCells = ComputeBoxCells(pick.cell.x, pick.cell.y, pick.cell.z);
+
+        std::vector<PreviewRenderer::InstanceData> previewInstances;
+        previewInstances.reserve(boxCells.size());
+
+        const float cellSize = m_VoxelGrid.GetCellSize();
+        for (const auto& c : boxCells)
+        {
+            // 맵 밖 셀은 미리보기에서 제외 (SetCell의 bounds 필터와 동일 기준)
+            if (!m_VoxelGrid.IsInBounds(c.x, c.y, c.z))  continue;
+
+            Math::Vector3 worldPos = m_VoxelGrid.GetWorldPos(c.x, c.y, c.z);
+
+            PreviewRenderer::InstanceData inst{};
+            inst.position[0] = worldPos.GetX();
+            inst.position[1] = worldPos.GetY();
+            inst.position[2] = worldPos.GetZ();
+            inst.scale = cellSize;
+            inst.colorType = 20;   // 반투명 노랑 (CubePS)
+            previewInstances.push_back(inst);
+        }
+
+        PreviewRenderer::UpdateInstances(previewInstances);
+        m_PreviewVisible = !previewInstances.empty();
+        m_PreviewAnchor = anchor;
+    }
+
+    // 우클릭: 현재 미리보기 박스를 실제로 커밋
+    if (rightClicked && m_PreviewVisible)
+    {
+        std::vector<DirectX::XMINT3> boxCells = ComputeBoxCells(pick.cell.x, pick.cell.y, pick.cell.z);
+        ApplyTerrainEdit(boxCells);
+
+        // 커밋 직후 같은 앵커라도 지형이 바뀌었으니 다음 프레임에 강제 재평가
+        m_PreviewAnchor = { INT32_MIN, INT32_MIN, INT32_MIN };
+    }
+}
+
+void FlowField::ApplyTerrainEdit(const std::vector<DirectX::XMINT3>& cells)
+{
+    // TODO : 현재 동적 생성 위해 vector를 전부 다시 쌓는 문제 
+    m_VoxelGrid.OverwriteCells(cells, VoxelGrid::CellType::Blocked);
+
+    m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
+    VoxelRenderer::UpdateInstances(m_VoxelInstances);
+
+    m_VoxelCoordToIndex.clear();
+    m_VoxelCoordToIndex.reserve(m_VoxelCellCoords.size());
+    m_ChunkToVoxelIndices.clear();
+
+    for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
+    {
+        auto& c = m_VoxelCellCoords[i];
+        m_VoxelCoordToIndex[MakeCellKey(c.x, c.y, c.z)] = (int)i;
+        m_ChunkToVoxelIndices[CorridorFlowField::ChunkKeyOf(c.x, c.z)].push_back((int)i);
+    }
+
+    // 편집 전 확정/호버/경로 인덱스는 이제 낡은 값 무효화
+    m_HoverCellIndex = -1;
+    m_ConfirmedCellIndex = -1;
+    m_PathVoxelIndices.clear();
+
+
+    RefreshDebugColors();
+}
+
+void FlowField::OnEditModeChanged()
+{
+    // 미리보기 잔상 제거
+    if (m_EditMode == EditMode::GroupMove)
+    {
+        // 잔상 존재시,
+        if (true == m_PreviewVisible)
+        {
+            PreviewRenderer::UpdateInstances({});
+            m_PreviewVisible = false;
+            m_PreviewAnchor = { INT32_MIN, INT32_MIN, INT32_MIN };
+        }
+    }
+    // GroupMove -> TerrainBuild: 진행 중이던 호버 셀만 복원
+    else
+    {
+        if (m_HoverCellIndex >= 0 && m_HoverCellIndex != m_ConfirmedCellIndex)
+        {
+            std::vector<int> changed;
+            RestoreCellColor(m_HoverCellIndex);
+            changed.push_back(m_HoverCellIndex);
+            FlushVoxelInstanceChanges(changed);
+        }
+        m_HoverCellIndex = -1;
+        m_HoverActive = false;
+    }
+
+}
 
 void FlowField::BuildArrowInstances()
 {
@@ -533,6 +660,26 @@ void FlowField::RefreshDebugColors(const std::vector<int64_t>& extraKeys)
 }
 
 
+std::vector<DirectX::XMINT3> FlowField::ComputeBoxCells(int hx, int hy, int hz) const
+{
+    constexpr int R = 1;        // 3x3x3
+    std::vector<DirectX::XMINT3> cells;
+    cells.reserve((2 * R + 1) * (2 * R + 1) * (2 * R + 1));
+   
+    for (int y = hy + 1; y <= hy + 1 + (2 * R); ++y)
+    {
+        for (int z = hz - R; z <= hz + R; ++z)
+        {
+            for (int x = hx - R; x <= hx + R; ++x)
+            {
+                cells.push_back({ x, y, z });
+            }
+        }
+    }
+    return cells;
+}
+
+
 
 void FlowField::RestoreCellColor(int instanceIndex)
 {
@@ -613,18 +760,35 @@ void FlowField::Update(float dt)
         GameInput::SetMouseExclusiveMode(m_MouseCaptured);
     }
 
+
+    // 1/2: 편집 모드 전환 (그룹 이동 / 지형 생성)
+    if (GameInput::IsFirstPressed(GameInput::kKey_1) && m_EditMode != EditMode::GroupMove)
+    {
+        m_EditMode = EditMode::GroupMove;
+        OnEditModeChanged();
+    }
+    if (GameInput::IsFirstPressed(GameInput::kKey_2) && m_EditMode != EditMode::TerrainBuild)
+    {
+        m_EditMode = EditMode::TerrainBuild;
+        OnEditModeChanged();
+    }
+
+
+    // 인게임 모드: 기존처럼 카메라만 조작됨 (마우스 회전 + WASD)
     if (m_MouseCaptured)
     {
-        // 인게임 모드: 기존처럼 카메라만 조작됨 (마우스 회전 + WASD)
         m_CameraController->Update(dt);
     }
-    else
+    else  // 해제 모드: 카메라는 멈추고, 클릭으로 NPC 선택/목적지 지정만 가능
     {
-        // 해제 모드: 카메라는 멈추고, 클릭으로 NPC 선택/목적지 지정만 가능
-        HandlePicking();
+        if (m_EditMode == EditMode::GroupMove)          HandleGroupMovePicking();
+        else if (m_EditMode == EditMode::TerrainBuild)  HandleTerrainBuildPicking();
     }
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+
+
+
     // 전원 도착(HasGoal true->false) 시 시각화 초기화
     const bool hasGoal = m_Npc.HasGoal();
     if (m_PrevHasGoal && !hasGoal)   OnGroupArrived();
@@ -677,6 +841,9 @@ void FlowField::RenderScene(void)
 
     // flowfield 화살표
     FlowFieldArrowRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
+
+    // 지형 생성 미리보기 (반투명, 깊이 읽기전용) — 불투명 전부 그린 뒤 마지막에 얹기
+    PreviewRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
 
     // Present 전이
     ctx.TransitionResource(g_SceneColorBuffer, D3D12_RESOURCE_STATE_PRESENT);

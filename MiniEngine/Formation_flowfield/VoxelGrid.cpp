@@ -204,8 +204,7 @@ void VoxelGrid::ValidateWalkable()
             continue;
         }
 
-        // 표면 복셀 walkable 판정 조건들
-        bool walkable = true;
+
 
 
         //// 조건 1 — 이웃 4방향 표면 복셀과 높이차 검사
@@ -241,23 +240,7 @@ void VoxelGrid::ValidateWalkable()
         // 조건 2 — 머리 위 공간(헤드룸) 확인
         // 터널/아치 구조에서는 컬럼마다 천장 위치가 다르므로, 표면(cell.y) 바로 위부터
         // HEADROOM_CELLS칸이 전부 비어있어야 실제로 지나갈 수 있는 통로로 인정.
-        // GetSurfaceY 비교 같은 우회 로직 불필요 — GetCell이 이미 정확한 Empty/Blocked를
-        // 반환하므로 그대로 신뢰하면 됨 (컬럼당 표면 1개 가정이 깨져도 안전).
-        const int HEADROOM_CELLS = 3 + 1; // 캐릭터 키 3칸 + 여유 1칸
-
-        for (int k = 1; k <= HEADROOM_CELLS; k++)
-        {
-            int headY = cell.y + k;
-
-            // 맵 맨 위를 넘어가면 그 위는 무조건 뚫려있는 것으로 간주하고 통과
-            if (headY >= m_SizeY) break;
-
-            if (GetCell(cell.x, headY, cell.z) != CellType::Empty)
-            {
-                walkable = false; // 천장(아치)이 너무 낮음 -> 통행 불가
-                break;
-            }
-        }
+        bool walkable = CheckWalkableCondition(cell.x, cell.y, cell.z);
 
         // 조건 3 — TODO : 장애물 마킹 (동적 변경 시)
         
@@ -464,7 +447,7 @@ void VoxelGrid::BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outI
         inst.colorType = (cell.type == CellType::Walkable) ? 0 : 1;
         outInstances.push_back(inst);
 
-        if (outCoords) outCoords->push_back({ cell.x, cell.y, cell.z });
+        if (outCoords) outCoords->push_back({ (int16_t)cell.x, (int16_t)cell.y, (int16_t)cell.z });
     }
 }
 
@@ -572,6 +555,18 @@ int VoxelGrid::GetGroundY(int x, int z) const
     return (span.count > 0) ? (int)span.data[0] : -1;
 }
 
+bool VoxelGrid::CheckWalkableCondition(int x, int y, int z) const
+{
+    constexpr int HEADROOM_CELLS = 3 + 1;
+    for (int k = 1; k <= HEADROOM_CELLS; k++)
+    {
+        int headY = y + k;
+        if (headY >= m_SizeY) break;
+        if (GetCell(x, headY, z) != CellType::Empty) return false;
+    }
+    return true;
+}
+
 void VoxelGrid::AddNarrowingCliffs(const DirectX::XMFLOAT3& start, const DirectX::XMFLOAT3& end,
     float outerHalfWidth, float minHalfWidth, float cliffHeight)
 {
@@ -659,4 +654,62 @@ void VoxelGrid::AddNarrowingCliffs(const DirectX::XMFLOAT3& start, const DirectX
 
     // ValidateWalkable()은 호출하지 않음 - 절벽 셀은 Blocked로 직접 지정했고,
     // 재호출하면 절벽 꼭대기가 Walkable로 승격되어 NPC가 절벽 위로 올라가버린다.
+}
+
+void VoxelGrid::OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellType type)
+{
+    std::vector<std::pair<int, int>> touchedCol;
+    std::unordered_set<int64_t> touchedSet;
+
+    for (const auto& c : cells)
+    {
+        if (false == IsInBounds(c.x, c.y, c.z))  continue;
+
+        SetCell(c.x, c.y, c.z, type);
+
+        int64_t colKey = MakeCellKey(c.x, 0, c.z);
+        if (touchedSet.insert(colKey).second)
+        {
+            touchedCol.push_back({ c.x, c.z });
+        }
+    }
+    if (touchedCol.empty())  return;
+
+    // 영향 컬럼의 기존 렌더 엔트리 일괄 제거 TODO : 인덱스 구조 변경시, 이 오버헤드도 같이 리팩토링 할것
+    m_Cells.erase(std::remove_if(m_Cells.begin(), m_Cells.end(), [&](const VoxelCell& c) {
+        return touchedSet.count(MakeCellKey(c.x, 0, c.z)) > 0;
+        }), m_Cells.end());
+
+
+
+    // 1) 표면 캐시부터 최신화 (walkable 재판정이 이 캐시를 참조하므로 선행 필수)
+    for (const auto& col : touchedCol)
+    {
+        RefreshSurfaceColumn(col.first, col.second);
+    }
+
+    // 2) walkable 재판정 -> m_Chunks 확정
+    for (const auto& col : touchedCol)
+    {
+        const int x = col.first, z = col.second;
+        for (int y = 0; y < m_SizeY; ++y)
+        {
+            if (GetCell(x, y, z) == CellType::Empty) continue;
+            bool walkable = IsSurface(x, y, z) && CheckWalkableCondition(x, y, z);
+            SetCell(x, y, z, walkable ? CellType::Walkable : CellType::Blocked);
+        }
+    }
+
+    // 3) 확정된 타입으로 렌더 목록 재등록 (GetCell이 이제 최종 타입을 돌려줌)
+    for (const auto& col : touchedCol)
+    {
+        const int x = col.first, z = col.second;
+        for (int y = 0; y < m_SizeY; ++y)
+        {
+            CellType t = GetCell(x, y, z);       // walkable 재판정이 반영된 최종값
+            if (t == CellType::Empty) continue;
+            if (!IsCellExposed(x, y, z)) continue;
+            m_Cells.push_back({ x, y, z, t });
+        }
+    }
 }

@@ -78,7 +78,8 @@ public:
     void SetCell(int x, int y, int z, CellType type);
 
     // 격자 좌표 하나 (우클릭 피킹 결과와 렌더 인스턴스를 매칭하기 위한 용도)
-    struct CellCoord { int x, y, z; };
+    // 좌표는 21비트 키(MakeCellKey)에 담기는 크기 (실맵 좌표 << 32767).
+    struct CellCoord { int16_t x, y, z; };
 
     // 렌더용 인스턴스 목록 생성.
     // outCoords가 주어지면 outInstances[i]에 대응하는 격자 좌표를 같은 순서로 채움
@@ -127,6 +128,9 @@ public:
         float minHalfWidth = 3.0f,      // 중앙(가장 좁은 지점) 통로 반폭
         float cliffHeight = 4.0f);      // 절벽이 지면 위로 솟는 높이
 
+    // 지정된 셀 type 덮어쓰기 / 해당 컬럼 렌더 목록 및 표면 캐시 재구축
+    void OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellType type);
+
     // 해당 셀이 공기(Empty)에 노출됐는지: 바닥/맵 경계이거나 6방향 이웃 중 하나라도 Empty
     // BuildFromVolumeSource와 AddNarrowingCliffs가 동일 로직을 공유하기 위한 헬퍼
     bool IsCellExposed(int x, int y, int z) const;
@@ -138,12 +142,19 @@ public:
 
 
 
+
+
     // 패스 2 — 배치 완료 후 표면 복셀 walkable 재판정
     void ValidateWalkable();
     // 표면 복셀인지 확인 (위쪽이 비어있는 복셀)
     bool IsSurface(int x, int y, int z) const;
     // x,z 위치의 표면 y값 반환
     int  GetSurfaceY(int x, int z) const;
+    // 맵 밖인지 반환
+    bool IsInBounds(int x, int y, int z) const
+    {
+        return x >= 0 && x < m_SizeX && y >= 0 && y < m_SizeY&& z >= 0 && z < m_SizeZ;
+    }
 
 
     // Y List를 받아 순회용 구조체
@@ -208,8 +219,8 @@ private:
     void RefreshSurfaceColumn(int x, int z); 
     // 지형이 확정된 직후(모든 SetCell 완료 후) 호출 — 표면 캐시 할당 + 전체 컬럼 1회 스캔.
     void BuildSurfaceCache();
-
-
+    // (x,y,z) 헤드룸 walkable 조건
+    bool CheckWalkableCondition(int x, int y, int z) const;
 
     void ToChunkCoord(int x, int y, int z, int& chunkIndex, int& lx, int& ly, int& lz) const;
 };

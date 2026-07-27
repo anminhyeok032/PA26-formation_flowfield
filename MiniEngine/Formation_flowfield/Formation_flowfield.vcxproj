@@ -158,7 +158,8 @@
     <ClCompile Include="HeightMap.cpp" />
     <ClCompile Include="NpcManager.cpp" />
     <ClCompile Include="NpcRenderer.cpp" />
-    <ClCompile Include="PathCorrider.cpp" />
+    <ClCompile Include="PathCorridor.cpp" />
+    <ClCompile Include="PreviewRenderer.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
     <ClCompile Include="VoxelRenderer.cpp" />
   </ItemGroup>
@@ -242,6 +243,7 @@
     <ClInclude Include="NpcManager.h" />
     <ClInclude Include="NpcRenderer.h" />
     <ClInclude Include="PathCorridor.h" />
+    <ClInclude Include="PreviewRenderer.h" />
     <ClInclude Include="ScopedCpuTimer.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClInclude Include="VoxelRenderer.h" />

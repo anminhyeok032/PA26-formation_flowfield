@@ -5,6 +5,7 @@
 #include "HeightMap.h"
 #include "VoxelGrid.h"
 #include "VoxelRenderer.h"
+#include "PreviewRenderer.h"
 #include "NpcRenderer.h"
 #include <d3d12.h>
 #include <vector>
@@ -79,6 +80,23 @@ private:
     void RefreshDebugColors(const std::vector<int64_t>& extraKeys = {});
 
 
+    //----------------- 동적지형 관련 ----------------------
+    DirectX::XMINT3 m_PreviewAnchor{ INT32_MIN, INT32_MIN, INT32_MIN }; // 마지막으로 미리보기 그린셀
+    bool            m_PreviewVisible = false;                           // 마지막으로 그린곳 있는지 확인용
+
+    // 동적지형 미리보기
+    std::vector<DirectX::XMINT3> ComputeBoxCells(int hx, int hy, int hz) const;
+    
+    // 지형 생성용 피킹(미리보기 + 우클릭시 커밋)
+    void HandleTerrainBuildPicking();
+
+    // N x N x N 박스 지형에 커밋 (SetSell -> 표면/렌더 재빌드 -> Flowfield 재구축)
+    void ApplyTerrainEdit(const std::vector<DirectX::XMINT3>& cells);
+
+    // 마우스 모드 전환시, 상태 정리용(미리보기 삭제 / 호버 삭제)
+    void OnEditModeChanged();
+
+
     //----------------- flowfield dir 시각화----------------
     bool m_DebugShowArrows = true;
     void BuildArrowInstances();
@@ -86,7 +104,17 @@ private:
     bool m_PrevHasGoal = false;   // HasGoal의 true->false 전환(전원 도착) 감지용
     void OnGroupArrived();        // 도착 시 디버그 시각화 전체 해제
 
+
     // ----------------- 목적지 복셀 선택 관련 --------------
+    struct PickResult
+    {
+        bool hasRay = false;
+        Math::Vector3 rayOrigin, rayDir;
+        bool hit = false;
+        DirectX::XMINT3 cell{ 0, 0, 0 };
+    };
+    // 현재 마우스 위치 기준 레이캐스트
+    PickResult PickVoxel() const;
     std::vector<VoxelRenderer::InstanceData> m_VoxelInstances;  // 지속 보관
     std::vector<VoxelGrid::CellCoord>        m_VoxelCellCoords; // m_VoxelInstances와 1:1 대응
 
@@ -104,12 +132,16 @@ private:
     // 기본값 true로 시작 -> Startup()에서 커서 숨김과 짝을 맞춰야 함
     bool m_MouseCaptured = true;
 
+    // ---- 편집 모드 (1: 그룹 이동 / 2: 지형 생성) ----
+    enum class EditMode { GroupMove, TerrainBuild };
+    EditMode m_EditMode = EditMode::GroupMove;
+
     // ---- 피킹(레이캐스팅) 관련 헬퍼 ----
     // 화면 좌표(마우스 클라이언트 좌표)를 월드 공간 레이(origin, dir)로 변환
     bool ScreenPointToRay(int mouseX, int mouseY, Math::Vector3& outOrigin, Math::Vector3& outDir) const;
 
     // 매 프레임 좌/우클릭을 검사해서 NPC 선택 / 목적지 지정 처리
-    void HandlePicking();
+    void HandleGroupMovePicking();
 
 
     // 바뀐 복셀 gpu 업로드
