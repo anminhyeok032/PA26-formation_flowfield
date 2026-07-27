@@ -2,8 +2,38 @@
 #include "GridNeighbors.h"
 #include "ChunkKey.h"
 #include <queue>
-#include <functional>   // std::greater
+#include <functional>  
 #include <cmath>
+
+
+
+//------------------------------------------
+// direction 패킹용 헬퍼
+//------------------------------------------
+namespace
+{
+    // dx, dy, dz (각 -1/0/1) -> 2비트씩 패킹
+    uint8_t EncodeDirDelta(int dx, int dy, int dz)
+    {
+        return (uint8_t)(dx + 1) | ((uint8_t)(dy + 1) << 2) | ((uint8_t)(dz + 1) << 4);
+    }
+
+    void DecodeDirDelta(uint8_t packed, int& dx, int& dy, int& dz)
+    {
+        dx = (int)(packed & 0x3u) - 1;
+        dy = (int)((packed >> 2) & 0x3u) - 1;
+        dz = (int)((packed >> 4) & 0x3u) - 1;
+    }
+    void DecodeDirDelta(uint8_t packed, DirectX::XMINT3& d) // overloaded
+    {
+        d.x = (int)(packed & 0x3u) - 1;
+        d.y = (int)((packed >> 2) & 0x3u) - 1;
+        d.z = (int)((packed >> 4) & 0x3u) - 1;
+    }
+}
+
+
+
 
 CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindOrCreateColumn(
     const VoxelGrid& grid, int x, int y, int z,
@@ -84,39 +114,36 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
     std::vector<NeighborInfo> neighbors;
     while (!openList.empty())
     {
-        // 가장 낮은 비용부터 뽑기
-        DirectX::XMINT3 curr = openList.top().pos;
+        const OpenEntry entry = openList.top();
         openList.pop();
 
         int currIdx;
-        FlowFieldChunk::ColumnData* currChunk = FindOrCreateColumn(grid, curr.x, curr.y, curr.z, currIdx, chunkcache);
+        FlowFieldChunk::ColumnData* currChunk = FindOrCreateColumn(grid, entry.pos.x, entry.pos.y, entry.pos.z, currIdx, chunkcache);
+        if (!currChunk)  continue;
 
-        // 같은 좌표 뽑기 방지
-        if (true == currChunk->visited[currIdx]) continue;
-        currChunk->visited[currIdx] = true;
+        // 방문 여부를 cost 비교로 확정
+        if (entry.cost > currChunk->cost[currIdx])   continue;
 
-        float currCost = currChunk->cost[currIdx];
-        // 걸어서 갈 수 있는 이웃좌표
-        GetWalkableNeighbors(grid, curr, neighbors);
+        const float currCost = currChunk->cost[currIdx];
+
+        GetWalkableNeighbors(grid, entry.pos, neighbors);
 
         for (const auto& n : neighbors)
         {
             // 해당 y에 mask없으면 continue
-            if (mask.find(MakeCellKey(n.pos.x, n.pos.y, n.pos.z)) == mask.end())  continue;
+            if ( mask.find(MakeCellKey(n.pos)) == mask.end() ) continue;
 
             int next_idx;
             FlowFieldChunk::ColumnData* nChunk = FindOrCreateColumn(grid, n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
             if (!nChunk) continue;
-            if (nChunk->visited[next_idx]) continue;   // 이미 확정된 노드는 더 나아질 수 없음
 
-            float predCost = currCost + n.cost;
+            const float predCost = currCost + n.cost;
 
             if (predCost < nChunk->cost[next_idx])
             {
                 nChunk->cost[next_idx] = predCost;
                 openList.push({ n.pos, predCost });
             }
-
         }
     }
 
@@ -152,7 +179,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
 
                 for (int slot = 0; slot < surfaces.count; ++slot)
                 {
-                    if (false == col.visited[slot])  continue;
+                    if (false == col.IsReached(slot))  continue;
 
                     float myCost = col.cost[slot];
                     if (myCost == 0.0f)  continue;  // 목적지 자신
@@ -172,7 +199,7 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                         int nIdx;
                         const FlowFieldChunk::ColumnData* nChunk = FindColumn(grid, n.pos.x, n.pos.y, n.pos.z, nIdx, chunkCache);
                         // 해당 이웃이 방문했고, 찾은것중(나포함) 더 비용이 낮고(목표에 가깝고) 
-                        if (nChunk && nChunk->visited[nIdx] && nChunk->cost[nIdx] < bestCost)
+                        if (nChunk && nChunk->cost[nIdx] < bestCost)
                         {
                             bestCost = nChunk->cost[nIdx];
                             bestNeighbor = n.pos;
@@ -183,10 +210,9 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
                     // 더 비용이 낮은 이웃으로 향함
                     if (true == found)
                     {
-                        Math::Vector3 selfPos = grid.GetWorldPos(x, y, z);
-                        Math::Vector3 neighborPos = grid.GetWorldPos(bestNeighbor.x, bestNeighbor.y, bestNeighbor.z);
-                        Math::Vector3 dir = Math::Normalize(neighborPos - selfPos);
-                        col.direction[slot] = DirectX::XMFLOAT3(dir.GetX(), dir.GetY(), dir.GetZ());
+                        col.direction[slot] = EncodeDirDelta(bestNeighbor.x - x,
+                                                            bestNeighbor.y - y,
+                                                            bestNeighbor.z - z);
                     }
                 }
 
@@ -197,14 +223,17 @@ void CorridorFlowField::ComputeDirections(const VoxelGrid& grid)
     }
 }
 
-bool CorridorFlowField::SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMFLOAT3& outDir) const
+bool CorridorFlowField::SampleDirection(const VoxelGrid& grid, int x, int y, int z, DirectX::XMINT3& outDir) const
 {
     int slot;
     ChunkCache chunkcache;
     const FlowFieldChunk::ColumnData* col = FindColumn(grid, x, y, z, slot, chunkcache);
-    if (!col || slot < 0 || !col->visited[slot]) return false;
+    if (!col || slot < 0 || !col->IsReached(slot)) return false;
 
-    outDir = col->direction[slot];
+    const uint8_t packed = col->direction[slot];
+    if (FlowFieldChunk::kNoDir == packed)    return false;  // 방향없음
+
+    DecodeDirDelta(packed, outDir);
     return true;
 }
 
@@ -213,7 +242,7 @@ bool CorridorFlowField::SampleCost(const VoxelGrid& grid, int x, int y, int z, f
     ChunkCache cache;
     int slot;
     const FlowFieldChunk::ColumnData* col = FindColumn(grid, x, y, z, slot, cache);
-    if (!col || slot < 0 || !col->visited[slot]) return false;
+    if (!col || slot < 0 || !col->IsReached(slot)) return false;
 
     outCost = col->cost[slot];
     return true;
@@ -225,5 +254,5 @@ bool CorridorFlowField::IsVisited(const VoxelGrid& grid, int x, int y, int z) co
     ChunkCache chunkcache;
     const FlowFieldChunk::ColumnData* col = FindColumn(grid, x, y, z, slotIdx, chunkcache);
     if (!col || slotIdx < 0) return false;
-    return col->visited[slotIdx];
+    return col->IsReached(slotIdx);
 }

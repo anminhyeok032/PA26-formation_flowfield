@@ -331,8 +331,10 @@ void FlowField::BuildArrowInstances()
         {
             const auto& c = m_VoxelCellCoords[idx];
 
-            DirectX::XMFLOAT3 dir;
+            DirectX::XMINT3 dir;
             if (false == m_Npc.GetFlowField().SampleDirection(m_VoxelGrid, c.x, c.y, c.z, dir))  continue;
+
+            Math::Vector3 dirVec = Math::Normalize(Math::Vector3((float)dir.x, (float)dir.y, (float)dir.z));
 
             Math::Vector3 worldPos = m_VoxelGrid.GetWorldPos(c.x, c.y, c.z);
 
@@ -341,9 +343,9 @@ void FlowField::BuildArrowInstances()
             inst.position[1] = worldPos.GetY() + HEIGHT_OFFSET;
             inst.position[2] = worldPos.GetZ();
             inst.length = ARROW_LENGTH;
-            inst.direction[0] = dir.x;
-            inst.direction[1] = dir.y;
-            inst.direction[2] = dir.z;
+            inst.direction[0] = dirVec.GetX();
+            inst.direction[1] = dirVec.GetY();
+            inst.direction[2] = dirVec.GetZ();
 
             instances.emplace_back(inst);
         }

@@ -65,7 +65,6 @@ private:
 
 
 // 복셀 메모리는 16^3 청크(VoxelChunk)로 구성 — 3D A*/FlowField 인접 접근 캐시 효율용.
-// TODO : 청크 내부 인덱싱 Morton order 전환은 BFS/A* 프로파일링 후 결정
 class VoxelGrid
 {
 public:
