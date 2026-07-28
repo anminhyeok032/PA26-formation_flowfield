@@ -41,6 +41,7 @@ namespace VoxelRenderer
     void Render(GraphicsContext& ctx, const Math::Matrix4& viewProj);
 
     // 현재 활성 인스턴스 수 조회
+    void SetInstanceCount(uint32_t count);
     uint32_t GetInstanceCount();
     void ToggleWireframe();
     bool IsWireframe();

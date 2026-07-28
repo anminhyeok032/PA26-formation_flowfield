@@ -230,6 +230,11 @@ namespace VoxelRenderer
         }
     }
 
+    void SetInstanceCount(uint32_t count)
+    {
+        s_InstanceCount = count;
+    }
+
     uint32_t GetInstanceCount()
     {
         return s_InstanceCount;

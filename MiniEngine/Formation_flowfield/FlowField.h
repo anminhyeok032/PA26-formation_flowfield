@@ -143,7 +143,16 @@ private:
     // 매 프레임 좌/우클릭을 검사해서 NPC 선택 / 목적지 지정 처리
     void HandleGroupMovePicking();
 
-
+    //==== 인스턴스 배열 일부 갱신용 헬퍼(swap-and-pop / append) ====
+    // -- 편집 안한 셀 인덱스를 보호하기 위해 전체 재빌드 대신 사용 --
+    void RemoveInstanceAt(int idx, std::vector<int>& dirty);
+    void AppendInstance(const VoxelGrid::TerrainEditDelta::AddedCell& cell, std::vector<int>& dirty);
+    void EraseFromChunkIndex(int64_t chunkKey, int idx);
+    void ReindexInChunkIndex(int64_t chunkKey, int oldIdx, int newIdx);
+     
     // 바뀐 복셀 gpu 업로드
     void FlushVoxelInstanceChanges(std::vector<int>& changedIndices);
+
+
+
 };

@@ -384,28 +384,74 @@ void FlowField::HandleTerrainBuildPicking()
 
 void FlowField::ApplyTerrainEdit(const std::vector<DirectX::XMINT3>& cells)
 {
-    // TODO : 현재 동적 생성 위해 vector를 전부 다시 쌓는 문제 
-    m_VoxelGrid.OverwriteCells(cells, VoxelGrid::CellType::Blocked);
+    auto indexToCoord = [&](int idx) -> DirectX::XMINT3 {
+        const auto& c = m_VoxelCellCoords[idx];
+        return { c.x, c.y, c.z };
+    };
 
-    m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
-    VoxelRenderer::UpdateInstances(m_VoxelInstances);
-
-    m_VoxelCoordToIndex.clear();
-    m_VoxelCoordToIndex.reserve(m_VoxelCellCoords.size());
-    m_ChunkToVoxelIndices.clear();
-
-    for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
+    // 
+    bool hadConfirmed = (m_ConfirmedCellIndex >= 0);
+    DirectX::XMINT3 confirmedCoord = hadConfirmed ? indexToCoord(m_ConfirmedCellIndex) : DirectX::XMINT3{};
+    // a* 경로 다시 그리기 위한 임시 저장
+    std::vector<DirectX::XMINT3> pathCoords;
+    pathCoords.reserve(m_PathVoxelIndices.size());
+    for (int idx : m_PathVoxelIndices)
     {
-        auto& c = m_VoxelCellCoords[i];
-        m_VoxelCoordToIndex[MakeCellKey(c.x, c.y, c.z)] = (int)i;
-        m_ChunkToVoxelIndices[CorridorFlowField::ChunkKeyOf(c.x, c.z)].push_back((int)i);
+        pathCoords.push_back(indexToCoord(idx));
     }
 
-    // 편집 전 확정/호버/경로 인덱스는 이제 낡은 값 무효화
-    m_HoverCellIndex = -1;
-    m_ConfirmedCellIndex = -1;
-    m_PathVoxelIndices.clear();
+    VoxelGrid::TerrainEditDelta delta;
+    m_VoxelGrid.OverwriteCells(cells, VoxelGrid::CellType::Blocked, delta);
 
+    std::vector<int> dirty;
+    dirty.reserve(delta.removed.size() + delta.added.size());
+
+    // 1. 제거 - 인덱스 내림차순이어야함.
+    std::vector<int> removeIndices;
+    removeIndices.reserve(delta.removed.size());
+    for (const auto& co : delta.removed)
+    {
+        auto it = m_VoxelCoordToIndex.find(MakeCellKey(co));
+        if (it != m_VoxelCoordToIndex.end()) removeIndices.push_back(it->second);
+    }
+    std::sort(removeIndices.begin(), removeIndices.end(), std::greater<int>());
+    for (int idx : removeIndices)
+    {
+        RemoveInstanceAt(idx, dirty);
+    }
+    
+
+    // 2. 추가 - 배열 끝에  append 해주기
+    for (const auto& cell : delta.added)
+    {
+        AppendInstance(cell, dirty);
+    }
+
+
+    // 3. ? 축소로 범위 벗어난 dirty 인덱스 제거 (스왑 대상 pop된 경우)
+    // 3) 축소로 범위를 벗어난 dirty 인덱스 제거 (스왑 대상이 뒤이어 pop된 경우)
+    const int finalSize = (int)m_VoxelInstances.size();
+    dirty.erase(std::remove_if(dirty.begin(), dirty.end(),
+        [finalSize](int i) { return i >= finalSize; }), dirty.end());
+
+    // 4) 카운트 갱신 후 변경분만 GPU 업로드
+    VoxelRenderer::SetInstanceCount((uint32_t)finalSize);
+    FlushVoxelInstanceChanges(dirty);
+
+    // 5) 좌표 -> 새 인덱스 재매핑 (편집으로 사라진 셀은 누락)
+    auto remap = [&](const DirectX::XMINT3& co) -> int {
+        auto it = m_VoxelCoordToIndex.find(MakeCellKey(co.x, co.y, co.z));
+        return (it != m_VoxelCoordToIndex.end()) ? it->second : -1;
+    };
+    m_ConfirmedCellIndex = hadConfirmed ? remap(confirmedCoord) : -1;
+    m_HoverCellIndex = -1;
+
+    m_PathVoxelIndices.clear();
+    for (const auto& co : pathCoords)
+    {
+        int idx = remap(co);
+        if (idx >= 0) m_PathVoxelIndices.push_back(idx);
+    }
 
     RefreshDebugColors();
 }
@@ -815,6 +861,77 @@ void FlowField::Update(float dt)
         FlowFieldArrowRenderer::SetEnabled(m_DebugShowArrows);
         BuildArrowInstances();
     }
+}
+//-----------------------------------------------
+//  인스턴스 일부 갱신용 헬퍼
+//-----------------------------------------------
+void FlowField::EraseFromChunkIndex(int64_t chunkKey, int idx)
+{
+    auto it = m_ChunkToVoxelIndices.find(chunkKey);
+    if (it == m_ChunkToVoxelIndices.end()) return;
+
+    auto& vec = it->second;
+    vec.erase(std::remove(vec.begin(), vec.end(), idx), vec.end());
+    if (vec.empty()) m_ChunkToVoxelIndices.erase(it);
+}
+
+void FlowField::ReindexInChunkIndex(int64_t chunkKey, int oldIdx, int newIdx)
+{
+    auto it = m_ChunkToVoxelIndices.find(chunkKey);
+    if (it == m_ChunkToVoxelIndices.end()) return;
+
+    for (int& v : it->second)
+        if (v == oldIdx) { v = newIdx; break; }
+}
+
+void FlowField::RemoveInstanceAt(int idx, std::vector<int>& dirty)
+{
+    const auto& co = m_VoxelCellCoords[idx];
+
+    // 이 셀의 색인 제거
+    m_VoxelCoordToIndex.erase(MakeCellKey(co.x, co.y, co.z));
+    EraseFromChunkIndex(CorridorFlowField::ChunkKeyOf(co.x, co.z), idx);
+
+    int lastIdx = (int)m_VoxelInstances.size() - 1;
+    if (idx != lastIdx)
+    {
+        // 배열 끝 원소를 빈 자리로 이동 (이 한 원소만 인덱스가 바뀜)
+        m_VoxelInstances[idx] = m_VoxelInstances[lastIdx];
+        m_VoxelCellCoords[idx] = m_VoxelCellCoords[lastIdx];
+
+        const auto& sc = m_VoxelCellCoords[idx];
+        m_VoxelCoordToIndex[MakeCellKey(sc.x, sc.y, sc.z)] = idx;
+        ReindexInChunkIndex(CorridorFlowField::ChunkKeyOf(sc.x, sc.z), lastIdx, idx);
+
+        dirty.push_back(idx);
+    }
+
+    m_VoxelInstances.pop_back();
+    m_VoxelCellCoords.pop_back();
+}
+//-----------------------------------------------
+
+void FlowField::AppendInstance(const VoxelGrid::TerrainEditDelta::AddedCell& cell,
+    std::vector<int>& dirty)
+{
+    const float cellSize = m_VoxelGrid.GetCellSize();
+    int idx = (int)m_VoxelInstances.size();
+
+    VoxelRenderer::InstanceData inst{};
+    inst.position[0] = cell.x * cellSize;
+    inst.position[1] = cell.y * cellSize;
+    inst.position[2] = cell.z * cellSize;
+    inst.scale = cellSize;
+    // BuildInstanceList와 동일한 기본색 규칙 (디버그 덧칠은 RefreshDebugColors가 담당)
+    inst.colorType = (cell.type == VoxelGrid::CellType::Walkable) ? 0u : 1u;
+
+    m_VoxelInstances.push_back(inst);
+    m_VoxelCellCoords.push_back({ (int16_t)cell.x, (int16_t)cell.y, (int16_t)cell.z });
+
+    m_VoxelCoordToIndex[MakeCellKey(cell.x, cell.y, cell.z)] = idx;
+    m_ChunkToVoxelIndices[CorridorFlowField::ChunkKeyOf(cell.x, cell.z)].push_back(idx);
+
+    dirty.push_back(idx);
 }
 
 void FlowField::RenderScene(void)

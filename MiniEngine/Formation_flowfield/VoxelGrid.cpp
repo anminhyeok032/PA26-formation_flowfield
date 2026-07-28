@@ -106,12 +106,7 @@ void VoxelGrid::BuildFromVolumeSource(const VoxelSourceFn& isSolid, int sizeX, i
 
                 //if (!isExposed) continue; // 완전히 파묻힌 내부 복셀은 렌더 스킵
 
-                VoxelCell cell;
-                cell.x = x;
-                cell.y = y;
-                cell.z = z;
-                cell.type = CellType::Blocked; // ValidateWalkable에서 덮어씀
-                m_Cells.push_back(cell);
+                m_Cells.push_back({ (int16_t)x, (int16_t)y, (int16_t)z });
             }
         }
     }
@@ -200,7 +195,7 @@ void VoxelGrid::ValidateWalkable()
         // 표면 복셀만 판정 (위쪽 y+1이 비어있어야 표면)
         if (false == IsSurface(cell.x, cell.y, cell.z))
         {
-            cell.type = CellType::Blocked; // 내부 복셀은 항상 Blocked
+            SetCell(cell.x, cell.y, cell.z, CellType::Blocked);
             continue;
         }
 
@@ -244,11 +239,9 @@ void VoxelGrid::ValidateWalkable()
 
         // 조건 3 — TODO : 장애물 마킹 (동적 변경 시)
         
-
-        cell.type = walkable ? CellType::Walkable : CellType::Blocked;
-
+\
         // 청크에도 반영 (FlowField 계산 시 빠른 접근용)
-        SetCell(cell.x, cell.y, cell.z, cell.type);
+        SetCell(cell.x, cell.y, cell.z, walkable ? CellType::Walkable : CellType::Blocked);
     }
 
 }
@@ -437,14 +430,15 @@ void VoxelGrid::BuildInstanceList(std::vector<VoxelRenderer::InstanceData>& outI
 
     for (const auto& cell : m_Cells)
     {
-        if (cell.type == CellType::Empty) continue;
+        CellType t = GetCell(cell.x, cell.y, cell.z);
+        if (t == CellType::Empty) continue;
 
         VoxelRenderer::InstanceData inst = {};
         inst.position[0] = cell.x * m_CellSize;
         inst.position[1] = cell.y * m_CellSize;
         inst.position[2] = cell.z * m_CellSize;
         inst.scale = m_CellSize;
-        inst.colorType = (cell.type == CellType::Walkable) ? 0 : 1;
+        inst.colorType = (t == CellType::Walkable) ? 0 : 1;
         outInstances.push_back(inst);
 
         if (outCoords) outCoords->push_back({ (int16_t)cell.x, (int16_t)cell.y, (int16_t)cell.z });
@@ -633,7 +627,7 @@ void VoxelGrid::AddNarrowingCliffs(const DirectX::XMFLOAT3& start, const DirectX
 
     // 영향받은 컬럼들의 기존 렌더 엔트리를 한 번에 제거 (컬럼마다 스캔하지 않도록)
     // 이 과정에서 m_Cells 순서가 바뀐다 -> BuildInstanceList 이전에만 호출할 것
-    m_Cells.erase(std::remove_if(m_Cells.begin(), m_Cells.end(), [&](const VoxelCell& c) {
+    m_Cells.erase(std::remove_if(m_Cells.begin(), m_Cells.end(), [&](const CellCoord& c) {
         return touchedSet.count(MakeCellKey(c.x, 0, c.z)) > 0;
         }), m_Cells.end());
 
@@ -644,10 +638,9 @@ void VoxelGrid::AddNarrowingCliffs(const DirectX::XMFLOAT3& start, const DirectX
         const int x = col.first, z = col.second;
         for (int y = 0; y < m_SizeY; ++y)
         {
-            CellType type = GetCell(x, y, z);
-            if (type == CellType::Empty) continue;
+            if (GetCell(x, y, z) == CellType::Empty) continue;
             if (!IsCellExposed(x, y, z))  continue;
-            m_Cells.push_back({ x, y, z, type });
+            m_Cells.push_back({ (int16_t)x, (int16_t)y, (int16_t)z });
         }
         RefreshSurfaceColumn(x, z);
     }
@@ -656,8 +649,11 @@ void VoxelGrid::AddNarrowingCliffs(const DirectX::XMFLOAT3& start, const DirectX
     // 재호출하면 절벽 꼭대기가 Walkable로 승격되어 NPC가 절벽 위로 올라가버린다.
 }
 
-void VoxelGrid::OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellType type)
+void VoxelGrid::OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellType type, TerrainEditDelta& outDelta)
 {
+    outDelta.removed.clear();
+    outDelta.added.clear();
+
     std::vector<std::pair<int, int>> touchedCol;
     std::unordered_set<int64_t> touchedSet;
 
@@ -675,8 +671,17 @@ void VoxelGrid::OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellTy
     }
     if (touchedCol.empty())  return;
 
+    // 빠질 엔트리 먼저 기록(erase 사용전에)
+    for (const auto& c : m_Cells)
+    {
+        if (touchedSet.count(MakeCellKey(c.x, 0, c.z)) > 0)
+        {
+            outDelta.removed.emplace_back(DirectX::XMINT3{ c.x, 0, c.z });
+        }
+    }
+
     // 영향 컬럼의 기존 렌더 엔트리 일괄 제거 TODO : 인덱스 구조 변경시, 이 오버헤드도 같이 리팩토링 할것
-    m_Cells.erase(std::remove_if(m_Cells.begin(), m_Cells.end(), [&](const VoxelCell& c) {
+    m_Cells.erase(std::remove_if(m_Cells.begin(), m_Cells.end(), [&](const CellCoord& c) {
         return touchedSet.count(MakeCellKey(c.x, 0, c.z)) > 0;
         }), m_Cells.end());
 
@@ -709,7 +714,8 @@ void VoxelGrid::OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellTy
             CellType t = GetCell(x, y, z);       // walkable 재판정이 반영된 최종값
             if (t == CellType::Empty) continue;
             if (!IsCellExposed(x, y, z)) continue;
-            m_Cells.push_back({ x, y, z, t });
+            m_Cells.push_back({ (int16_t)x, (int16_t)y, (int16_t)z });
+            outDelta.added.push_back({ (int16_t)x, (int16_t)y, (int16_t)z, t });
         }
     }
 }

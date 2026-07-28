@@ -128,8 +128,17 @@ public:
         float minHalfWidth = 3.0f,      // 중앙(가장 좁은 지점) 통로 반폭
         float cliffHeight = 4.0f);      // 절벽이 지면 위로 솟는 높이
 
+
+
+    // OverwriteCells 돌려주는 렌더 목록 변경분
+    struct TerrainEditDelta
+    {
+        struct AddedCell { int16_t x, y, z; CellType type; };
+        std::vector<DirectX::XMINT3>    removed;    // 렌더 목록에서 빠진 셀
+        std::vector<AddedCell>          added;      // 새로 추가된 셀
+    };
     // 지정된 셀 type 덮어쓰기 / 해당 컬럼 렌더 목록 및 표면 캐시 재구축
-    void OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellType type);
+    void OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellType type, TerrainEditDelta& outDelta);
 
     // 해당 셀이 공기(Empty)에 노출됐는지: 바닥/맵 경계이거나 6방향 이웃 중 하나라도 Empty
     // BuildFromVolumeSource와 AddNarrowingCliffs가 동일 로직을 공유하기 위한 헬퍼
@@ -178,15 +187,9 @@ public:
         int maxSearchRadius = 10) const;
 
 private:
-    // 표면 복셀 하나만 저장 (위치 + 타입)
-    struct VoxelCell
-    {
-        int      x, y, z;
-        CellType type;
-    };
 
-    // 렌더용 셀 저장소
-    std::vector<VoxelCell>  m_Cells;    
+    // 렌더용 셀 저장소 - 전체 복셀 좌표만 보관 
+    std::vector<CellCoord>  m_Cells;    
 
     // walkable 판별용 청크 구조
     std::vector<VoxelChunk> m_Chunks; 
