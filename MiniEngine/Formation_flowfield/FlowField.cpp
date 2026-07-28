@@ -64,18 +64,18 @@ void FlowField::Startup(void)
     m_MainScissor.right = (LONG)g_SceneColorBuffer.GetWidth();
     m_MainScissor.bottom = (LONG)g_SceneColorBuffer.GetHeight();
 
+    // ----- 렌더러 초기화 -----
     VoxelRenderer::Initialize();
     NpcRenderer::Initialize();
     FlowFieldArrowRenderer::Initialize();
     PreviewRenderer::Initialize();
 
-    // BMP 로드 → 복셀 생성 → GPU 업로드
-    // heightmap.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
+    // BMP 로드 -> 복셀 생성 -> GPU 업로드
+    // Heightmap02.bmp를 실행 파일과 같은 폴더에 두거나 경로 조정
     bool loaded = m_HeightMap.LoadFromBMP("Heightmap02.bmp",
         MAX_HEIGHT,     // 최대 높이 (월드 유닛)
         WORLD_SCALE,    // MapScale
         VOXEL_SIZE);    // 복셀 1개 크기 -> 복셀 수 = pow( (맵 크기 * MAP_SCALE) / VOXEL_SIZE), 2 )
-
 
     if (true == loaded)
     {
@@ -96,25 +96,6 @@ void FlowField::Startup(void)
         DirectX::XMFLOAT3 BottleneckStart{ 70.0f, 0.0f, 150.0f };
         DirectX::XMFLOAT3 BottleneckEnd{ 70.0f, 0.0f, 190.0f };
         m_VoxelGrid.AddNarrowingCliffs(BottleneckStart, BottleneckEnd, 12.0f, 1.0f);
-
-        
-        m_VoxelGrid.BuildInstanceList(m_VoxelInstances, &m_VoxelCellCoords);
-        VoxelRenderer::UpdateInstances(m_VoxelInstances);
-
-        // 색인 구축: 여기서만 전체를 한 번 순회함 (이후로는 절대 이렇게 다시 순회 안 함)
-        m_VoxelCoordToIndex.clear();
-        m_VoxelCoordToIndex.reserve(m_VoxelCellCoords.size());
-
-        // 청크 시각화용 자료 초기화
-        m_ChunkToVoxelIndices.clear();
-
-
-        for (size_t i = 0; i < m_VoxelCellCoords.size(); i++)
-        {
-            auto& c = m_VoxelCellCoords[i];
-            m_VoxelCoordToIndex[MakeCellKey(c.x, c.y, c.z)] = (int)i;
-            m_ChunkToVoxelIndices[CorridorFlowField::ChunkKeyOf(c.x, c.z)].push_back((int)i);
-        }
     }
     else
     {
@@ -146,13 +127,24 @@ void FlowField::Startup(void)
         Vector3(xz_position, MAX_HEIGHT * 2.0f, xz_position)    // 카메라 위치
     );
 
-
-    // npc 배치
-    m_Npc.Init(m_VoxelGrid);
-
     // m_MouseCaptured 기본값(true)과 맞춰 커서를 처음부터 숨김 상태로 시작
     ShowCursor(FALSE);
     GameInput::SetMouseExclusiveMode(true);
+
+
+
+
+    // ----- 각 클래스 초기화 -----
+    // 복셀 인스턴스 렌더값 초기화
+    m_Store.Initialize(&m_VoxelGrid);
+    m_Store.Build();
+    // 디버그 시각화 값 초기화
+    m_Debug.Initialize(&m_Store, &m_VoxelGrid, &m_Npc.GetFlowField());
+    // 동적 지형 생성기 초기화
+    m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug);
+    // npc 배치 초기화
+    m_Npc.Init(m_VoxelGrid);
+
 }
 
 void FlowField::Cleanup(void)
@@ -163,6 +155,14 @@ void FlowField::Cleanup(void)
 }
 
 
+
+
+
+//-------------------------------------
+//
+//  피킹 및 피킹 후 처리 함수
+//
+//-------------------------------------
 bool FlowField::ScreenPointToRay(int mouseX, int mouseY, Math::Vector3& outOrigin, Math::Vector3& outDir) const
 {
     // 뷰포트 크기 (m_MainViewport는 기존 RenderScene에서 쓰던 값 재사용)
@@ -205,7 +205,6 @@ FlowField::PickResult FlowField::PickVoxel() const
     return result;
 }
 
-
 void FlowField::HandleGroupMovePicking()
 {
     // Win32 절대 마우스 좌표 획득 (GameInput은 상대 델타만 제공하므로 별도 호출 필요)
@@ -219,15 +218,16 @@ void FlowField::HandleGroupMovePicking()
     // 1. 좌클릭: NPC 선택
     if (leftClicked && pick.hasRay)
     {
-        // 선택, 색상, 업로드
+        // 선택 / 색상  업로드
         m_Npc.TrySelectNpc(pick.rayOrigin, pick.rayDir);
 
-        if (m_HoverCellIndex >= 0 && m_HoverCellIndex != m_ConfirmedCellIndex)
+        int hover = m_Debug.GetHover();
+        if (hover >= 0 && !m_Debug.IsConfirmedIndex(hover))
         {
-            RestoreCellColor(m_HoverCellIndex);
-            changedVoxelIndices.push_back(m_HoverCellIndex);
+            m_Debug.RestoreCellColor(hover);
+            changedVoxelIndices.push_back(hover);
         }
-        m_HoverCellIndex = -1;
+        m_Debug.ClearHover();
         m_HoverActive = m_Npc.HasSelection();
     }
 
@@ -237,565 +237,118 @@ void FlowField::HandleGroupMovePicking()
         int newHoverIndex = -1;
         if (pick.hit)
         {
-            auto it = m_VoxelCoordToIndex.find(MakeCellKey(pick.cell));
-            if (it != m_VoxelCoordToIndex.end())
-                newHoverIndex = it->second;
+            int idx = m_Store.FindIndex(pick.cell);
+            if (idx > -1)
+            {
+                newHoverIndex = idx;
+            }
         }
-
-        if (newHoverIndex != m_HoverCellIndex)
+        int hover = m_Debug.GetHover();
+        if (newHoverIndex != hover)
         {
             // 이전 호버 셀 복원 (단, 그게 이미 확정된 목적지라면 초록 유지)
-            if (m_HoverCellIndex >= 0 && m_HoverCellIndex != m_ConfirmedCellIndex)
+            if (hover >= 0 && !m_Debug.IsConfirmedIndex(hover))
             {
-                RestoreCellColor(m_HoverCellIndex);
-                changedVoxelIndices.push_back(m_HoverCellIndex);
+                m_Debug.RestoreCellColor(hover);
+                changedVoxelIndices.push_back(hover);
             }
 
-            m_HoverCellIndex = newHoverIndex;
+            m_Debug.SetHover(newHoverIndex);
 
             // 새 호버 셀 초록 표시 (그게 이미 확정 목적지라면 어차피 초록이라 중복이어도 무해)
-            if (m_HoverCellIndex >= 0)
+            if (newHoverIndex >= 0)
             {
-                m_VoxelInstances[m_HoverCellIndex].colorType = kColorHover;
-                changedVoxelIndices.push_back(m_HoverCellIndex);
+                m_Store.SetColor(newHoverIndex, kColorHover);
+                changedVoxelIndices.push_back(newHoverIndex);
             }
         }
     }
-    else if (m_HoverCellIndex >= 0)
+    else if (m_Debug.GetHover() >= 0)
     {
         // NPC 선택이 해제된 상태라면 호버 프리뷰 종료 (확정 셀이 아니면 복원)
-        if (m_HoverCellIndex != m_ConfirmedCellIndex)
+        int hover = m_Debug.GetHover();
+        if (false == m_Debug.IsConfirmedIndex(hover))
         {
-            RestoreCellColor(m_HoverCellIndex);
-            changedVoxelIndices.push_back(m_HoverCellIndex);
+            m_Debug.RestoreCellColor(hover);
+            changedVoxelIndices.push_back(hover);
         }
-        m_HoverCellIndex = -1;
+        m_Debug.ClearHover();
     }
 
     // ---------- 3. 우클릭: 지금 호버 중인 셀을 목적지로 확정 ----------
-    if (rightClicked && m_Npc.HasSelection() && m_HoverCellIndex >= 0)
+    int hover = m_Debug.GetHover();
+    if (rightClicked && m_Npc.HasSelection() && hover >= 0)
     {
         // 이전 확정 셀이 있었고, 지금 호버 셀과 다르면 원래 색으로 복원
-        if (m_ConfirmedCellIndex >= 0 &&
-            m_ConfirmedCellIndex != m_HoverCellIndex)
+        if (m_Debug.HasConfirmed() && !m_Debug.IsConfirmedIndex(hover))
         {
-            RestoreCellColor(m_ConfirmedCellIndex);
-            changedVoxelIndices.push_back(m_ConfirmedCellIndex);
+            int prevConfirmed = m_Store.FindIndex(m_Debug.ConfirmedCoord());
+            if (prevConfirmed >= 0)
+            {
+                m_Debug.RestoreCellColor(prevConfirmed);
+                changedVoxelIndices.push_back(prevConfirmed);
+            }
         }
 
-        m_ConfirmedCellIndex = m_HoverCellIndex;
-        m_VoxelInstances[m_ConfirmedCellIndex].colorType = kColorHover; // 이미 초록이지만 명시적으로 재확인
-        changedVoxelIndices.push_back(m_HoverCellIndex);
+        VoxelGrid::CellCoord g = m_Store.CoordAt(hover);
+        DirectX::XMINT3 goalCoord{ g.x, g.y, g.z };
+        m_Debug.SetConfirmed(goalCoord);
+        m_Store.SetColor(hover, kColorHover);       // 이미 초록이지만 명시적으로 재확인
+        changedVoxelIndices.push_back(hover);
 
         m_HoverActive = false; // 목적지 확정 -> 실시간 호버 종료
 
 
         // ---- 파이프라인: 선택된 NPC 위치 -> A* -> 마스크 -> CorridorFlowField ----
-        auto& goalCoord = m_VoxelCellCoords[m_ConfirmedCellIndex];
-        DirectX::XMINT3 goalCell{ goalCoord.x, goalCoord.y, goalCoord.z };
-
         std::vector<DirectX::XMINT3> path;
-        if (m_Npc.SetGroupDestination(goalCell, &path))
+        if (m_Npc.SetGroupDestination(goalCoord, &path))
         {
             // A* 경로 셀 -> 복셀 인스턴스 인덱스로 변환
-            m_PathVoxelIndices.clear();
-            m_PathVoxelIndices.reserve(path.size());
-            for (const auto& node : path)
-            {
-                auto it = m_VoxelCoordToIndex.find(MakeCellKey(node.x, node.y, node.z));
-                if (it != m_VoxelCoordToIndex.end())    m_PathVoxelIndices.push_back(it->second);
-            }
+            m_Debug.SetPath(path);
 
-
-            // 성공 시 디버그 색칠/화살표 갱신 (FlowField의 시각화 책임)
-            std::vector<int64_t> prevKeys = m_OccupiedChunkKeys;
-            ReleaseChunks(0);
-            OccupyChunks(0);
-            CollectDebugColorChanges(changedVoxelIndices, prevKeys);
-            BuildArrowInstances();
+            std::vector<int64_t> prevKeys = m_Debug.OccupiedKeys();
+            m_Debug.ReleaseChunks(0);
+            m_Debug.OccupyChunks(0);
+            m_Debug.CollectDebugColorChanges(changedVoxelIndices, prevKeys);
+            m_Debug.BuildArrowInstances();
         }
     }
-    FlushVoxelInstanceChanges(changedVoxelIndices);
-}
-
-void FlowField::HandleTerrainBuildPicking()
-{
-    PickResult pick = PickVoxel();
-    bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
-
-    if (!pick.hit)
-    {
-        // 허공 조준 -> 미리보기 끔 (이미 꺼져 있으면 재업로드 스킵)
-        if (m_PreviewVisible)
-        {
-            PreviewRenderer::UpdateInstances({});
-            m_PreviewVisible = false;
-            m_PreviewAnchor = { INT32_MIN, INT32_MIN, INT32_MIN };
-        }
-        return;
-    }
-
-    DirectX::XMINT3 anchor = pick.cell;
-
-    // 앵커가 안 바뀌었으면 미리보기 GPU 업로드 스킵 (매 프레임 업로드 방지)
-    bool anchorChanged = (anchor.x != m_PreviewAnchor.x ||
-                          anchor.y != m_PreviewAnchor.y ||
-                          anchor.z != m_PreviewAnchor.z);
-
-    if (anchorChanged)
-    {
-        std::vector<DirectX::XMINT3> boxCells = ComputeBoxCells(pick.cell.x, pick.cell.y, pick.cell.z);
-
-        std::vector<PreviewRenderer::InstanceData> previewInstances;
-        previewInstances.reserve(boxCells.size());
-
-        const float cellSize = m_VoxelGrid.GetCellSize();
-        for (const auto& c : boxCells)
-        {
-            // 맵 밖 셀은 미리보기에서 제외 (SetCell의 bounds 필터와 동일 기준)
-            if (!m_VoxelGrid.IsInBounds(c.x, c.y, c.z))  continue;
-
-            Math::Vector3 worldPos = m_VoxelGrid.GetWorldPos(c.x, c.y, c.z);
-
-            PreviewRenderer::InstanceData inst{};
-            inst.position[0] = worldPos.GetX();
-            inst.position[1] = worldPos.GetY();
-            inst.position[2] = worldPos.GetZ();
-            inst.scale = cellSize;
-            inst.colorType = 20;   // 반투명 노랑 (CubePS)
-            previewInstances.push_back(inst);
-        }
-
-        PreviewRenderer::UpdateInstances(previewInstances);
-        m_PreviewVisible = !previewInstances.empty();
-        m_PreviewAnchor = anchor;
-    }
-
-    // 우클릭: 현재 미리보기 박스를 실제로 커밋
-    if (rightClicked && m_PreviewVisible)
-    {
-        std::vector<DirectX::XMINT3> boxCells = ComputeBoxCells(pick.cell.x, pick.cell.y, pick.cell.z);
-        ApplyTerrainEdit(boxCells);
-
-        // 커밋 직후 같은 앵커라도 지형이 바뀌었으니 다음 프레임에 강제 재평가
-        m_PreviewAnchor = { INT32_MIN, INT32_MIN, INT32_MIN };
-    }
-}
-
-void FlowField::ApplyTerrainEdit(const std::vector<DirectX::XMINT3>& cells)
-{
-    auto indexToCoord = [&](int idx) -> DirectX::XMINT3 {
-        const auto& c = m_VoxelCellCoords[idx];
-        return { c.x, c.y, c.z };
-    };
-
-    // 
-    bool hadConfirmed = (m_ConfirmedCellIndex >= 0);
-    DirectX::XMINT3 confirmedCoord = hadConfirmed ? indexToCoord(m_ConfirmedCellIndex) : DirectX::XMINT3{};
-    // a* 경로 다시 그리기 위한 임시 저장
-    std::vector<DirectX::XMINT3> pathCoords;
-    pathCoords.reserve(m_PathVoxelIndices.size());
-    for (int idx : m_PathVoxelIndices)
-    {
-        pathCoords.push_back(indexToCoord(idx));
-    }
-
-    VoxelGrid::TerrainEditDelta delta;
-    m_VoxelGrid.OverwriteCells(cells, VoxelGrid::CellType::Blocked, delta);
-
-    std::vector<int> dirty;
-    dirty.reserve(delta.removed.size() + delta.added.size());
-
-    // 1. 제거 - 인덱스 내림차순이어야함.
-    std::vector<int> removeIndices;
-    removeIndices.reserve(delta.removed.size());
-    for (const auto& co : delta.removed)
-    {
-        auto it = m_VoxelCoordToIndex.find(MakeCellKey(co));
-        if (it != m_VoxelCoordToIndex.end()) removeIndices.push_back(it->second);
-    }
-    std::sort(removeIndices.begin(), removeIndices.end(), std::greater<int>());
-    for (int idx : removeIndices)
-    {
-        RemoveInstanceAt(idx, dirty);
-    }
-    
-
-    // 2. 추가 - 배열 끝에  append 해주기
-    for (const auto& cell : delta.added)
-    {
-        AppendInstance(cell, dirty);
-    }
-
-
-    // 3. ? 축소로 범위 벗어난 dirty 인덱스 제거 (스왑 대상 pop된 경우)
-    // 3) 축소로 범위를 벗어난 dirty 인덱스 제거 (스왑 대상이 뒤이어 pop된 경우)
-    const int finalSize = (int)m_VoxelInstances.size();
-    dirty.erase(std::remove_if(dirty.begin(), dirty.end(),
-        [finalSize](int i) { return i >= finalSize; }), dirty.end());
-
-    // 4) 카운트 갱신 후 변경분만 GPU 업로드
-    VoxelRenderer::SetInstanceCount((uint32_t)finalSize);
-    FlushVoxelInstanceChanges(dirty);
-
-    // 5) 좌표 -> 새 인덱스 재매핑 (편집으로 사라진 셀은 누락)
-    auto remap = [&](const DirectX::XMINT3& co) -> int {
-        auto it = m_VoxelCoordToIndex.find(MakeCellKey(co.x, co.y, co.z));
-        return (it != m_VoxelCoordToIndex.end()) ? it->second : -1;
-    };
-    m_ConfirmedCellIndex = hadConfirmed ? remap(confirmedCoord) : -1;
-    m_HoverCellIndex = -1;
-
-    m_PathVoxelIndices.clear();
-    for (const auto& co : pathCoords)
-    {
-        int idx = remap(co);
-        if (idx >= 0) m_PathVoxelIndices.push_back(idx);
-    }
-
-    RefreshDebugColors();
+    m_Store.Flush(changedVoxelIndices);
 }
 
 void FlowField::OnEditModeChanged()
 {
-    // 미리보기 잔상 제거
     if (m_EditMode == EditMode::GroupMove)
     {
-        // 잔상 존재시,
-        if (true == m_PreviewVisible)
-        {
-            PreviewRenderer::UpdateInstances({});
-            m_PreviewVisible = false;
-            m_PreviewAnchor = { INT32_MIN, INT32_MIN, INT32_MIN };
-        }
+        m_TerrainEditor.OnDeactivate();   // 미리보기 잔상 제거
     }
-    // GroupMove -> TerrainBuild: 진행 중이던 호버 셀만 복원
     else
     {
-        if (m_HoverCellIndex >= 0 && m_HoverCellIndex != m_ConfirmedCellIndex)
+        // 진행 중이던 호버만 복원 (확정 목적지와 NPC 이동은 유지)
+        int hover = m_Debug.GetHover();
+        if (hover >= 0 && !m_Debug.IsConfirmedIndex(hover))
         {
             std::vector<int> changed;
-            RestoreCellColor(m_HoverCellIndex);
-            changed.push_back(m_HoverCellIndex);
-            FlushVoxelInstanceChanges(changed);
+            m_Debug.RestoreCellColor(hover);
+            changed.push_back(hover);
+            m_Store.Flush(changed);
         }
-        m_HoverCellIndex = -1;
+        m_Debug.ClearHover();
         m_HoverActive = false;
     }
 
 }
 
-void FlowField::BuildArrowInstances()
-{
-    std::vector<FlowFieldArrowRenderer::InstanceData> instances;
-
-    if (false == m_DebugShowArrows)   return;
-
-    float cellSize = m_VoxelGrid.GetCellSize();
-    const float ARROW_LENGTH = cellSize * 0.8f;     // 셀보다 살짝 작게함 -> 옆셀 침범 안하게
-    const float HEIGHT_OFFSET = cellSize * 0.8f;    // 지면 띄울 높이
-
-    for (int64_t key : m_OccupiedChunkKeys)
-    {
-        auto it = m_ChunkToVoxelIndices.find(key);
-        if (it == m_ChunkToVoxelIndices.end())   continue;
-
-        for (int idx : it->second)
-        {
-            const auto& c = m_VoxelCellCoords[idx];
-
-            DirectX::XMINT3 dir;
-            if (false == m_Npc.GetFlowField().SampleDirection(m_VoxelGrid, c.x, c.y, c.z, dir))  continue;
-
-            Math::Vector3 dirVec = Math::Normalize(Math::Vector3((float)dir.x, (float)dir.y, (float)dir.z));
-
-            Math::Vector3 worldPos = m_VoxelGrid.GetWorldPos(c.x, c.y, c.z);
-
-            FlowFieldArrowRenderer::InstanceData inst{};
-            inst.position[0] = worldPos.GetX();
-            inst.position[1] = worldPos.GetY() + HEIGHT_OFFSET;
-            inst.position[2] = worldPos.GetZ();
-            inst.length = ARROW_LENGTH;
-            inst.direction[0] = dirVec.GetX();
-            inst.direction[1] = dirVec.GetY();
-            inst.direction[2] = dirVec.GetZ();
-
-            instances.emplace_back(inst);
-        }
-        
-    }
-
-    FlowFieldArrowRenderer::UpdateInstances(instances);
-}
-
-void FlowField::OnGroupArrived()
-{
-    std::vector<int> changed;
-
-    // 1. 경로 / 확정 목적지 레이어 해제 (색 계산 전에 먼저 지워야 기본색이 나옴)
-    changed.insert(changed.end(), m_PathVoxelIndices.begin(), m_PathVoxelIndices.end());
-    m_PathVoxelIndices.clear();
-
-    if (m_ConfirmedCellIndex >= 0)
-    {
-        changed.push_back(m_ConfirmedCellIndex);
-        m_ConfirmedCellIndex = -1;
-    }
-
-    // 2. 청크 점유 해제 (해제 전 키를 남겨야 그 청크들도 다시 칠할 수 있음)
-    std::vector<int64_t> prevKeys = m_OccupiedChunkKeys;
-    ReleaseChunks(0);
-
-    // 3. 레이어가 전부 사라진 상태에서 색 재계산
-    for (int idx : changed)   RestoreCellColor(idx);
-    CollectDebugColorChanges(changed, prevKeys);
-
-    // 4. 화살표 제거 (m_OccupiedChunkKeys가 비었으므로 빈 인스턴스로 갱신됨)
-    BuildArrowInstances();
-
-    FlushVoxelInstanceChanges(changed);
-}
-
-uint32_t FlowField::GetBaseColorType(int instanceIndex) const
-{
-    auto& c = m_VoxelCellCoords[instanceIndex];
-    return (m_VoxelGrid.GetCell(c.x, c.y, c.z) == VoxelGrid::CellType::Walkable) ? 0u : 1u;
-}
-
-uint32_t FlowField::GetLayeredColorType(int instanceIndex) const
-{
-    if (instanceIndex < 0 || instanceIndex >= (int)m_VoxelCellCoords.size())
-        return kColorDefault;
-
-    // CollectDebugColorChanges의 레이어 순서와 동일한 우선순위
-    // (경로 루프가 확정 셀을 skip하므로 확정이 경로보다 우선)
-    if (instanceIndex == m_ConfirmedCellIndex)  return kColorHover;
-
-    if (std::find(m_PathVoxelIndices.begin(), m_PathVoxelIndices.end(), instanceIndex)
-        != m_PathVoxelIndices.end())            return kColorPath;
-
-    if (true == m_DebugShowChunks)
-    {
-        const auto& c = m_VoxelCellCoords[instanceIndex];
-        auto occIt = m_ChunkOccupants.find(CorridorFlowField::ChunkKeyOf(c.x, c.z));
-        if (occIt != m_ChunkOccupants.end() && !occIt->second.empty())
-        {
-            if (m_Npc.GetFlowField().IsVisited(m_VoxelGrid, c.x, c.y, c.z))
-                return 10u + (uint32_t)(occIt->second.back() % 8);
-        }
-    }
-
-    return GetBaseColorType(instanceIndex);
-}
-
-void FlowField::OccupyChunks(int groupId)
-{
-    ReleaseChunks(groupId);
-
-    m_OccupiedChunkKeys.clear();
-    for (const auto& kv : m_Npc.GetFlowField().GetChunks())
-    {
-        m_ChunkOccupants[kv.first].push_back(groupId);
-        m_OccupiedChunkKeys.push_back(kv.first);
-    }
-}
-
-void FlowField::ReleaseChunks(int groupId)
-{
-    for (auto key : m_OccupiedChunkKeys)
-    {
-        auto it = m_ChunkOccupants.find(key);
-        if (it == m_ChunkOccupants.end())    continue;
-
-        // 청크 vector에서 해당 groupId 지움
-        auto& occupants = it->second;
-        occupants.erase(std::remove(occupants.begin(), occupants.end(), groupId), occupants.end());
-
-        // 지워서 해당 청크에 대한 점유 그룹 없음면 청크 자체(점유에대한)를 지움
-        if (occupants.empty())
-        {
-            m_ChunkOccupants.erase(it);
-        }
-    }
-    m_OccupiedChunkKeys.clear();
-}
-
-
-void FlowField::CollectDebugColorChanges(std::vector<int>& changed, const std::vector<int64_t>& extraKeys)
-{
-    // 예상 크기 계산
-    size_t reserveCount = 0;
-    for (auto key : m_OccupiedChunkKeys)
-    {
-        auto it = m_ChunkToVoxelIndices.find(key);
-        if (it != m_ChunkToVoxelIndices.end())   reserveCount += it->second.size();
-    }
-    for (auto key : extraKeys)
-    {
-        auto it = m_ChunkToVoxelIndices.find(key);
-        if (it != m_ChunkToVoxelIndices.end())   reserveCount += it->second.size();
-    }
-    changed.reserve(reserveCount + m_PathVoxelIndices.size() + 2);      // 청크 + 경로 + 호버링셀
-
-    // 0. 리셋 - 기본 복셀 색 먼저 씌운다
-    auto paintChunk = [&](int64_t key)
-    {
-        auto it = m_ChunkToVoxelIndices.find(key);
-        if (it == m_ChunkToVoxelIndices.end()) return;
-
-        bool useGroupColor = false;
-        uint32_t groupColor = 0;
-
-        if (true == m_DebugShowChunks)
-        {
-            auto occIt = m_ChunkOccupants.find(key);
-            if (occIt != m_ChunkOccupants.end() && !occIt->second.empty())
-            {
-                useGroupColor = true;
-                groupColor = 10u + (uint32_t)(occIt->second.back() % 8);
-            }
-        }
-
-        for (int idx : it->second)
-        {
-            bool isVisit = false;
-            if (true == useGroupColor)
-            {
-                const auto& c = m_VoxelCellCoords[idx];
-                isVisit = m_Npc.GetFlowField().IsVisited(m_VoxelGrid, c.x, c.y, c.z);
-            }
-
-            m_VoxelInstances[idx].colorType = isVisit ? groupColor : GetBaseColorType(idx);
-            changed.push_back(idx);
-        }
-    };
-
-    //
-    for (int64_t key : m_OccupiedChunkKeys) paintChunk(key);
-    for (int64_t key : extraKeys)           paintChunk(key);
-
-    // 1 - 호버 / 확정 목적지
-    if (m_ConfirmedCellIndex >= 0)
-    {
-        m_VoxelInstances[m_ConfirmedCellIndex].colorType = kColorHover;
-        changed.push_back(m_ConfirmedCellIndex);
-    }
-    if (m_HoverCellIndex >= 0)
-    {
-        m_VoxelInstances[m_HoverCellIndex].colorType = kColorHover;
-        changed.push_back(m_HoverCellIndex);
-    }
-
-
-    // 2 - A* 경로
-    for (int idx : m_PathVoxelIndices)
-    {
-        if (idx == m_ConfirmedCellIndex) continue;
-        m_VoxelInstances[idx].colorType = kColorPath;        // 빨간색으로 지정
-        changed.push_back(idx);
-    }
-}
 
 
 
-void FlowField::RefreshDebugColors(const std::vector<int64_t>& extraKeys)
-{
-    std::vector<int> changed;
-    CollectDebugColorChanges(changed, extraKeys);
-    FlushVoxelInstanceChanges(changed);
-}
 
 
-std::vector<DirectX::XMINT3> FlowField::ComputeBoxCells(int hx, int hy, int hz) const
-{
-    constexpr int R = 1;        // 3x3x3
-    std::vector<DirectX::XMINT3> cells;
-    cells.reserve((2 * R + 1) * (2 * R + 1) * (2 * R + 1));
-   
-    for (int y = hy + 1; y <= hy + 1 + (2 * R); ++y)
-    {
-        for (int z = hz - R; z <= hz + R; ++z)
-        {
-            for (int x = hx - R; x <= hx + R; ++x)
-            {
-                cells.push_back({ x, y, z });
-            }
-        }
-    }
-    return cells;
-}
-
-
-
-void FlowField::RestoreCellColor(int instanceIndex)
-{
-    if (instanceIndex < 0 || instanceIndex >= (int)m_VoxelCellCoords.size()) return;
-    m_VoxelInstances[instanceIndex].colorType = GetLayeredColorType(instanceIndex);
-}
-
-// GPU 갱신 호출은 매번 CPU-GPU 동기화를 동반하므로, 호출 횟수가 곧 비용.
-// 변경 인덱스가 배열 전체에 흩어져 있으면 연속 구간이 잘게 쪼개져 호출이 폭증함.
-// 이 경우 차라리 전체를 한 번에 올리는 게 훨씬 빠름 (동기화 1번 vs N번)
-void FlowField::FlushVoxelInstanceChanges(std::vector<int>& changedIndices)
-{
-    if (changedIndices.empty()) return;
-
-    std::sort(changedIndices.begin(), changedIndices.end());
-    // 중복 인덱스 제거 (한 프레임에 같은 셀이 두 번 바뀐 경우 대비)
-    changedIndices.erase(std::unique(changedIndices.begin(), changedIndices.end()), changedIndices.end());
-
-    // 구간 개수가 이 값을 넘으면 부분 갱신을 포기하고 전체 업로드로 전환.
-    const int MAX_RANGES = 32;
-
-    // 1단계: 실제 업로드 전에 구간 개수만 먼저 셈
-    int rangeCount = 0;
-    {
-        size_t i = 0;
-        while (i < changedIndices.size())
-        {
-            while (i + 1 < changedIndices.size() && changedIndices[i + 1] == changedIndices[i] + 1)
-                i++;
-            rangeCount++;
-            i++;
-        }
-    }
-
-    // 2단계: 구간이 너무 많으면 전체 업로드 1회로 대체
-    if (rangeCount > MAX_RANGES)
-    {
-        VoxelRenderer::UpdateInstances(m_VoxelInstances);
-        return;
-    }
-
-    // 구간이 적으면 부분로직
-    size_t i = 0;
-    while (i < changedIndices.size())
-    {
-        size_t runStart = i;
-        // 인덱스가 연속(1씩 증가)인 동안 구간을 넓힘
-        while (i + 1 < changedIndices.size() && changedIndices[i + 1] == changedIndices[i] + 1)
-        {
-            i++;
-        }
-
-        int startIndex = changedIndices[runStart];
-        int count = changedIndices[i] - startIndex + 1;
-
-        // m_VoxelInstances에서 해당 구간이 실제로도 메모리상 연속이므로
-        // 포인터 하나로 count개를 통째로 넘길 수 있음
-        VoxelRenderer::UpdateInstanceRange((uint32_t)startIndex, (uint32_t)count, &m_VoxelInstances[startIndex]);
-        i++;
-
-        rangeCount++;
-    }
-
-    //char buf[128]; 
-    //sprintf_s(buf, "FlushVoxelInstanceChanges: %zu indices -> %d ranges\n",
-    //    changedIndices.size(), rangeCount);
-    //OutputDebugStringA(buf);
-}
-
-
+//-------------------------------------
+//
+//  업데이트 및 렌더
+//
+//-------------------------------------
 void FlowField::Update(float dt)
 {
     // Tab: 인게임(카메라 조작) <-> 해제(마우스 보임, 피킹 가능) 모드 토글
@@ -827,17 +380,24 @@ void FlowField::Update(float dt)
     }
     else  // 해제 모드: 카메라는 멈추고, 클릭으로 NPC 선택/목적지 지정만 가능
     {
-        if (m_EditMode == EditMode::GroupMove)          HandleGroupMovePicking();
-        else if (m_EditMode == EditMode::TerrainBuild)  HandleTerrainBuildPicking();
+        if (m_EditMode == EditMode::GroupMove)
+        {
+            HandleGroupMovePicking();
+        }
+        else
+        {
+            PickResult pick = PickVoxel();
+            bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
+            m_TerrainEditor.HandlePicking(pick.hit, pick.cell, rightClicked);
+        }
     }
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
 
 
-
     // 전원 도착(HasGoal true->false) 시 시각화 초기화
     const bool hasGoal = m_Npc.HasGoal();
-    if (m_PrevHasGoal && !hasGoal)   OnGroupArrived();
+    if (m_PrevHasGoal && !hasGoal)   m_Debug.OnGroupArrived();
     m_PrevHasGoal = hasGoal;
 
     // F1: 솔리드 <-> 와이어프레임 토글
@@ -851,87 +411,15 @@ void FlowField::Update(float dt)
     // F2 - flowfield 색 바꾸기
     if (GameInput::IsFirstPressed(GameInput::kKey_f2))
     {
-        m_DebugShowChunks = !m_DebugShowChunks;
-        RefreshDebugColors();   // 켜고 끌 때 즉시 반영
+        m_Debug.ToggleChunks();
+        m_Debug.RefreshDebugColors();  // 켜고 끌 때 즉시 반영
     }
     // F3 - flowfield dir 시각화
     if (GameInput::IsFirstPressed(GameInput::kKey_f3))
     {
-        m_DebugShowArrows = !m_DebugShowArrows;
-        FlowFieldArrowRenderer::SetEnabled(m_DebugShowArrows);
-        BuildArrowInstances();
+        m_Debug.ToggleArrows();
+        m_Debug.BuildArrowInstances();
     }
-}
-//-----------------------------------------------
-//  인스턴스 일부 갱신용 헬퍼
-//-----------------------------------------------
-void FlowField::EraseFromChunkIndex(int64_t chunkKey, int idx)
-{
-    auto it = m_ChunkToVoxelIndices.find(chunkKey);
-    if (it == m_ChunkToVoxelIndices.end()) return;
-
-    auto& vec = it->second;
-    vec.erase(std::remove(vec.begin(), vec.end(), idx), vec.end());
-    if (vec.empty()) m_ChunkToVoxelIndices.erase(it);
-}
-
-void FlowField::ReindexInChunkIndex(int64_t chunkKey, int oldIdx, int newIdx)
-{
-    auto it = m_ChunkToVoxelIndices.find(chunkKey);
-    if (it == m_ChunkToVoxelIndices.end()) return;
-
-    for (int& v : it->second)
-        if (v == oldIdx) { v = newIdx; break; }
-}
-
-void FlowField::RemoveInstanceAt(int idx, std::vector<int>& dirty)
-{
-    const auto& co = m_VoxelCellCoords[idx];
-
-    // 이 셀의 색인 제거
-    m_VoxelCoordToIndex.erase(MakeCellKey(co.x, co.y, co.z));
-    EraseFromChunkIndex(CorridorFlowField::ChunkKeyOf(co.x, co.z), idx);
-
-    int lastIdx = (int)m_VoxelInstances.size() - 1;
-    if (idx != lastIdx)
-    {
-        // 배열 끝 원소를 빈 자리로 이동 (이 한 원소만 인덱스가 바뀜)
-        m_VoxelInstances[idx] = m_VoxelInstances[lastIdx];
-        m_VoxelCellCoords[idx] = m_VoxelCellCoords[lastIdx];
-
-        const auto& sc = m_VoxelCellCoords[idx];
-        m_VoxelCoordToIndex[MakeCellKey(sc.x, sc.y, sc.z)] = idx;
-        ReindexInChunkIndex(CorridorFlowField::ChunkKeyOf(sc.x, sc.z), lastIdx, idx);
-
-        dirty.push_back(idx);
-    }
-
-    m_VoxelInstances.pop_back();
-    m_VoxelCellCoords.pop_back();
-}
-//-----------------------------------------------
-
-void FlowField::AppendInstance(const VoxelGrid::TerrainEditDelta::AddedCell& cell,
-    std::vector<int>& dirty)
-{
-    const float cellSize = m_VoxelGrid.GetCellSize();
-    int idx = (int)m_VoxelInstances.size();
-
-    VoxelRenderer::InstanceData inst{};
-    inst.position[0] = cell.x * cellSize;
-    inst.position[1] = cell.y * cellSize;
-    inst.position[2] = cell.z * cellSize;
-    inst.scale = cellSize;
-    // BuildInstanceList와 동일한 기본색 규칙 (디버그 덧칠은 RefreshDebugColors가 담당)
-    inst.colorType = (cell.type == VoxelGrid::CellType::Walkable) ? 0u : 1u;
-
-    m_VoxelInstances.push_back(inst);
-    m_VoxelCellCoords.push_back({ (int16_t)cell.x, (int16_t)cell.y, (int16_t)cell.z });
-
-    m_VoxelCoordToIndex[MakeCellKey(cell.x, cell.y, cell.z)] = idx;
-    m_ChunkToVoxelIndices[CorridorFlowField::ChunkKeyOf(cell.x, cell.z)].push_back(idx);
-
-    dirty.push_back(idx);
 }
 
 void FlowField::RenderScene(void)
@@ -959,7 +447,7 @@ void FlowField::RenderScene(void)
     // flowfield 화살표
     FlowFieldArrowRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
 
-    // 지형 생성 미리보기 (반투명, 깊이 읽기전용) — 불투명 전부 그린 뒤 마지막에 얹기
+    // 지형 생성 미리보기 (반투명, 깊이 읽기전용) — 불투명 렌더(마지막에 그릴것)
     PreviewRenderer::Render(ctx, m_Camera.GetViewProjMatrix());
 
     // Present 전이
