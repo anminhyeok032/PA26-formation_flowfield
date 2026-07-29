@@ -120,6 +120,7 @@ bool NpcManager::TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector
 bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     std::vector<DirectX::XMINT3>* outPath)
 {
+    CORE_SCOPE(CorridorField_Build);
     MemoryProbe probe("SetGroupDestination");
     m_HasGoal = false;
     const size_t n = m_NpcInstances.size();
@@ -229,6 +230,8 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 
     probe.Report();
     m_CorridorField.ReportMemory();
+    DEBUGPRINT("leaf chunks=%zu\n", leaf.field.GetChunks().size());
+
     return true;
 }
 

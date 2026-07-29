@@ -1,4 +1,4 @@
-#include "pch.h"              // MiniEngine ÇÁ·ÎÁ§Æ® ±Ô¾à (¾øÀ¸¸é Á¦°Å)
+ï»¿#include "pch.h"              // MiniEngine í”„ë¡œì íŠ¸ ê·œì•½ (ì—†ìœ¼ë©´ ì œê±°)
 #include "ScopedCpuTimer.h"
 #include "Utility.h"
 #include "GraphicsCore.h"     // Graphics::GetFrameCount()
@@ -8,8 +8,8 @@
 
 namespace
 {
-    // CoreScope enum°ú ¼ø¼­¡¤°³¼ö°¡ Á¤È®È÷ ÀÏÄ¡ÇØ¾ß ÇÔ.
-    // enum¿¡ Ç×¸ñÀ» Ãß°¡ÇÏ¸é ¿©±âµµ °°Àº À§Ä¡¿¡ Ãß°¡ÇÒ °Í (¾Æ·¡ static_assert°¡ Àâ¾ÆÁÜ).
+    // CoreScope enumê³¼ ìˆœì„œÂ·ê°œìˆ˜ê°€ ì •í™•íˆ ì¼ì¹˜í•´ì•¼ í•¨.
+    // enumì— í•­ëª©ì„ ì¶”ê°€í•˜ë©´ ì—¬ê¸°ë„ ê°™ì€ ìœ„ì¹˜ì— ì¶”ê°€í•  ê²ƒ (ì•„ë˜ static_assertê°€ ì¡ì•„ì¤Œ).
     const char* kScopeNames[] =
     {
         "NpcUpdateCore",
@@ -21,18 +21,19 @@ namespace
         "DestInitMovement",
         "DestFieldBuild",
         "FieldDijkstra",
-        "FieldComputeDir"
+        "FieldComputeDir",
+        "CorridorField_Build"
     };
     static_assert(_countof(kScopeNames) == (int)CoreScope::COUNT,
-        "kScopeNames°¡ CoreScope enum°ú °³¼ö°¡ ´Ù¸§ - µÑÀ» ÇÔ²² °»½ÅÇÒ °Í");
+        "kScopeNamesê°€ CoreScope enumê³¼ ê°œìˆ˜ê°€ ë‹¤ë¦„ - ë‘˜ì„ í•¨ê»˜ ê°±ì‹ í•  ê²ƒ");
 }
 
 void CoreTimer::Report(const char* filePath)
 {
     Stat* stats = Stats();
 
-    // ÇÑ ¹øµµ È£ÃâµÇÁö ¾ÊÀº ½ºÄÚÇÁ´Â Á¦¿ÜÇÏ°í, total ³»¸²Â÷¼ø Á¤·Ä(º´¸ñºÎÅÍ º¸ÀÌ°Ô).
-    // ÀÎµ¦½º¸¸ Á¤·ÄÇØ ¿øº» ¹è¿­Àº °Çµå¸®Áö ¾ÊÀ½.
+    // í•œ ë²ˆë„ í˜¸ì¶œë˜ì§€ ì•Šì€ ìŠ¤ì½”í”„ëŠ” ì œì™¸í•˜ê³ , total ë‚´ë¦¼ì°¨ìˆœ ì •ë ¬(ë³‘ëª©ë¶€í„° ë³´ì´ê²Œ).
+    // ì¸ë±ìŠ¤ë§Œ ì •ë ¬í•´ ì›ë³¸ ë°°ì—´ì€ ê±´ë“œë¦¬ì§€ ì•ŠìŒ.
     std::vector<int> order;
     order.reserve((int)CoreScope::COUNT);
     for (int i = 0; i < (int)CoreScope::COUNT; ++i)
@@ -41,17 +42,17 @@ void CoreTimer::Report(const char* filePath)
     std::sort(order.begin(), order.end(),
         [stats](int a, int b) { return stats[a].totalMs > stats[b].totalMs; });
 
-    // append ¸ğµå - ¿©·¯ ¹ø È£ÃâÇØµµ ÀÌ·ÂÀÌ ½×ÀÓ(Reset°ú Á¶ÇÕÇØ ±¸°£º° ºñ±³ °¡´É)
+    // append ëª¨ë“œ - ì—¬ëŸ¬ ë²ˆ í˜¸ì¶œí•´ë„ ì´ë ¥ì´ ìŒ“ì„(Resetê³¼ ì¡°í•©í•´ êµ¬ê°„ë³„ ë¹„êµ ê°€ëŠ¥)
     FILE* fp = nullptr;
     fopen_s(&fp, filePath, "a");
 
     auto emit = [&](const char* line)
     {
-        Utility::Print(line);          // µğ¹ö°Å ºÎÂø ½Ã VS Ãâ·Â Ã¢
-        if (fp) fputs(line, fp);       // Ç×»ó ÆÄÀÏ
+        Utility::Print(line);          // ë””ë²„ê±° ë¶€ì°© ì‹œ VS ì¶œë ¥ ì°½
+        if (fp) fputs(line, fp);       // í•­ìƒ íŒŒì¼
     };
 
-    char buf[256];   // Utility::Printf°¡ ³»ºÎ ¹öÆÛ 256B¶ó, ÇÑ ÁÙ¾¿ ³ª´² Ãâ·ÂÇÒ °Í
+    char buf[256];   // Utility::Printfê°€ ë‚´ë¶€ ë²„í¼ 256Bë¼, í•œ ì¤„ì”© ë‚˜ëˆ  ì¶œë ¥í•  ê²ƒ
 
    
 
@@ -68,8 +69,8 @@ void CoreTimer::Report(const char* filePath)
         emit(buf);
     }
 
-    // NpcUpdateCoreÀÇ calls = ½ÇÁ¦·Î ÀÌµ¿ÀÌ µ¹¾Æ°£ ÇÁ·¹ÀÓ ¼ö.
-    // ¸ñÀûÁö ÆÄÀÌÇÁ¶óÀÎ(Dest*)Àº ¿ìÅ¬¸¯ È½¼öÀÌ¹Ç·Î ºĞ¸ğ°¡ ´Ù¸£´Ù´Â Á¡¿¡ ÁÖÀÇ.
+    // NpcUpdateCoreì˜ calls = ì‹¤ì œë¡œ ì´ë™ì´ ëŒì•„ê°„ í”„ë ˆì„ ìˆ˜.
+    // ëª©ì ì§€ íŒŒì´í”„ë¼ì¸(Dest*)ì€ ìš°í´ë¦­ íšŸìˆ˜ì´ë¯€ë¡œ ë¶„ëª¨ê°€ ë‹¤ë¥´ë‹¤ëŠ” ì ì— ì£¼ì˜.
     const Stat& frameStat = stats[(int)CoreScope::NpcUpdateCore];
     if (frameStat.calls > 0)
     {

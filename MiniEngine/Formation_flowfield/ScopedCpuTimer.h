@@ -14,6 +14,7 @@ enum class CoreScope : int
     DestFieldBuild,
     FieldDijkstra,
     FieldComputeDir,
+    CorridorField_Build,
     COUNT
 };
 
