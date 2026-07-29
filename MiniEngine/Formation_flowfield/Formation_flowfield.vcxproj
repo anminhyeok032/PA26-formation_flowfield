@@ -152,13 +152,16 @@
   <ItemGroup>
     <ClCompile Include="AStarPathfinder.cpp" />
     <ClCompile Include="CorridorFlowField.cpp" />
+    <ClCompile Include="DebugVisualizer.cpp" />
     <ClCompile Include="FlowField.cpp" />
     <ClCompile Include="FlowFieldArrowRenderer.cpp" />
     <ClCompile Include="GridNeighbors.cpp" />
     <ClCompile Include="HeightMap.cpp" />
     <ClCompile Include="NpcManager.cpp" />
     <ClCompile Include="NpcRenderer.cpp" />
-    <ClCompile Include="PathCorrider.cpp" />
+    <ClCompile Include="PathCorridor.cpp" />
+    <ClCompile Include="PreviewRenderer.cpp" />
+    <ClCompile Include="TerrainEditor.cpp" />
     <ClCompile Include="ScopedCpuTimer.cpp" />
     <ClCompile Include="VoxelGrid.cpp" />
     <ClCompile Include="VoxelRenderer.cpp" />
@@ -236,6 +239,7 @@
     <ClInclude Include="CellReservation.h" />
     <ClInclude Include="ChunkKey.h" />
     <ClInclude Include="CorridorFlowField.h" />
+    <ClInclude Include="DebugVisualizer.h" />
     <ClInclude Include="FlowField.h" />
     <ClInclude Include="FlowFieldArrowRenderer.h" />
     <ClInclude Include="GridNeighbors.h" />
@@ -244,8 +248,12 @@
     <ClInclude Include="NpcManager.h" />
     <ClInclude Include="NpcRenderer.h" />
     <ClInclude Include="PathCorridor.h" />
+    <ClInclude Include="PreviewRenderer.h" />
     <ClInclude Include="ScopedCpuTimer.h" />
+    <ClInclude Include="TerrainEditor.h" />
     <ClInclude Include="VoxelGrid.h" />
+    <ClCompile Include="VoxelInstanceStore.cpp" />
+    <ClInclude Include="VoxelInstanceStore.h" />
     <ClInclude Include="VoxelRenderer.h" />
   </ItemGroup>
   <ItemGroup>
@@ -327,6 +335,10 @@
       <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling FlowFieldArrowVS.hlsl</Message>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)CompiledShaders\FlowFieldArrowVS.h;%(Outputs)</Outputs>
     </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Heightmap.bmp" />
+    <Image Include="Heightmap02.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemDefinitionGroup>

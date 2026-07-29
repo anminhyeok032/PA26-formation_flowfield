@@ -34,5 +34,8 @@ float4 main(VSOutput input) : SV_Target
     if (input.colorType == 16) return float4(0.5f, 0.8f, 0.4f, 1.0f);  // lite green
     if (input.colorType == 17) return float4(0.6f, 0.6f, 0.6f, 1.0f);  // grey
 
+    // 20: Preview Dynamic voxel (BlendTraditional + DepthReadOnly)
+    if (input.colorType == 20) return float4(1.0f, 0.9f, 0.2f, 0.4f);  //- half alpha yellow
+
     return float4(1.0f, 1.0f, 0.0f, 1.0f);  // UB - yellow
 }

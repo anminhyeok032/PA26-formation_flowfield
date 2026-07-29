@@ -5,10 +5,6 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="헤더 파일">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
     <Filter Include="Render">
       <UniqueIdentifier>{7765d3c0-5eea-4c50-a26c-91f312e512ba}</UniqueIdentifier>
     </Filter>
@@ -37,6 +33,12 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{c098d818-ec34-458d-aa2b-b4ec260b758e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Simulation\Terrain">
+      <UniqueIdentifier>{fe67eee9-9d10-4dfa-b52f-6fba09df4ffd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Simulation\DebugCheck">
+      <UniqueIdentifier>{ca9137ac-195e-44b2-9493-9cc342b4b5cc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -45,16 +47,13 @@
     <ClCompile Include="VoxelRenderer.cpp">
       <Filter>Render</Filter>
     </ClCompile>
-    <ClCompile Include="HeightMap.cpp">
-      <Filter>Simulation</Filter>
-    </ClCompile>
     <ClCompile Include="VoxelGrid.cpp">
       <Filter>Simulation\Voxel</Filter>
     </ClCompile>
     <ClCompile Include="AStarPathfinder.cpp">
       <Filter>NPC\PathFinding</Filter>
     </ClCompile>
-    <ClCompile Include="PathCorrider.cpp">
+    <ClCompile Include="PathCorridor.cpp">
       <Filter>NPC\PublicFunction</Filter>
     </ClCompile>
     <ClCompile Include="GridNeighbors.cpp">
@@ -71,6 +70,21 @@
     </ClCompile>
     <ClCompile Include="NpcManager.cpp">
       <Filter>NPC</Filter>
+    </ClCompile>
+    <ClCompile Include="PreviewRenderer.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="VoxelInstanceStore.cpp">
+      <Filter>Simulation\Voxel</Filter>
+    </ClCompile>
+    <ClCompile Include="HeightMap.cpp">
+      <Filter>Simulation\Terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="DebugVisualizer.cpp">
+      <Filter>Simulation\DebugCheck</Filter>
+    </ClCompile>
+    <ClCompile Include="TerrainEditor.cpp">
+      <Filter>Simulation\Terrain</Filter>
     </ClCompile>
     <ClCompile Include="ScopedCpuTimer.cpp">
       <Filter>소스 파일</Filter>
@@ -102,9 +116,6 @@
   <ItemGroup>
     <ClInclude Include="VoxelRenderer.h">
       <Filter>Render</Filter>
-    </ClInclude>
-    <ClInclude Include="HeightMap.h">
-      <Filter>Simulation</Filter>
     </ClInclude>
     <ClInclude Include="VoxelGrid.h">
       <Filter>Simulation\Voxel</Filter>
@@ -139,11 +150,39 @@
     <ClInclude Include="CellReservation.h">
       <Filter>소스 파일</Filter>
     </ClInclude>
+    <ClInclude Include="PreviewRenderer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="VoxelInstanceStore.h">
+      <Filter>Simulation\Voxel</Filter>
+    </ClInclude>
+    <ClInclude Include="HeightMap.h">
+      <Filter>Simulation\Terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="DebugVisualizer.h">
+      <Filter>Simulation\DebugCheck</Filter>
+    </ClInclude>
     <ClInclude Include="ScopedCpuTimer.h">
-      <Filter>Simulation</Filter>
+      <Filter>Simulation\DebugCheck</Filter>
+    </ClInclude>
+    <ClInclude Include="TerrainEditor.h">
+      <Filter>Simulation\Terrain</Filter>
     </ClInclude>
     <ClInclude Include="MemoryProbe.h">
       <Filter>Simulation</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Heightmap.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="Heightmap02.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config">
+      <Filter>리소스 파일</Filter>
+    </None>
   </ItemGroup>
 </Project>

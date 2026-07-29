@@ -487,13 +487,10 @@ bool NpcManager::TryPrimaryDirection(size_t i, const DirectX::XMINT3& curr, floa
 {
     outWaited = false;
 
-    DirectX::XMFLOAT3 fdir;
-    if (false == m_CorridorField.SampleDirection(*m_Grid, curr.x, curr.y, curr.z, fdir))
-        return false;
-    if (fdir.x * fdir.x + fdir.y * fdir.y + fdir.z * fdir.z < 1e-6f)
+    DirectX::XMINT3 desired;
+    if (false == m_CorridorField.SampleDirection(*m_Grid, curr.x, curr.y, curr.z, desired))
         return false;
 
-    DirectX::XMINT3 desired{ (int)std::round(fdir.x), (int)std::round(fdir.y), (int)std::round(fdir.z) };
     DirectX::XMINT3 desiredCell{ curr.x + desired.x, curr.y + desired.y, curr.z + desired.z };
 
     // (1) 1순위 방향이 바로 가능하면 그대로

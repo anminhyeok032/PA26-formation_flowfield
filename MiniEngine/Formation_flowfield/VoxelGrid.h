@@ -65,7 +65,6 @@ private:
 
 
 // 복셀 메모리는 16^3 청크(VoxelChunk)로 구성 — 3D A*/FlowField 인접 접근 캐시 효율용.
-// TODO : 청크 내부 인덱싱 Morton order 전환은 BFS/A* 프로파일링 후 결정
 class VoxelGrid
 {
 public:
@@ -79,7 +78,8 @@ public:
     void SetCell(int x, int y, int z, CellType type);
 
     // 격자 좌표 하나 (우클릭 피킹 결과와 렌더 인스턴스를 매칭하기 위한 용도)
-    struct CellCoord { int x, y, z; };
+    // 좌표는 21비트 키(MakeCellKey)에 담기는 크기 (실맵 좌표 << 32767).
+    struct CellCoord { int16_t x, y, z; };
 
     // 렌더용 인스턴스 목록 생성.
     // outCoords가 주어지면 outInstances[i]에 대응하는 격자 좌표를 같은 순서로 채움
@@ -128,6 +128,18 @@ public:
         float minHalfWidth = 3.0f,      // 중앙(가장 좁은 지점) 통로 반폭
         float cliffHeight = 4.0f);      // 절벽이 지면 위로 솟는 높이
 
+
+
+    // OverwriteCells 돌려주는 렌더 목록 변경분
+    struct TerrainEditDelta
+    {
+        struct AddedCell { int16_t x, y, z; CellType type; };
+        std::vector<DirectX::XMINT3>    removed;    // 렌더 목록에서 빠진 셀
+        std::vector<AddedCell>          added;      // 새로 추가된 셀
+    };
+    // 지정된 셀 type 덮어쓰기 / 해당 컬럼 렌더 목록 및 표면 캐시 재구축
+    void OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellType type, TerrainEditDelta& outDelta);
+
     void ReportMemory(const char* filePath = "mem_VoxelGrid.txt") const;
 
     // 해당 셀이 공기(Empty)에 노출됐는지: 바닥/맵 경계이거나 6방향 이웃 중 하나라도 Empty
@@ -141,12 +153,19 @@ public:
 
 
 
+
+
     // 패스 2 — 배치 완료 후 표면 복셀 walkable 재판정
     void ValidateWalkable();
     // 표면 복셀인지 확인 (위쪽이 비어있는 복셀)
     bool IsSurface(int x, int y, int z) const;
     // x,z 위치의 표면 y값 반환
     int  GetSurfaceY(int x, int z) const;
+    // 맵 밖인지 반환
+    bool IsInBounds(int x, int y, int z) const
+    {
+        return x >= 0 && x < m_SizeX && y >= 0 && y < m_SizeY&& z >= 0 && z < m_SizeZ;
+    }
 
 
     // Y List를 받아 순회용 구조체
@@ -170,15 +189,9 @@ public:
         int maxSearchRadius = 10) const;
 
 private:
-    // 표면 복셀 하나만 저장 (위치 + 타입)
-    struct VoxelCell
-    {
-        int      x, y, z;
-        CellType type;
-    };
 
-    // 렌더용 셀 저장소
-    std::vector<VoxelCell>  m_Cells;    
+    // 렌더용 셀 저장소 - 전체 복셀 좌표만 보관 
+    std::vector<CellCoord>  m_Cells;    
 
     // walkable 판별용 청크 구조
     std::vector<VoxelChunk> m_Chunks; 
@@ -211,8 +224,8 @@ private:
     void RefreshSurfaceColumn(int x, int z); 
     // 지형이 확정된 직후(모든 SetCell 완료 후) 호출 — 표면 캐시 할당 + 전체 컬럼 1회 스캔.
     void BuildSurfaceCache();
-
-
+    // (x,y,z) 헤드룸 walkable 조건
+    bool CheckWalkableCondition(int x, int y, int z) const;
 
     void ToChunkCoord(int x, int y, int z, int& chunkIndex, int& lx, int& ly, int& lz) const;
 };
