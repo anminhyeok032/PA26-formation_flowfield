@@ -24,6 +24,7 @@
 #include "VoxelInstanceStore.h"
 #include "DebugVisualizer.h"
 #include "TerrainEditor.h"
+#include "PortalGraph.h"
 
 class FlowField : public GameCore::IGameApp
 {
@@ -47,6 +48,9 @@ private:
     VoxelGrid                           m_VoxelGrid;
     // NPC data
     NpcManager                          m_Npc;
+
+    // 청크 포탈
+    PortalGraph                         m_PortalGraph;
 
     // 복셀 인스턴스 + 색인 + GPU 업로드의 단일 소유자
     VoxelInstanceStore  m_Store;

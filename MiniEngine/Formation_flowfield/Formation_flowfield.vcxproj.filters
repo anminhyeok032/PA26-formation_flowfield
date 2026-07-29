@@ -71,6 +71,12 @@
     <ClCompile Include="NpcManager.cpp">
       <Filter>NPC</Filter>
     </ClCompile>
+    <ClCompile Include="NpcMovementSolver.cpp">
+      <Filter>NPC</Filter>
+    </ClCompile>
+    <ClCompile Include="LeafSplitController.cpp">
+      <Filter>NPC</Filter>
+    </ClCompile>
     <ClCompile Include="PreviewRenderer.cpp">
       <Filter>Render</Filter>
     </ClCompile>
@@ -85,6 +91,9 @@
     </ClCompile>
     <ClCompile Include="TerrainEditor.cpp">
       <Filter>Simulation\Terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="PortalGraph.cpp">
+      <Filter>Simulation\Voxel</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -141,6 +150,15 @@
     <ClInclude Include="NpcManager.h">
       <Filter>NPC</Filter>
     </ClInclude>
+    <ClInclude Include="NpcTypes.h">
+      <Filter>NPC</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcMovementSolver.h">
+      <Filter>NPC</Filter>
+    </ClInclude>
+    <ClInclude Include="LeafSplitController.h">
+      <Filter>NPC</Filter>
+    </ClInclude>
     <ClInclude Include="CellReservation.h">
       <Filter>소스 파일</Filter>
     </ClInclude>
@@ -161,6 +179,9 @@
     </ClInclude>
     <ClInclude Include="TerrainEditor.h">
       <Filter>Simulation\Terrain</Filter>
+    </ClInclude>
+    <ClInclude Include="PortalGraph.h">
+      <Filter>Simulation\Voxel</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
