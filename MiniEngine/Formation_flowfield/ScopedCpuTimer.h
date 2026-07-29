@@ -35,7 +35,7 @@ public:
     }
 
     static Stat* Stats() { static Stat s[(int)CoreScope::COUNT]; return s; }
-    static void Report(const char* filePath = "core_timing.txt");
+    static void Report(const char* filePath = "Report/core_timing.txt");
     static void Reset() { for (int i = 0; i < (int)CoreScope::COUNT; ++i) Stats()[i] = Stat{}; }
 
 private:

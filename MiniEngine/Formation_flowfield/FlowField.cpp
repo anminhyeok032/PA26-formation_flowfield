@@ -77,7 +77,7 @@ void FlowField::Startup(void)
         MAX_HEIGHT,     // 최대 높이 (월드 유닛)
         WORLD_SCALE,    // MapScale
         VOXEL_SIZE);    // 복셀 1개 크기 -> 복셀 수 = pow( (맵 크기 * MAP_SCALE) / VOXEL_SIZE), 2 )
-    }
+    
 
     if (true == loaded)
     {
@@ -466,13 +466,12 @@ void FlowField::ReportMemory(const char* filePath) const
         return v.capacity() * sizeof(typename std::decay_t<decltype(v)>::value_type);
     };
 
-    size_t instances = vecB(m_VoxelInstances);
-    size_t coords = vecB(m_VoxelCellCoords);
+    size_t instances = m_Store.Count();
+    size_t coords = m_Store.CoordCount();
 
     // m_ChunkToVoxelIndices: 바깥 맵 + 안쪽 vector들 각각
-    size_t chunkIdx = m_ChunkToVoxelIndices.bucket_count() * 16;
-    for (const auto& kv : m_ChunkToVoxelIndices)
-        chunkIdx += 48 /*노드 오버헤드 근사*/ + vecB(kv.second);
+    size_t chunkIdx = m_Store.ChunkIndicesCount() * 16;
+
 
     char buf[1024];
     int n = sprintf_s(buf,

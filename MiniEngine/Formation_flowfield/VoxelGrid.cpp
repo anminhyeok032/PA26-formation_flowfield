@@ -719,14 +719,13 @@ void VoxelGrid::OverwriteCells(const std::vector<DirectX::XMINT3>& cells, CellTy
         }
     }
 }
-}
 
 
 void VoxelGrid::ReportMemory(const char* filePath) const
 {
     size_t voxelChunks = m_Chunks.capacity() * sizeof(VoxelChunk);
     size_t surfChunks = m_SurfaceChunks.capacity() * sizeof(SurfaceChunk);
-    size_t cells = m_Cells.capacity() * sizeof(VoxelCell);
+    size_t cells = m_Cells.capacity() * sizeof(CellCoord);
 
     char buf[512];
     sprintf_s(buf,

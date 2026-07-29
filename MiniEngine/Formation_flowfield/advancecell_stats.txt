@@ -1,3 +1,0 @@
-AdvanceCell calls=4
-  SampleCost=4 SampleDir=0 ReserveFind=0  (avg hash/call=1.00)
-  primaryHit=0 waited=0 fallbackHit=0 arrived=4 stuck=0

@@ -626,7 +626,7 @@ bool NpcManager::SampleCostCounted(int x, int y, int z, float& outCost)
     ++m_Stats.sampleCostCalls;
     return m_CorridorField.SampleCost(*m_Grid, x, y, z, outCost);
 }
-bool NpcManager::SampleDirectionCounted(int x, int y, int z, DirectX::XMFLOAT3& outDir)
+bool NpcManager::SampleDirectionCounted(int x, int y, int z, DirectX::XMINT3& outDir)
 {
     ++m_Stats.sampleDirCalls;
     return m_CorridorField.SampleDirection(*m_Grid, x, y, z, outDir);

@@ -35,7 +35,7 @@ public:
     virtual void Update(float deltaT) override;
     virtual void RenderScene(void) override;
 
-    void ReportMemory(const char* filePath = "mem_flowfield.txt") const;
+    void ReportMemory(const char* filePath = "Report/mem_flowfield.txt") const;
 
 private:
     Camera                              m_Camera;

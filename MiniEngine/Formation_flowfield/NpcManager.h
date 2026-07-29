@@ -87,7 +87,7 @@ public:
     bool HasGoal() const { return m_HasGoal; }
 
 
-    void ReportAndResetStats(const char* filePath = "advancecell_stats.txt")
+    void ReportAndResetStats(const char* filePath = "Report/advancecell_stats.txt")
     {
         auto& s = m_Stats;
         char buf[512];
@@ -107,7 +107,7 @@ public:
 
         s = AdvanceCellStats{};   // 리셋
     }
-    void ReportMemory(const char* filePath = "mem_npc.txt") const;
+    void ReportMemory(const char* filePath = "Report/mem_npc.txt") const;
 
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
@@ -182,7 +182,7 @@ private:
     AdvanceCellStats m_Stats;
 
     bool SampleCostCounted(int x, int y, int z, float& outCost);
-    bool SampleDirectionCounted(int x, int y, int z, DirectX::XMFLOAT3& outDir);
+    bool SampleDirectionCounted(int x, int y, int z, DirectX::XMINT3& outDir);
     int ReserveFindCounted(int64_t key);
 
 };
