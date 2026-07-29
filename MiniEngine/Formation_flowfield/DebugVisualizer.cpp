@@ -4,11 +4,11 @@
 #include <algorithm>
 
 void DebugVisualizer::Initialize(VoxelInstanceStore* store, const VoxelGrid* grid,
-    const CorridorFlowField* field)
+    const NpcManager* npc)
 {
     m_Store = store;
     m_Grid = grid;
-    m_Field = field;
+    m_Npc = npc;
 }
 
 int DebugVisualizer::ConfirmedIndex() const
@@ -27,12 +27,19 @@ bool DebugVisualizer::IsPathCoord(const VoxelGrid::CellCoord& c) const
 void DebugVisualizer::OccupyChunks(int groupId)
 {
     ReleaseChunks(groupId);
-
     m_OccupiedChunkKeys.clear();
-    for (const auto& kv : m_Field->GetChunks())
+
+    // 모든 leaf 청크를 합집합으로 수집 (갈라져도 칠해지게)
+    std::unordered_set<int64_t> seen;
+    const int leafCount = m_Npc->GetLeafCount();
+    for (int li = 0; li < leafCount; ++li)
     {
-        m_ChunkOccupants[kv.first].push_back(groupId);
-        m_OccupiedChunkKeys.push_back(kv.first);
+        for (const auto& kv : m_Npc->GetLeafField(li).GetChunks())
+        {
+            if (false == seen.insert(kv.first).second)   continue;  // 중복 청크 스킵
+            m_ChunkOccupants[kv.first].push_back(groupId);
+            m_OccupiedChunkKeys.push_back(kv.first);
+        }
     }
 }
 
@@ -78,7 +85,7 @@ uint32_t DebugVisualizer::GetLayeredColorType(int index) const
         auto occIt = m_ChunkOccupants.find(CorridorFlowField::ChunkKeyOf(c.x, c.z));
         if (occIt != m_ChunkOccupants.end() && !occIt->second.empty())
         {
-            if (m_Field->IsVisited(*m_Grid, c.x, c.y, c.z)) return 10u + (uint32_t)(occIt->second.back() % 8);
+            if (m_Npc->IsVisitedAny(*m_Grid, c.x, c.y, c.z)) return 10u + (uint32_t)(occIt->second.back() % 8);
         }
     }
 
@@ -132,7 +139,7 @@ void DebugVisualizer::CollectDebugColorChanges(std::vector<int>& changed,
             if (true == useGroupColor)
             {
                 const auto& c = m_Store->CoordAt(idx);
-                isVisit = m_Field->IsVisited(*m_Grid, c.x, c.y, c.z);
+                isVisit = m_Npc->IsVisitedAny(*m_Grid, c.x, c.y, c.z);
             }
             m_Store->SetColor(idx, isVisit ? groupColor : m_Store->GetBaseColorType(idx));
             changed.push_back(idx);
@@ -195,7 +202,7 @@ void DebugVisualizer::BuildArrowInstances()
             const auto& c = m_Store->CoordAt(idx);
 
             DirectX::XMINT3 d;
-            if (false == m_Field->SampleDirection(*m_Grid, c.x, c.y, c.z, d))  continue;
+            if (false == m_Npc->SampleDirectionAny(*m_Grid, c.x, c.y, c.z, d))  continue;
 
             // 정수 델타 -> 단위벡터. GetWorldPos가 등방이라 기존 실수 방향과 동일 결과
             Math::Vector3 dirVec = Math::Normalize(Math::Vector3((float)d.x, (float)d.y, (float)d.z));
