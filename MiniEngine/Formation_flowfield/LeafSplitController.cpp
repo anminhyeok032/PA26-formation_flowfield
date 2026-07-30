@@ -85,7 +85,7 @@ bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, const ChunkGraph& 
     }
     if (startCell.x < 0) return false;
 
-    if (!chunkGraph.FindChunkPath(startCell.x, startCell.z, goalCell.x, goalCell.z, outChunkPath))
+    if (!chunkGraph.FindChunkPath(grid, startCell, goalCell, outChunkPath))
         return false;
 
     return true;

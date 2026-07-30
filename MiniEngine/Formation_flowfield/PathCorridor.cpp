@@ -9,7 +9,7 @@
 
 int ComputeMarginCells(int memberCount, int bufferCells)
 {
-    const int MIN_MARGIN = 20;
+    const int MIN_MARGIN = 10;
 
     if (memberCount <= 1)   return MIN_MARGIN;
 

@@ -83,9 +83,9 @@ void FlowField::Startup(void)
             m_HeightMap,
             StartPos,
             EndPos,
-            5.0f,               // 터널 반지름
+            15.0f,               // 터널 반지름
             1.0,              
-            true, false);        // 양쪽 다 개방
+            true, true);        // 양쪽 다 개방
 
         // 병목 협곡 지형 추가 (5주차 병목 테스트용)
         // 월드 좌표계: m_Size=514, cellSize=0.5 -> 유효 범위 0~257. 터널(z월드 90 부근)과 안 겹침.
