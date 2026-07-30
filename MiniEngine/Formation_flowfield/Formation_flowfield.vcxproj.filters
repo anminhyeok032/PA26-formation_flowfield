@@ -92,7 +92,7 @@
     <ClCompile Include="TerrainEditor.cpp">
       <Filter>Simulation\Terrain</Filter>
     </ClCompile>
-    <ClCompile Include="PortalGraph.cpp">
+    <ClCompile Include="ChunkGraph.cpp">
       <Filter>Simulation\Voxel</Filter>
     </ClCompile>
   </ItemGroup>
@@ -180,7 +180,7 @@
     <ClInclude Include="TerrainEditor.h">
       <Filter>Simulation\Terrain</Filter>
     </ClInclude>
-    <ClInclude Include="PortalGraph.h">
+    <ClInclude Include="ChunkGraph.h">
       <Filter>Simulation\Voxel</Filter>
     </ClInclude>
   </ItemGroup>

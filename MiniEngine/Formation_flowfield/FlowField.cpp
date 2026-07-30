@@ -139,10 +139,11 @@ void FlowField::Startup(void)
     // 동적 지형 생성기 초기화
     m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug);
 
-    m_PortalGraph.Build(m_VoxelGrid);
+    // 청크 링크 그래프 빌드
+    m_ChunkGraph.Build(m_VoxelGrid);
 
     // npc 배치 초기화
-    m_Npc.Init(m_VoxelGrid);
+    m_Npc.Init(m_VoxelGrid, m_ChunkGraph);
 
     // 디버그 시각화 값 초기화
     m_Debug.Initialize(&m_Store, &m_VoxelGrid, &m_Npc);

@@ -58,7 +58,7 @@ struct LeafGroup
     std::vector<int>                members;    // Npc index
     std::unordered_set<int64_t>     excluded;   // 분리시, 막은(벽) 병목 복셀들(head는 항상 empty)
     int                             depth = 0;  // leaf depth (head==0)
-    std::vector<DirectX::XMINT3>    path;       // 이 leaf의 A* 경로(분리시, 겹칩 판별)
+    std::vector<int64_t>            path;       // 이 leaf의 A* 경로(분리시, 겹칩 판별)
     bool                            active = false;
 
     void Reset()

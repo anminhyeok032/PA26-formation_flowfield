@@ -17,7 +17,7 @@ public:
     NpcManager();
 
 	// 지형 참조 보관 + npc 인스턴스 저장
-	void Init(const VoxelGrid& grid);
+	void Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph);
 
 	// 좌클릭 선택
 	bool TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector3& rayDir);
@@ -45,6 +45,7 @@ public:
 
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
+    const ChunkGraph* m_ChunkGraph = nullptr;
 
     std::vector<NpcRenderer::InstanceData> m_NpcInstances;
     int m_SelectedNpcIndex = -1;

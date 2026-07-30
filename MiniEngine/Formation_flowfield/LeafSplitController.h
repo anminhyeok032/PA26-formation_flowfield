@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "NpcTypes.h"
-#include "AStarPathfinder.h"
+#include "ChunkGraph.h"
 #include <DirectXMath.h>
 #include <unordered_set>
 #include <vector>
@@ -16,14 +16,25 @@ public:
         NpcGroup& group,
         std::vector<DirectX::XMINT3>& startCells);
 
-    bool BuildLeafCorridor(const VoxelGrid& grid, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-        std::vector<DirectX::XMINT3>* outPath = nullptr);
+    bool BuildLeafCorridor(const VoxelGrid& grid, const ChunkGraph& chunkGraph,
+        LeafGroup& leaf, const DirectX::XMINT3& goalCell, std::vector<int64_t>* outChunkPath = nullptr);
 
-    void CheckSplitTriggers(const VoxelGrid& grid);   // 이동 루프 종료 후 호출
+    //void CheckSplitTriggers(const VoxelGrid& grid);   // 이동 루프 종료 후 호출
 
 private:
-    // TODO : NpcManager 비대화에 따른 파일 분리 및 리팩토링 할것
-    // --- 분리 제한 요소 ---
+    // a* 실행
+    bool FindLeafPath(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
+        std::vector<int64_t>& outChunkPath, DirectX::XMINT3& outCentroidCell);
+
+    // margin / mask / field 구축
+    void BuildLeafField(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
+        const DirectX::XMINT3& centroidCell, const std::vector<int64_t>& chunkPath);
+
+    
+
+
+    /*
+    * // --- 분리 제한 요소 ---
     static constexpr int    MIN_SPLIT_SIZE = 4;         // 분리 최소 인원
     static constexpr int    MAX_SPLIT_DEPTH = 2;        // 최대 분리 횟수
     static constexpr int    MAX_LEAVES      = 8;        // 메모리 상한(leaf당 flowfield 하나)
@@ -31,14 +42,6 @@ private:
     static constexpr float  PATH_OVERLAP_LIMIT = 0.5f; // (0.0~1.0) path 겹침 ratio -> 이 이상 겹치면 분할x
     static constexpr float  NEW_PATH_LIMIT = 10.0f;      // 우회경로가 n배 보다 길면 분할 포기
     static constexpr float  SPLIT_BLOCK_TIME = 2.0f;    // 이 시간 이상 막히면 분리 검토
-
-    // a* 실행
-    bool FindLeafPath(const VoxelGrid& grid, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-        std::vector<DirectX::XMINT3>& outPath, DirectX::XMINT3& outCentroidCell);
-
-    // margin / mask / field 구축
-    void BuildLeafField(const VoxelGrid& grid, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-        const DirectX::XMINT3& centroidCell, const std::vector<DirectX::XMINT3>& path);
 
     // 막힌 Npc들이 가려던 방향을 BFS로 넓혀서 병목 단면 수집용
     void CollectBottleneckCells(const VoxelGrid& grid, const std::vector<int>& stuckMem,
@@ -52,8 +55,8 @@ private:
 
     bool AreSpatiallyClustered(const std::vector<int>& members) const;
 
-    AStarPathfinder   m_Pathfinder;
-
+    */
+    
     std::vector<std::unique_ptr<LeafGroup>>& m_Leaves;
     NpcMoveData& m_Move;
     NpcGroup& m_Group;

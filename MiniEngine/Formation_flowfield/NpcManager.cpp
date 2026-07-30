@@ -14,9 +14,10 @@ NpcManager::NpcManager()
 {
 }
 
-void NpcManager::Init(const VoxelGrid& grid)
+void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph)
 {
     m_Grid = &grid;
+    m_ChunkGraph = &chunkgraph;
     const float voxelSize = grid.GetCellSize();
     const float NPC_WIDTH = voxelSize / 2.5f;
     const float NPC_HEIGHT = voxelSize * 3.0f / 2.0f;
@@ -124,82 +125,86 @@ bool NpcManager::TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector
 bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     std::vector<DirectX::XMINT3>* outPath)
 {
-    // 이전 그룹 분리 전부 초기화 - 새로운 경로 생성시 하나의 그룹으로 처리
-    for (auto& leaf : m_Leaves)
-    {
-        leaf->Reset();
-    }
+    const size_t n = m_NpcInstances.size();
+    if (n == 0) return false;
+
+    // --- 1. 이전 분리 상태 초기화 - 새 목적지는 항상 단일 그룹에서 시작 ---
+    for (auto& leaf : m_Leaves) leaf->Reset();
     m_Leaves.resize(1);
+    if (!m_Leaves[0]) m_Leaves[0] = std::make_unique<LeafGroup>();   // resize가 만든 빈 슬롯 방어
     m_Group.Reset();
 
     LeafGroup& leaf = *m_Leaves[0];
 
-    const size_t n = m_NpcInstances.size();
-    if (n == 0) return false;
-
-    // --- 1. 각 NPC의 시작 셀 수집 (마스크 시드 + 이동 초기화에 공유) ---
-    // FindNearestWalkable을 여기서 1회만 돌리고, 결과를 멤버에 저장해 InitGroupMovement가 재사용
+    // --- 2. 각 NPC의 시작 셀 수집 (마스크 시드 + 이동 초기화에 공유) ---
+    // FindNearestWalkable을 여기서 1회만 돌리고 InitGroupMovement가 재사용
     m_StartCells.clear();
-    m_StartCells.resize(n, { -1,-1,-1 });
+    m_StartCells.resize(n, { -1, -1, -1 });
 
-    const bool hasPrevMove = (m_Move.size() > 0);   // 그룹 있는지 확인
-
+    const bool hasPrevMove = (m_Move.size() > 0);
     for (size_t i = 0; i < n; ++i)
     {
-        DirectX::XMINT3 startCell{ -1, -1, -1 };
-        bool resolved = false;
-
-        // 1. 이전에 움직였으면, 기존의 타겟cell을 start로 설정
-        if (true == hasPrevMove)
+        // 이전에 움직이던 중이면 예약된 목표 셀을 그대로 시작점으로
+        if (hasPrevMove)
         {
             const auto& tc = m_Move.targetCell[i];
             if (m_Reserve.Find(MakeCellKey(tc)) == (int)i)
             {
-                startCell = tc;
-                resolved = true;
+                m_StartCells[i] = tc;
+                continue;
             }
         }
 
-        // 2. 없으면 렌더 좌표로 역산하기
-        if (false == resolved)
+        // 아니면 렌더 좌표에서 역산
+        const auto& inst = m_NpcInstances[i];
+        Math::Vector3 p(inst.position[0], inst.position[1], inst.position[2]);
+        int sx, sy, sz;
+        if (m_Grid->FindNearestWalkable(p, sx, sy, sz))
         {
-            const auto& inst = m_NpcInstances[i];
-            Math::Vector3 p(inst.position[0], inst.position[1], inst.position[2]);
-            int sx, sy, sz;
-            if (m_Grid->FindNearestWalkable(p, sx, sy, sz))
-            {
-                startCell = { sx, sy, sz };
-                resolved = true;
-            }
+            m_StartCells[i] = { sx, sy, sz };
         }
-
-        if (true == resolved)
-        {
-            m_StartCells[i] = startCell;
-        }
-
     }
-
 
     InitGroupMovement();   // m_StartCells 재사용
 
+    // --- 3. 루트 leaf 구성 - 전원이 leaf 0 소속 ---
     leaf.leafId = 0;
     leaf.parentId = m_Group.groupId;
     leaf.depth = 0;
-
+    leaf.members.reserve(m_Move.size());
     for (size_t i = 0; i < m_Move.size(); ++i)
     {
         m_Move.leafId[i] = 0;
         leaf.members.push_back((int)i);
     }
 
-    if (false == m_SplitController.BuildLeafCorridor(*m_Grid, leaf, goalCell, outPath)) return false;
+    // --- 4. 청크 경로 -> 마스크 -> FlowField ---
+    std::vector<int64_t> chunkPath;
+    if (!m_SplitController.BuildLeafCorridor(*m_Grid, *m_ChunkGraph, leaf, goalCell, &chunkPath))  return false;
+
+    // --- 5. 마스크가 실제 통로를 담았는지 확인 ---
+    // 청크 그래프는 청크 내부가 벽/절벽으로 갈라진 경우를 모른다.
+    // 조용히 깨지지 않도록 여기서 잡는다. 뜨기 시작하면 margin 확대나 청크 세분화를 검토.
+    for (size_t i = 0; i < n; ++i)
+    {
+        const auto& c = m_StartCells[i];
+        if (c.x < 0)    continue;
+        if (!leaf.field.IsVisited(*m_Grid, c.x, c.y, c.z))
+        {
+            DEBUGPRINT("ChunkGraph: mask miss - npc %zu at (%d,%d,%d)\n", i, c.x, c.y, c.z);
+            break;   // 한 번만 알리면 충분
+        }
+    }
 
     leaf.active = true;
+
     m_Group.goal = goalCell;
     m_Group.hasGoal = true;
     m_Group.leafIds.clear();
     m_Group.leafIds.push_back(0);
+
+    // --- 6. 디버그 시각화용 셀 변환 ---
+    if (outPath) ChunkGraph::ChunkPathToCells(*m_Grid, leaf.field, chunkPath, *outPath);
 
     return true;
 }
@@ -281,7 +286,7 @@ void NpcManager::Update(float dt)
         m_Group.hasGoal = false;
     }
 
-    m_SplitController.CheckSplitTriggers(*m_Grid);   // 루프 종료 후 - 여기서 leaf가 늘어날 수 있음
+    // m_SplitController.CheckSplitTriggers(*m_Grid);   // 루프 종료 후 - 여기서 leaf가 늘어날 수 있음
 
     // 누군가 움직였을때만 이동
     if (true == anyMoved)

@@ -18,26 +18,35 @@ constexpr float NPC_SPLIT_WAIT_SECONDS = (VOXEL_SIZE_REF / NPC_SPEED) * NPC_SPLI
 
 LeafSplitController::LeafSplitController(std::vector<std::unique_ptr<LeafGroup>>& leaves,
     NpcMoveData& move, NpcGroup& group, std::vector<DirectX::XMINT3>& startCells)
-    : m_Leaves(leaves), m_Move(move), m_Group(group), m_StartCells(startCells)
+    : m_Leaves(leaves), m_Move(move), m_Group(group), m_StartCells(startCells) 
 {
 }
 
-bool LeafSplitController::BuildLeafCorridor(const VoxelGrid& grid, LeafGroup& leaf, const DirectX::XMINT3& goalCell, std::vector<DirectX::XMINT3>* outPath)
+//------------------------
+//
+// 기초 길찾기 로직
+//
+//------------------------
+bool LeafSplitController::BuildLeafCorridor(const VoxelGrid& grid, const ChunkGraph& chunkGraph, 
+    LeafGroup& leaf, const DirectX::XMINT3& goalCell, std::vector<int64_t>* outChunkPath)
 {
-    if (leaf.members.empty()) return false;
-
-    std::vector<DirectX::XMINT3> path;
+    std::vector<int64_t> chunkPath;
     DirectX::XMINT3 centroidCell;
-    if (!FindLeafPath(grid, leaf, goalCell, path, centroidCell)) return false;
-    if (outPath) *outPath = path;
+    if (!FindLeafPath(grid, chunkGraph, leaf, goalCell, chunkPath, centroidCell)) return false;
 
-    BuildLeafField(grid, leaf, goalCell, centroidCell, path);
+    // leaf.path를 여기서 확정
+    // 기존 코드에선 TrySplitLeaf만 child.path를 채우고 루트 leaf는 비어 있었다 -
+    // 그러면 첫 분리 때 parent.path가 empty라 경로 중복 검사가 통째로 건너뛰어진다.
+    leaf.path = chunkPath;
+    if (outChunkPath) *outChunkPath = chunkPath;
+
+    BuildLeafField(grid, chunkGraph, leaf, goalCell, centroidCell, chunkPath);
     return true;
 }
 
 
-bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-    std::vector<DirectX::XMINT3>& outPath, DirectX::XMINT3& outCentroidCell)
+bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
+    std::vector<int64_t>& outChunkPath, DirectX::XMINT3& outCentroidCell)
 {
     if (leaf.members.empty()) return false;
 
@@ -60,21 +69,30 @@ bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, LeafGroup& leaf, c
     int cy = (int)std::round(centroid.GetY());
     int cz = (int)std::round(centroid.GetZ());
 
-    int asx, asy, asz;
-    Math::Vector3 centroidWorld = grid.GetWorldPos(cx, cy, cz);
-    if (!grid.FindNearestWalkable(centroidWorld, asx, asy, asz)) return false;
+    outCentroidCell = { cx, cy, cz };   // margin 계산용
 
-    std::vector<DirectX::XMINT3> path;
-    if (!m_Pathfinder.FindPath(grid, { asx, asy, asz }, goalCell, path, leaf.excluded))
+    // 경로 출발점은 무게중심에 가장 가까운 실제 멤버 셀 사용
+    DirectX::XMINT3 startCell{ -1, -1, -1 };
+    int bestDistSq = INT_MAX;
+    for (int idx : leaf.members)
+    {
+        const auto& c = m_StartCells[idx];
+        if (c.x < 0) continue;
+
+        const int dx = c.x - cx, dz = c.z - cz;
+        const int d = dx * dx + dz * dz;
+        if (d < bestDistSq) { bestDistSq = d; startCell = c; }
+    }
+    if (startCell.x < 0) return false;
+
+    if (!chunkGraph.FindChunkPath(startCell.x, startCell.z, goalCell.x, goalCell.z, outChunkPath))
         return false;
 
-    outPath = path;
-    outCentroidCell = { cx, cy, cz };
     return true;
 }
 
-void LeafSplitController::BuildLeafField(const VoxelGrid& grid, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-    const DirectX::XMINT3& centroidCell, const std::vector<DirectX::XMINT3>& path)
+void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
+    const DirectX::XMINT3& centroidCell, const std::vector<int64_t>& chunkPath)
 {
     const int cx = centroidCell.x, cz = centroidCell.z;
 
@@ -93,19 +111,29 @@ void LeafSplitController::BuildLeafField(const VoxelGrid& grid, LeafGroup& leaf,
     int margin = std::max(formationMargin, maxDistFromCentroid) + 2;
 
     // 4 - 마스크: A* 경로 + leaf 멤버 시작 셀만 시드로
-    std::vector<DirectX::XMINT3> leafSeeds;
-    leafSeeds.reserve(leaf.members.size());
+    // seeds = 경로 청크 + 멤버가 실제로 서 있는 청크
+    // (센트로이드 기준 경로가 구석 멤버를 못 지나칠 수 있다 - 기존 extraSeeds와 같은 목적)
+    std::vector<int64_t> seeds = chunkPath;
     for (int idx : leaf.members)
     {
-        if (m_StartCells[idx].x >= 0) leafSeeds.push_back(m_StartCells[idx]);
+        const auto& c = m_StartCells[idx];
+        if (c.x >= 0) seeds.push_back(ChunkGraph::ChunkKeyOf(c.x, c.z));
     }
 
-    auto mask = BuildLayerMask(grid, path, leafSeeds, margin);
+    auto chunks = chunkGraph.ExpandChunks(seeds, ChunkGraph::MarginChunksFor(margin));
+    auto mask = ChunkGraph::MaskCellsFromChunks(grid, chunks);
 
     // 5 - FlowField 계산
     leaf.field.Build(grid, goalCell, mask);
 }
 
+
+/*
+//------------------------
+//
+// 병목지형 돌파 추가 로직
+//
+//------------------------
 void LeafSplitController::CollectBottleneckCells(const VoxelGrid& grid, const std::vector<int>& stuckMem, std::unordered_set<int64_t>& outCells) const
 {
     std::unordered_set<int64_t> standing;
@@ -354,3 +382,4 @@ bool LeafSplitController::AreSpatiallyClustered(const std::vector<int>& members)
     }
     return true;
 }
+*/

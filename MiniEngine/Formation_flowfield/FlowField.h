@@ -24,7 +24,7 @@
 #include "VoxelInstanceStore.h"
 #include "DebugVisualizer.h"
 #include "TerrainEditor.h"
-#include "PortalGraph.h"
+#include "ChunkGraph.h"
 
 class FlowField : public GameCore::IGameApp
 {
@@ -50,7 +50,7 @@ private:
     NpcManager                          m_Npc;
 
     // 청크 포탈
-    PortalGraph                         m_PortalGraph;
+    ChunkGraph                          m_ChunkGraph;
 
     // 복셀 인스턴스 + 색인 + GPU 업로드의 단일 소유자
     VoxelInstanceStore  m_Store;
