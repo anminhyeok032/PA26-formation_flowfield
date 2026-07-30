@@ -137,7 +137,7 @@ void FlowField::Startup(void)
     m_Store.Build();
 
     // 동적 지형 생성기 초기화
-    m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug);
+    m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
 
     // 청크 링크 그래프 빌드
     m_ChunkGraph.Build(m_VoxelGrid);
@@ -391,7 +391,13 @@ void FlowField::Update(float dt)
         {
             PickResult pick = PickVoxel();
             bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
-            m_TerrainEditor.HandlePicking(pick.hit, pick.cell, rightClicked);
+            if (true == m_TerrainEditor.HandlePicking(pick.hit, pick.cell, rightClicked))
+            {
+                m_Npc.OnTerrainChanged(m_TerrainEditor.GetLastEditedCells());
+                m_Debug.ReleaseChunks(0);
+                m_Debug.OccupyChunks(0);
+                m_Debug.BuildArrowInstances();
+            }
         }
     }
 

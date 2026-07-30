@@ -1,11 +1,13 @@
 ﻿#include "TerrainEditor.h"
 #include "PreviewRenderer.h"
 
-void TerrainEditor::Initialize(VoxelGrid* grid, VoxelInstanceStore* store, DebugVisualizer* debug)
+void TerrainEditor::Initialize(VoxelGrid* grid, VoxelInstanceStore* store,
+    DebugVisualizer* debug, ChunkGraph* chunkGraph)
 {
     m_Grid = grid;
     m_Store = store;
     m_Debug = debug;
+    m_ChunkGraph = chunkGraph;
 }
 
 std::vector<DirectX::XMINT3> TerrainEditor::ComputeBoxCells(int hx, int hy, int hz) const
@@ -65,13 +67,13 @@ void TerrainEditor::UpdatePreview(const DirectX::XMINT3& anchor)
     m_PreviewAnchor = anchor;
 }
 
-void TerrainEditor::HandlePicking(bool hit, const DirectX::XMINT3& cell, bool commitPressed)
+bool TerrainEditor::HandlePicking(bool hit, const DirectX::XMINT3& cell, bool commitPressed)
 {
     // 허공 조준 -> 미리보기 끔 (이미 꺼져 있으면 재업로드 스킵)
     if (false == hit)
     {
         HidePreview();
-        return;
+        return false;
     }
 
     // 앵커가 안 바뀌었으면 미리보기 GPU 업로드 스킵
@@ -83,20 +85,28 @@ void TerrainEditor::HandlePicking(bool hit, const DirectX::XMINT3& cell, bool co
     // 우클릭 - 현재 미리보기 박스를 실제로 커밋
     if (commitPressed && m_PreviewVisible)
     {
+        m_LastEdited = ComputeBoxCells(cell.x, cell.y, cell.z);
         ApplyTerrainEdit(ComputeBoxCells(cell.x, cell.y, cell.z));
         // 지형이 바뀌었으니 같은 앵커라도 다음 프레임에 강제 재평가
         m_PreviewAnchor = { INT32_MIN, INT32_MIN, INT32_MIN };
+        return true;
+        
     }
+    return false;
 }
 
 void TerrainEditor::ApplyTerrainEdit(const std::vector<DirectX::XMINT3>& cells)
 {
     VoxelGrid::TerrainEditDelta delta;
     m_Grid->OverwriteCells(cells, VoxelGrid::CellType::Blocked, delta);
-    m_Store->ApplyDelta(delta);
 
-    // 확정/경로는 좌표로 보관되므로 인덱스 재매핑이 필요 없음.
-    // 호버만 리셋 — 다음 프레임 피킹이 재계산한다.
+    // 반드시 OverwriteCells 이후
+    // 라벨링이 GetSurfaceYList/IsWalkable을 읽는데, 그 값이 여기서 확정
+    // 입력은 delta가 아니라 cells - delta.removed는 y를 0으로 뭉개고,
+    // cells는 OverwriteCells가 touchedCol을 유도한 원본이라 항상 상위집합이다.
+    m_ChunkGraph->RefreshAround(*m_Grid, cells);
+    
+    m_Store->ApplyDelta(delta);
     m_Debug->ClearHover();
     m_Debug->RefreshDebugColors();
 }

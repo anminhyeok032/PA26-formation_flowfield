@@ -2,6 +2,7 @@
 #include "VoxelGrid.h"
 #include "VoxelInstanceStore.h"
 #include "DebugVisualizer.h"
+#include "ChunkGraph.h"
 #include <DirectXMath.h>
 #include <vector>
 
@@ -13,12 +14,15 @@
 class TerrainEditor
 {
 public:
-    void Initialize(VoxelGrid* grid, VoxelInstanceStore* store, DebugVisualizer* debug);
+    void Initialize(VoxelGrid* grid, VoxelInstanceStore* store, 
+        DebugVisualizer* debug, ChunkGraph* chunkGraph);
 
     // 지형 생성용 피킹(미리보기 + 우클릭시 커밋)
     // 지형 편집 모드일 때 매 프레임 호출.
     // hit=false면 허공 조준 -> 미리보기 끔. commitPressed면 현재 박스를 커밋
-    void HandlePicking(bool hit, const DirectX::XMINT3& cell, bool commitPressed);
+    bool HandlePicking(bool hit, const DirectX::XMINT3& cell, bool commitPressed);
+
+    const std::vector<DirectX::XMINT3>& GetLastEditedCells() const { return m_LastEdited; }
 
     // 편집 모드에서 빠져나갈 때 호출 — 미리보기 잔상 제거
     void OnDeactivate();
@@ -35,8 +39,11 @@ private:
     VoxelGrid* m_Grid = nullptr;
     VoxelInstanceStore* m_Store = nullptr;
     DebugVisualizer* m_Debug = nullptr;
+    ChunkGraph* m_ChunkGraph = nullptr;
 
     // 앵커가 안 바뀌면 미리보기 GPU 업로드를 건너뛰기 위한 캐시
     DirectX::XMINT3 m_PreviewAnchor{ INT32_MIN, INT32_MIN, INT32_MIN }; // 마지막으로 미리보기 그린셀
     bool            m_PreviewVisible = false;                           // 마지막으로 그린곳 있는지 확인용
+
+    std::vector<DirectX::XMINT3> m_LastEdited;              // 매 프레임 벡터 반환을 피하려 멤버로 보관
 };
