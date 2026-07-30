@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_set>
 #include <cstdint>
+#include <unordered_map>
 
 // 청크(8x8 xz) 단위 라우팅 그래프.
 // 노드는 청크가 아닌 청크 내부의 연결 성분
@@ -67,9 +68,8 @@ private:
     // 청크 하나를 flood fill로 라벨링. 성분 개수 반환
     int  LabelChunk(const VoxelGrid& grid, int cx, int cz, int16_t* outLabels) const;
 
-    // 이 청크에서 나가는 간선만 다시 만든다. allLabels는 최소 이 청크+8이웃을 포함해야 함
-    void BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
-        const std::vector<int16_t>& allLabels);
+
+
 
     // 셀 -> 노드 id. 해당 청크를 그 자리에서 라벨링한다(저장하지 않음)
     int  NodeIdOf(const VoxelGrid& grid, const DirectX::XMINT3& cell) const;
@@ -84,6 +84,19 @@ private:
     // m_NodeOffset[idx] + srcComp -> 출발노드의 id
     //      / vec.. m_NodeOffset[nChunkIdx]- 주변청크 인덱스 + dstComp-> 도착노드 id
     std::vector<std::vector<uint32_t>> m_Adjacency; 
+
+
+   // 라벨 버퍼 접근. slotOf가 nullptr이면 청크 인덱스를 그대로 슬롯으로 사용(전체 빌드용)
+   // 아니면 필요한 청크만 담은 조밀 버퍼에서 찾는다(증분 갱신용)
+    static const int16_t* LabelsOf(int chunkIdx, const std::vector<int16_t>& labels,
+        const std::unordered_map<int, int>* slotOf);
+
+    // 이 청크에서 나가는 간선만 다시 만든다. allLabels는 최소 이 청크+8이웃을 포함해야 함
+    void BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
+        const std::vector<int16_t>& labels,
+        const std::unordered_map<int, int>* slotOf);
+
+    int m_FullRebuildCount = 0;
 
 
     int m_CountX = 0;

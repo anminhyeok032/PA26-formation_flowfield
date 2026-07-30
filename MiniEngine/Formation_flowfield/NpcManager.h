@@ -44,6 +44,8 @@ public:
     const std::vector<NpcRenderer::InstanceData>& GetInstances() const { return m_NpcInstances; }
     bool HasGoal() const { return m_Group.hasGoal; }
 
+    // 동적 지형 생성에 대한 갱신 ( TODO : 다중 그룹으로 변환시, 해당 갱신은 상위에서 한번에)
+    void OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCells);
 
     void ReportAndResetStats(const char* filePath = "Report/advancecell_stats.txt")
     {

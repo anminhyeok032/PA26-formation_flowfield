@@ -320,6 +320,69 @@ bool NpcManager::SampleDirectionAny(const VoxelGrid& grid, int x, int y, int z, 
     return false;
 }
 
+void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCells)
+{
+    if (!m_Group.hasGoal || editedCells.empty()) return;
+
+    // 영향 청크 = 편집 청크 + 8이웃.
+    // 편집 셀 바로 옆(다른 청크)의 셀은 이제 방향이 벽을 가리키므로 이웃까지 포함해야 한다.
+    std::unordered_set<int64_t> affected;
+    for (const auto& c : editedCells)
+    {
+        const int ccx = c.x / ChunkGraph::CHUNK_SIZE;
+        const int ccz = c.z / ChunkGraph::CHUNK_SIZE;
+        for (int dz = -1; dz <= 1; ++dz)
+            for (int dx = -1; dx <= 1; ++dx)
+                affected.insert(MakeChunkKey(ccx + dx, 0, ccz + dz));
+    }
+
+    // NPC가 새로 막힌 셀 위에 서 있을 수 있으므로 현재 위치를 다시 스냅한다.
+    // m_StartCells는 SetGroupDestination 시점 값이라 그대로 쓰면 옛 좌표로 필드를 만든다.
+    const size_t n = m_Move.size();
+    for (size_t i = 0; i < n; ++i)
+    {
+        const auto& curr = m_Move.currCell[i];
+        if (curr.x < 0) { m_StartCells[i] = { -1,-1,-1 }; continue; }
+
+        if (m_Grid->IsWalkable(curr.x, curr.y, curr.z))
+        {
+            m_StartCells[i] = curr;
+            continue;
+        }
+        // 서 있던 자리가 막혔다 - 가장 가까운 walkable로 밀어낸다
+        int sx, sy, sz;
+        Math::Vector3 p = m_Grid->GetWorldPos(curr.x, curr.y, curr.z);
+        m_StartCells[i] = m_Grid->FindNearestWalkable(p, sx, sy, sz)
+            ? DirectX::XMINT3{ sx, sy, sz } : DirectX::XMINT3{ -1,-1,-1 };
+    }
+
+    for (auto& leafPtr : m_Leaves)
+    {
+        LeafGroup& leaf = *leafPtr;
+        if (!leaf.active || leaf.members.empty()) continue;
+
+        // 이 필드가 영향 청크를 덮고 있었나 - LeafGroup에 별도 상태를 두지 않아도
+        // CorridorFlowField가 이미 자기 청크 목록을 들고 있다
+        bool overlaps = false;
+        for (const auto& entry : leaf.field.GetChunks())
+        {
+            if (affected.count(entry.first) > 0) { overlaps = true; break; }
+        }
+        if (!overlaps) continue;   // 안 겹치면 그 필드는 여전히 유효하다
+
+        if (!m_SplitController.BuildLeafCorridor(*m_Grid, *m_ChunkGraph, leaf, m_Group.goal, nullptr))
+        {
+            // 목적지로 가는 길이 완전히 막혔다 - 이 leaf는 정지
+            leaf.active = false;
+            for (int idx : leaf.members)
+            {
+                m_Move.active[idx] = 0;
+                m_Move.stopReason[idx] = 1;
+            }
+        }
+    }
+}
+
 
 void NpcManager::InitGroupMovement()
 {
