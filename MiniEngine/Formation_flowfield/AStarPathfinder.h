@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <memory>
 #include <cmath>
+#include <unordered_set>
 
 // DirectX::XMINT3는 POD라 operator==/해시가 없으므로 자유 함수/특수화로 보강.
 inline bool operator==(const DirectX::XMINT3& a, const DirectX::XMINT3& b)
@@ -41,7 +42,18 @@ public:
                     const DirectX::XMINT3& start, 
                     const DirectX::XMINT3& goal,
                     std::vector<DirectX::XMINT3>& outPath, 
-                    int maxIterations = 100000);
+                    int maxIterations = 10'0000);
+
+    // excluded에 든 셀을 통행 불가로 취급하고 탐색
+    // 실제 지형(m_Chunks)은 건드리지 않으므로 렌더/다른 leaf에 영향x
+    // 병목 우회(분리) 시 병목 셀들을 막아 A*가 다른 길을 찾게 하는 용도
+    bool FindPath(const VoxelGrid& grid, 
+                    const DirectX::XMINT3& start,
+                    const DirectX::XMINT3& goal,
+                    std::vector<DirectX::XMINT3>& outPath,
+                    const std::unordered_set<int64_t>& excluded, 
+                    int maxIterations = 10'0000);
+
 
 private:
     // 메모리를 많이 사용해도, 주변 청크를 검사해서 해싱을 절감

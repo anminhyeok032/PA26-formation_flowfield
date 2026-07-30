@@ -5,32 +5,33 @@
 // 해당 cpp에서만 사용할 helper
 namespace
 {
-    // 표면 y 탐색 공통 로직
-    // 현재 y와 높이차 1 이내 표면 중 가까운거 찾음. 없으면 -1
-    int FindConnectableSurfaceY(const VoxelGrid& grid, int nx, int nz, int currY)
-    {
-        int bestY = -1;
-        int bestDiff = INT_MAX;
-
-        VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(nx, nz);
-        for (auto y : surfaces)
-        {
-            int diff = std::abs(y - currY);
-            if (diff <= 1 && diff < bestDiff)
-            {
-                bestDiff = diff;
-                bestY = y;
-            }
-        }
-        return bestY;
-    }
-
     // 실제 이동량(dx, dyActual, dz)으로 유클리드 거리를 정직하게 계산
     float ComputeMoveCost(int dx, int dyActual, int dz)
     {
         return std::sqrt((float)(dx * dx + dyActual * dyActual + dz * dz));
     }
 }
+
+// 표면 y 탐색 공통 로직
+// 현재 y와 높이차 1 이내 표면 중 가까운거 찾음. 없으면 -1
+int FindConnectableSurfaceY(const VoxelGrid& grid, int nx, int nz, int currY)
+{
+    int bestY = -1;
+    int bestDiff = INT_MAX;
+
+    VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(nx, nz);
+    for (auto y : surfaces)
+    {
+        int diff = std::abs(y - currY);
+        if (diff <= 1 && diff < bestDiff)
+        {
+            bestDiff = diff;
+            bestY = y;
+        }
+    }
+    return bestY;
+}
+
 
 void GetWalkableNeighbors(const VoxelGrid& grid, const DirectX::XMINT3& curr, std::vector<NeighborInfo>& outNeighbors)
 {

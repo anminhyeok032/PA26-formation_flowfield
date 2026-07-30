@@ -1,0 +1,10 @@
+scope                     total(ms)      calls      avg(ms)      max(ms)
+NpcUpdateCore             80926.458      40498      1.99828      3.40070
+CorridorField_Build          13.306          1     13.30650     13.30650
+DestFieldBuild               12.314          1     12.31390     12.31390
+FieldDijkstra                 6.844      32737      0.00021      0.02760
+FieldComputeDir               2.830          1      2.82960      2.82960
+DestAStar                     0.033          1      0.03280      0.03280
+
+(active frames = 40498, NpcUpdateCore per-frame = 1.99828 ms)
+

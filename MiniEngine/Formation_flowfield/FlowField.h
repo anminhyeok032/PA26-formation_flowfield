@@ -24,6 +24,7 @@
 #include "VoxelInstanceStore.h"
 #include "DebugVisualizer.h"
 #include "TerrainEditor.h"
+#include "ChunkGraph.h"
 #include "ScopedCpuTimer.h"
 #include "MemoryProbe.h"
 
@@ -51,6 +52,9 @@ private:
     VoxelGrid                           m_VoxelGrid;
     // NPC data
     NpcManager                          m_Npc;
+
+    // 청크 포탈
+    ChunkGraph                          m_ChunkGraph;
 
     // 복셀 인스턴스 + 색인 + GPU 업로드의 단일 소유자
     VoxelInstanceStore  m_Store;

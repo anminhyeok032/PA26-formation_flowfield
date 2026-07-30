@@ -157,9 +157,12 @@
     <ClCompile Include="FlowFieldArrowRenderer.cpp" />
     <ClCompile Include="GridNeighbors.cpp" />
     <ClCompile Include="HeightMap.cpp" />
+    <ClCompile Include="LeafSplitController.cpp" />
     <ClCompile Include="NpcManager.cpp" />
+    <ClCompile Include="NpcMovementSolver.cpp" />
     <ClCompile Include="NpcRenderer.cpp" />
     <ClCompile Include="PathCorridor.cpp" />
+    <ClCompile Include="ChunkGraph.cpp" />
     <ClCompile Include="PreviewRenderer.cpp" />
     <ClCompile Include="TerrainEditor.cpp" />
     <ClCompile Include="ScopedCpuTimer.cpp" />
@@ -244,10 +247,14 @@
     <ClInclude Include="FlowFieldArrowRenderer.h" />
     <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
+    <ClInclude Include="LeafSplitController.h" />
     <ClInclude Include="MemoryProbe.h" />
     <ClInclude Include="NpcManager.h" />
+    <ClInclude Include="NpcMovementSolver.h" />
     <ClInclude Include="NpcRenderer.h" />
+    <ClInclude Include="NpcTypes.h" />
     <ClInclude Include="PathCorridor.h" />
+    <ClInclude Include="ChunkGraph.h" />
     <ClInclude Include="PreviewRenderer.h" />
     <ClInclude Include="ScopedCpuTimer.h" />
     <ClInclude Include="TerrainEditor.h" />

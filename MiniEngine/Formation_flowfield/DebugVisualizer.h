@@ -2,7 +2,7 @@
 
 #include "VoxelInstanceStore.h"
 #include "VoxelGrid.h"
-#include "CorridorFlowField.h"
+#include "NpcManager.h"
 #include <DirectXMath.h>
 #include <vector>
 #include <unordered_map>
@@ -24,7 +24,7 @@ class DebugVisualizer
 {
 public:
     void Initialize(VoxelInstanceStore* store, const VoxelGrid* grid,
-        const CorridorFlowField* field);
+        const NpcManager* npc);
 
     // ---- 토글 ----
     void ToggleChunks() { m_ShowChunks = !m_ShowChunks; }
@@ -78,7 +78,7 @@ private:
 
     VoxelInstanceStore* m_Store = nullptr;
     const VoxelGrid* m_Grid = nullptr;
-    const CorridorFlowField* m_Field = nullptr;
+    const NpcManager* m_Npc = nullptr;
 
     bool m_ShowChunks = true;
     bool m_ShowArrows = true;

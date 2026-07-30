@@ -1,0 +1,7 @@
+[NpcManager] NPC=1000
+  NpcMoveData(SoA)   :     75.2 KB
+  m_NpcInstances     :     33.3 KB
+  m_MoveOrder        :      3.9 KB
+  m_StartCells       :     11.7 KB
+  CellReservation    :     43.3 KB (bucket=1024 size=1000)
+  --- гу╟Х           :    167.5 KB

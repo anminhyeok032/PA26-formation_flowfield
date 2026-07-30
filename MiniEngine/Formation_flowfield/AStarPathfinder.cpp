@@ -76,9 +76,24 @@ const AStarPathfinder::PathNodeChunk* AStarPathfinder::FindChunk(int x, int y, i
     return cache.chunk;
 }
 
+// 제외 집합 없는 기본 호출 — 정적 빈 집합 재사용(매 호출 할당 방지)
 bool AStarPathfinder::FindPath(const VoxelGrid& grid, const XMINT3& start, const XMINT3& goal,
     std::vector<XMINT3>& outPath, int maxIterations)
 {
+    static const std::unordered_set<int64_t> s_Empty;
+    return FindPath(grid, start, goal, outPath, s_Empty, maxIterations);
+}
+
+bool AStarPathfinder::FindPath(const VoxelGrid& grid, const DirectX::XMINT3& start, const DirectX::XMINT3& goal, 
+    std::vector<DirectX::XMINT3>& outPath, const std::unordered_set<int64_t>& excluded, int maxIterations)
+{
+    // 시작이나 목표 막혀있으면 탐색 불가
+    if (!excluded.empty())
+    {
+        if (excluded.count(MakeCellKey(start)) > 0)  return false;
+        if (excluded.count(MakeCellKey(goal)) > 0)  return false;
+    }
+
     // 각 인스턴스마다 따로 가지고 있음
     m_Chunks.clear(); // 이전 탐색 기록 초기화 (탐색마다 새로 시작)
     outPath.clear();
@@ -133,6 +148,8 @@ bool AStarPathfinder::FindPath(const VoxelGrid& grid, const XMINT3& start, const
             int idx;
             PathNodeChunk* nChunk = FindOrCreateChunk(n.pos.x, n.pos.y, n.pos.z, idx, chunkCache);
             if (nChunk->closed[idx]) continue;
+            // 제외 셀은 통행 불가로 간주 (지형은 그대로 두고 탐색에서만 배제)
+            if (!excluded.empty() && excluded.count(MakeCellKey(n.pos)) > 0) continue;
 
             float predG = currentG + n.cost;
 
@@ -145,7 +162,7 @@ bool AStarPathfinder::FindPath(const VoxelGrid& grid, const XMINT3& start, const
                 int dx = current.x - n.pos.x;
                 int dy = current.y - n.pos.y;
                 int dz = current.z - n.pos.z;
-                
+
                 nChunk->parentDir[idx] = EncodeParentDelta(dx, dy, dz);
 
 
