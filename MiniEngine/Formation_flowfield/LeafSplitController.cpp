@@ -33,7 +33,6 @@ bool LeafSplitController::BuildLeafCorridor(const VoxelGrid& grid, const ChunkGr
     std::vector<int64_t> chunkPath;
     DirectX::XMINT3 centroidCell;
     {
-        CORE_SCOPE(DestAStar);
         if (!FindLeafPath(grid, chunkGraph, leaf, goalCell, chunkPath, centroidCell)) return false;
     }
     // leaf.path를 여기서 확정
@@ -43,7 +42,6 @@ bool LeafSplitController::BuildLeafCorridor(const VoxelGrid& grid, const ChunkGr
     if (outChunkPath) *outChunkPath = chunkPath;
 
     {
-        CORE_SCOPE(DestFieldBuild);
         BuildLeafField(grid, chunkGraph, leaf, goalCell, centroidCell, chunkPath);
     }
     return true;
@@ -99,21 +97,23 @@ bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, const ChunkGraph& 
 void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
     const DirectX::XMINT3& centroidCell, const std::vector<int64_t>& chunkPath)
 {
-    const int cx = centroidCell.x, cz = centroidCell.z;
+    //const int cx = centroidCell.x, cz = centroidCell.z;
 
-    // 3 - margin: leaf 인원 + leaf 분포 반경
-    int maxDistFromCentroid = 0;
-    for (int idx : leaf.members)
-    {
-        const auto& c = m_StartCells[idx];
-        if (c.x < 0) continue;
-        int dx = c.x - cx, dz = c.z - cz;
-        int d = (int)std::round(std::sqrt((float)(dx * dx + dz * dz)));
-        maxDistFromCentroid = std::max(maxDistFromCentroid, d);
-    }
+    //// 3 - margin: leaf 인원 + leaf 분포 반경
+    //int maxDistFromCentroid = 0;
+    //for (int idx : leaf.members)
+    //{
+    //    const auto& c = m_StartCells[idx];
+    //    if (c.x < 0) continue;
+    //    int dx = c.x - cx, dz = c.z - cz;
+    //    int d = (int)std::round(std::sqrt((float)(dx * dx + dz * dz)));
+    //    maxDistFromCentroid = std::max(maxDistFromCentroid, d);
+    //}
 
-    int formationMargin = ComputeMarginCells((int)leaf.members.size());
-    int margin = std::max(formationMargin, maxDistFromCentroid) + 2;
+    //int formationMargin = ComputeMarginCells((int)leaf.members.size());
+    //int margin = std::max(formationMargin, maxDistFromCentroid) + 2;
+
+    const int margin = ComputeMarginCells((int)leaf.members.size()) + 2;
 
     // 4 - 마스크: A* 경로 + leaf 멤버 시작 셀만 시드로
     // seeds = 경로 청크 + 멤버가 실제로 서 있는 청크

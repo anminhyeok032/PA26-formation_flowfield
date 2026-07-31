@@ -8,6 +8,9 @@
 #include <cstdint>
 #include <unordered_map>
 
+#include "ScopedCpuTimer.h"
+
+
 // 청크(8x8 xz) 단위 라우팅 그래프.
 // 노드는 청크가 아닌 청크 내부의 연결 성분
 // 청크 하나가 벽이나 절벽으로 갈라져 있으면 성분이 둘 이상 생기고,
@@ -22,6 +25,11 @@ public:
     static constexpr int MAX_SLOTS = SurfaceChunk::SurfaceColumn::INLINE_CAPACITY;
     static constexpr int DIR_COUNT = 8;
     static constexpr int LABELS_PER_CHUNK = CHUNK_SIZE * CHUNK_SIZE * MAX_SLOTS;   // 256
+
+    static constexpr int SLOTS_PER_CHUNK = 4;   // 실측으로 정할 것 (아래 참고)
+
+    // m_NodeOffset 배열 자체가 불필요해진다
+    static uint32_t NodeOffsetOf(int chunkIdx) { return (uint32_t)chunkIdx * SLOTS_PER_CHUNK; }
 
     static int64_t ChunkKeyOf(int x, int z)
     {
@@ -58,6 +66,25 @@ public:
     static void ChunkPathToCells(const VoxelGrid& grid, const CorridorFlowField& field,
         const std::vector<int64_t>& chunkPath,
         std::vector<DirectX::XMINT3>& outCells);
+
+
+
+
+
+    struct MemoryFootprint
+    {
+        size_t compCount, nodeOffset, nodeChunk;
+        size_t adjacencyOuter, adjacencyData, adjacencySlack;
+        size_t Total() const
+        {
+            return compCount + nodeOffset + nodeChunk + adjacencyOuter + adjacencyData + adjacencySlack;
+        }
+    };
+    MemoryFootprint GetMemoryFootprint() const;
+    size_t GetEdgeCount() const;
+
+
+
 
 private:
     static int LocalIndex(int lx, int lz, int slot)

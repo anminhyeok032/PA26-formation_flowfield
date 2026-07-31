@@ -96,7 +96,7 @@
       <Filter>Simulation\Voxel</Filter>
     </ClCompile>
     <ClCompile Include="ScopedCpuTimer.cpp">
-      <Filter>소스 파일</Filter>
+      <Filter>Simulation\DebugCheck</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -190,7 +190,7 @@
       <Filter>Simulation\Voxel</Filter>
     </ClInclude>
     <ClInclude Include="MemoryProbe.h">
-      <Filter>Simulation</Filter>
+      <Filter>Simulation\DebugCheck</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

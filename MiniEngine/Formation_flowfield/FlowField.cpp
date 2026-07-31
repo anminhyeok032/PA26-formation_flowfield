@@ -143,7 +143,18 @@ void FlowField::Startup(void)
     m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
 
     // 청크 링크 그래프 빌드
-    m_ChunkGraph.Build(m_VoxelGrid);
+    {
+        MemoryProbe probe("ChunkGraph::Build");
+        m_ChunkGraph.Build(m_VoxelGrid);
+        probe.Report();
+    }
+    
+    const auto mem = m_ChunkGraph.GetMemoryFootprint();
+    Utility::Printf("[ChunkGraph] edges=%zu splitChunks=%d\n",
+        m_ChunkGraph.GetEdgeCount(),
+        m_ChunkGraph.GetSplitChunkCount());
+    Utility::Printf("[ChunkGraph] mem total=%.1fKB (adj=%.1fKB slack=%.1fKB)\n",
+        mem.Total() / 1024.0, mem.adjacencyData / 1024.0, mem.adjacencySlack / 1024.0);
 
     // npc 배치 초기화
     m_Npc.Init(m_VoxelGrid, m_ChunkGraph);

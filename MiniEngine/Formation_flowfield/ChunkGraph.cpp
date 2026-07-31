@@ -21,6 +21,7 @@ namespace
 // ---------------------------------------------------------------- 
 int ChunkGraph::LabelChunk(const VoxelGrid& grid, int cx, int cz, int16_t* outLabels) const
 {
+    CORE_SCOPE(ChunkGraph_LabelAll);
     // 라벨 없음으로 초기화
     std::fill(outLabels, outLabels + LABELS_PER_CHUNK, (int16_t)-1);
 
@@ -182,6 +183,7 @@ void ChunkGraph::BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
 
 void ChunkGraph::Build(const VoxelGrid& grid)
 {
+    CORE_SCOPE(ChunkGraph_Build);
     m_CountX = (grid.GetSizeX() + CHUNK_SIZE - 1) / CHUNK_SIZE;
     m_CountZ = (grid.GetSizeZ() + CHUNK_SIZE - 1) / CHUNK_SIZE;
 
@@ -223,11 +225,14 @@ void ChunkGraph::Build(const VoxelGrid& grid)
 
     // 4 - 간선 생성 (라벨과 노드 id가 모두 확정되고 나서)
     m_Adjacency.assign(total, {});
-    for (int cz = 0; cz < m_CountZ; ++cz)
     {
-        for (int cx = 0; cx < m_CountX; ++cx)
+        CORE_SCOPE(ChunkGraph_BuildEdges);
+        for (int cz = 0; cz < m_CountZ; ++cz)
         {
-            BuildEdgesForChunk(grid, cx, cz, labels, nullptr);
+            for (int cx = 0; cx < m_CountX; ++cx)
+            {
+                BuildEdgesForChunk(grid, cx, cz, labels, nullptr);
+            }
         }
     }
 }
@@ -235,6 +240,7 @@ void ChunkGraph::Build(const VoxelGrid& grid)
 void ChunkGraph::RefreshAround(const VoxelGrid& grid,
     const std::vector<DirectX::XMINT3>& editedCells)
 {
+    CORE_SCOPE(ChunkGraph_Refresh);
     // 그리드 크기가 바뀌었거나 아직 안 지어졌으면 전체 빌드
     if (m_CompCount.empty() ||
         m_CountX != (grid.GetSizeX() + CHUNK_SIZE - 1) / CHUNK_SIZE ||
@@ -298,12 +304,12 @@ void ChunkGraph::RefreshAround(const VoxelGrid& grid,
     // 라벨은 위에서 이미 계산했으니 여기서 다시 돌리지 않는다.
     for (int idx : edited)
     {
-        if (freshCount[slotOf[idx]] != m_CompCount[idx])
+        if (freshCount[slotOf[idx]] > SLOTS_PER_CHUNK)   // 개수 변경이 아니라 "상한 초과"만
         {
-            ++m_FullRebuildCount;
-            Build(grid);
+            ++m_FullRebuildCount;   // SLOTS_PER_CHUNK를 늘려 재빌드
             return;
         }
+        m_CompCount[idx] = freshCount[slotOf[idx]];   // 개수는 그냥 갱신
     }
 
     for (int idx : dirtyEdges)
@@ -320,6 +326,8 @@ void ChunkGraph::RefreshAround(const VoxelGrid& grid,
 
 int ChunkGraph::NodeIdOf(const VoxelGrid& grid, const DirectX::XMINT3& cell) const
 {
+    CORE_SCOPE(ChunkGraph_NodeIdOf);
+
     const int cx = cell.x / CHUNK_SIZE, cz = cell.z / CHUNK_SIZE;
     if (cx < 0 || cx >= m_CountX || cz < 0 || cz >= m_CountZ) return -1;
 
@@ -355,6 +363,7 @@ bool ChunkGraph::FindChunkPath(const VoxelGrid& grid,
     const DirectX::XMINT3& start, const DirectX::XMINT3& goal,
     std::vector<int64_t>& outChunkPath) const
 {
+    CORE_SCOPE(ChunkGraph_FindPath);
     outChunkPath.clear();
     if (m_Adjacency.empty()) return false;
 
@@ -431,6 +440,7 @@ bool ChunkGraph::FindChunkPath(const VoxelGrid& grid,
 std::unordered_set<int64_t> ChunkGraph::ExpandChunks(const std::vector<int64_t>& seeds,
     int marginChunks) const
 {
+    CORE_SCOPE(ChunkGraph_ExpandNodes);
     std::unordered_set<int64_t> result(seeds.begin(), seeds.end());
     if (marginChunks <= 0) return result;
 
@@ -474,6 +484,7 @@ std::unordered_set<int64_t> ChunkGraph::ExpandChunks(const std::vector<int64_t>&
 std::unordered_set<int64_t> ChunkGraph::MaskCellsFromChunks(
     const VoxelGrid& grid, const std::unordered_set<int64_t>& chunks)
 {
+    CORE_SCOPE(ChunkGraph_MaskCells);
     std::unordered_set<int64_t> mask;
     mask.reserve(chunks.size() * CHUNK_SIZE * CHUNK_SIZE);
 
@@ -560,4 +571,30 @@ void ChunkGraph::ChunkPathToCells(const VoxelGrid& grid, const CorridorFlowField
         if (best.x >= 0) outCells.push_back(best);
 
     }
+}
+
+
+
+ChunkGraph::MemoryFootprint ChunkGraph::GetMemoryFootprint() const
+{
+    MemoryFootprint m{};
+    m.compCount = m_CompCount.capacity() * sizeof(uint16_t);
+    m.nodeOffset = m_NodeOffset.capacity() * sizeof(uint32_t);
+    m.nodeChunk = m_NodeChunk.capacity() * sizeof(uint32_t);
+    m.adjacencyOuter = m_Adjacency.capacity() * sizeof(std::vector<uint32_t>);
+
+    for (const auto& list : m_Adjacency)
+    {
+        m.adjacencyData += list.size() * sizeof(uint32_t);
+        // push_back 성장분 + unique 후에도 안 줄어드는 여유분
+        m.adjacencySlack += (list.capacity() - list.size()) * sizeof(uint32_t);
+    }
+    return m;
+}
+
+size_t ChunkGraph::GetEdgeCount() const
+{
+    size_t n = 0;
+    for (const auto& list : m_Adjacency) n += list.size();
+    return n;
 }
