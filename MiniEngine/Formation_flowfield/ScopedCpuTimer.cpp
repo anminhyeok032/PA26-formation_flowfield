@@ -36,6 +36,13 @@ namespace
         "ChunkGraph_FindPath",
         "ChunkGraph_ExpandNodes",
         "ChunkGraph_MaskCells",
+
+        //"MaskCells",        // 마스크에 들어간 셀 수
+        //"FieldChunks",      // FlowField가 할당한 청크 수
+        //"FieldReached",     // Dijkstra가 도달한 셀 수 (마스크 대비 실제 유효율)
+        //"ExpandedNodes"    // ExpandNodes가 반환한 노드 수
+
+
     };
     static_assert(_countof(kScopeNames) == (int)CoreScope::COUNT,
         "kScopeNames가 CoreScope enum과 개수가 다름 - 둘을 함께 갱신할 것");
@@ -65,10 +72,110 @@ namespace
         false,   // ChunkGraph_FindPath  - 내부에서 NodeIdOf 2회 호출하지만 별도 집계
         false,   // ChunkGraph_ExpandNodes
         false,   // ChunkGraph_MaskCells
+
+        //false,   // MaskCells,
+        //false,   // FieldChunks,
+        //false,   // FieldReached,
+        //false    // ExpandedNodes
     };
     static_assert(_countof(kIsAggregate) == (int)CoreScope::COUNT,
         "kIsAggregate가 CoreScope enum과 개수가 다름");
 }
+
+namespace
+{
+    const char* kCountNames[(int)CoreCount::COUNT] =
+    {
+        "ExpandedNodes",
+        "MaskCells",
+        "FieldChunks",
+        "FieldChunkBytes",
+        "FieldReached",
+    };
+
+    // 분모 0에서 조용히 inf/nan이 찍히면 표를 못 믿게 된다
+    double SafeRatio(uint64_t num, uint64_t den)
+    {
+        return (den > 0) ? (double)num / (double)den : 0.0;
+    }
+}
+
+void CoreCounter::Report(const char* label, const char* filePath)
+{
+    const uint64_t* v = Values();
+    const bool* ok = Valid();
+
+    FILE* fp = nullptr;
+    fopen_s(&fp, filePath, "ab");
+
+    auto emit = [&](const char* line)
+    {
+        Utility::Print(line);
+        if (fp) fputs(line, fp);
+    };
+
+    char buf[256];   // CoreTimer::Report와 동일 - Utility::Printf 내부 버퍼가 256B
+
+    if (label) { sprintf_s(buf, "\n--- Counters [%s] ---\n", label); }
+    else { sprintf_s(buf, "\n--- Counters ---\n"); }
+    emit(buf);
+
+    // 시간과 달리 크기순 정렬이 의미가 없다.
+    // 파이프라인 순서(확장 -> 마스크 -> 필드 -> 도달)로 읽혀야 어디서 새는지 보인다
+    for (int i = 0; i < (int)CoreCount::COUNT; ++i)
+    {
+        if (!ok[i]) continue;
+        sprintf_s(buf, "%-26s %16llu\n", kCountNames[i], (unsigned long long)v[i]);
+        emit(buf);
+    }
+
+    // --- 파생 지표 - 이 값들 때문에 카운터를 만든 것이다 ---
+    const uint64_t nodes = v[(int)CoreCount::ExpandedNodes];
+    const uint64_t cells = v[(int)CoreCount::MaskCells];
+    const uint64_t chunks = v[(int)CoreCount::FieldChunks];
+    const uint64_t chBytes = v[(int)CoreCount::FieldChunkBytes];
+    const uint64_t reached = v[(int)CoreCount::FieldReached];
+
+    if (ok[(int)CoreCount::MaskCells] && ok[(int)CoreCount::FieldReached])
+    {
+        // 마스크에 넣었는데 Dijkstra가 못 간 셀의 비율.
+        // 낮으면 윈도우 크기 문제가 아니라 노드 확장이 이동 그래프와 어긋난 것 - 그쪽부터 볼 것
+        sprintf_s(buf, "\nreach rate   = %6.2f%%  (reached %llu / mask %llu)\n",
+            SafeRatio(reached, cells) * 100.0,
+            (unsigned long long)reached, (unsigned long long)cells);
+        emit(buf);
+    }
+
+    if (ok[(int)CoreCount::ExpandedNodes] && ok[(int)CoreCount::MaskCells])
+    {
+        // 노드 1개가 마스크에 기여하는 셀 수. 홉을 늘릴 때 비용 증가율 예측에 쓴다
+        sprintf_s(buf, "cells / node = %8.1f\n", SafeRatio(cells, nodes));
+        emit(buf);
+    }
+
+    if (ok[(int)CoreCount::FieldChunks] && ok[(int)CoreCount::FieldChunkBytes])
+    {
+        // 이론 메모리. MemoryProbe delta와 크게 벌어지면
+        // unordered_map 오버헤드가 예상보다 큰 것이므로 자료구조를 재검토할 근거가 된다
+        const double theoryMB = (double)(chunks * chBytes) / 1e6;
+        sprintf_s(buf, "field theory = %8.2f MB  (%llu chunks x %llu B)\n",
+            theoryMB, (unsigned long long)chunks, (unsigned long long)chBytes);
+        emit(buf);
+
+        if (ok[(int)CoreCount::FieldReached])
+        {
+            // 청크당 실제 도달 셀. FlowFieldChunk는 64컬럼 x 4슬롯 = 256슬롯이 상한이므로
+            // 이 값이 낮으면 청크 대부분이 빈 채로 할당된 것 = 윈도우 모양이 나쁘다
+            sprintf_s(buf, "reached / chunk = %6.1f  (of 256 slots)\n",
+                SafeRatio(reached, chunks));
+            emit(buf);
+        }
+    }
+
+    emit("\n");
+    if (fp) fclose(fp);
+}
+
 
 void CoreTimer::Report(const char* filePath)
 {

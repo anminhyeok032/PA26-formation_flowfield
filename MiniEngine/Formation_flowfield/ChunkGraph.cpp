@@ -468,6 +468,7 @@ std::unordered_set<uint32_t> ChunkGraph::ExpandNodes(const std::vector<uint32_t>
             pending.push(next);
         }
     }
+    CoreCounter::Set(CoreCount::ExpandedNodes, result.size());
     return result;
 }
 
@@ -528,6 +529,7 @@ std::unordered_set<int64_t> ChunkGraph::MaskCellsFromNodes(
             }
         }
     }
+    CoreCounter::Set(CoreCount::MaskCells, mask.size());
     return mask;
 }
 

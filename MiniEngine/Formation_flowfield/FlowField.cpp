@@ -171,6 +171,8 @@ void FlowField::Cleanup(void)
     VoxelRenderer::Shutdown();
     NpcRenderer::Shutdown();
     FlowFieldArrowRenderer::Shutdown();
+
+    ReportMemory();
 }
 
 
@@ -509,4 +511,7 @@ void FlowField::ReportMemory(const char* filePath) const
 
     m_VoxelGrid.ReportMemory(filePath);
     m_Npc.ReportMemory();
+
+    CoreTimer::Report();
+    CoreCounter::Report();
 }
