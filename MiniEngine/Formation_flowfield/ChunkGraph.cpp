@@ -87,17 +87,16 @@ int ChunkGraph::LabelChunk(const VoxelGrid& grid, int cx, int cz, int16_t* outLa
 // 간선
 //
 // ---------------------------------------------------------------- 
-// 라벨 조회를 방향당 1번
 void ChunkGraph::BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
     const std::vector<int16_t>& labels,
     const std::unordered_map<int, int>* slotOf)
 {
-    const int chunkIdx = cx + m_CountX * cz;
+    const int      chunkIdx = cx + m_CountX * cz;
+    const uint32_t base = NodeOffsetOf(chunkIdx);
 
-    for (uint16_t c = 0; c < m_CompCount[chunkIdx]; ++c)
-    {
-        m_Adjacency[m_NodeOffset[chunkIdx] + c].clear();
-    }
+    // 죽은 슬롯까지 비운다 - comp >= m_CompCount인 슬롯은 항상 비어 있다를 불변식
+    // 성분이 줄었다가 다시 늘 때 옛 이웃을 물려받는 사고를 막는다
+    for (int c = 0; c < SLOTS_PER_CHUNK; ++c) m_Adjacency[base + c].clear();
 
     // 셀마다 찾지 않고 방향 루프 밖에서 한 번만 - 크로싱마다 해시 조회하면 낭비
     const int16_t* srcLabels = LabelsOf(chunkIdx, labels, slotOf);
@@ -112,6 +111,8 @@ void ChunkGraph::BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
         const int      nChunkIdx = ncx + m_CountX * ncz;
         const int16_t* dstLabels = LabelsOf(nChunkIdx, labels, slotOf);
         if (!dstLabels) continue;
+
+        const uint32_t nBase = NodeOffsetOf(nChunkIdx);
 
         const int  dx = kDirX[dir];
         const int  dz = kDirZ[dir];
@@ -158,16 +159,20 @@ void ChunkGraph::BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
                     srcLabels[LocalIndex(ax % CHUNK_SIZE, az % CHUNK_SIZE, slot)];
                 const int16_t dstComp =
                     dstLabels[LocalIndex(bx % CHUNK_SIZE, bz % CHUNK_SIZE, bslot)];
-                if (srcComp < 0 || dstComp < 0) continue;
 
-                m_Adjacency[m_NodeOffset[chunkIdx] + srcComp].push_back(m_NodeOffset[nChunkIdx] + dstComp);
+                // 상한 초과로 clamp된 성분은 노드를 받지 못했다.
+                // 검사를 빼면 base + srcComp가 다음 청크의 슬롯을 덮어쓴다
+                if (srcComp < 0 || srcComp >= (int16_t)m_CompCount[chunkIdx])  continue;
+                if (dstComp < 0 || dstComp >= (int16_t)m_CompCount[nChunkIdx]) continue;
+
+                m_Adjacency[base + srcComp].push_back(nBase + dstComp);
             }
         }
     }
 
     for (uint16_t c = 0; c < m_CompCount[chunkIdx]; ++c)
     {
-        auto& list = m_Adjacency[m_NodeOffset[chunkIdx] + c];
+        auto& list = m_Adjacency[base + c];
         std::sort(list.begin(), list.end());
         list.erase(std::unique(list.begin(), list.end()), list.end());
     }
@@ -187,7 +192,7 @@ void ChunkGraph::Build(const VoxelGrid& grid)
 
     const int chunkCount = m_CountX * m_CountZ;
     m_CompCount.assign(chunkCount, 0);
-    m_NodeOffset.assign(chunkCount, 0);
+    m_MaxCompPerChunk = 0;
 
     // 라벨은 간선을 만드는 동안만 필요하므로 지역 버퍼에 두고 함수 끝에서 버린다
     std::vector<int16_t> labels((size_t)chunkCount * LABELS_PER_CHUNK, -1);
@@ -199,30 +204,20 @@ void ChunkGraph::Build(const VoxelGrid& grid)
         for (int cx = 0; cx < m_CountX; ++cx)
         {
             const int idx = cx + m_CountX * cz;
-            m_CompCount[idx] = (uint16_t)LabelChunk(grid, cx, cz, &labels[(size_t)idx * LABELS_PER_CHUNK]);
+            const int comps = LabelChunk(grid, cx, cz, &labels[(size_t)idx * LABELS_PER_CHUNK]);
+
+            m_MaxCompPerChunk = std::max(m_MaxCompPerChunk, comps);
+
+            // 상한을 넘긴 성분은 노드를 받지 못한다.
+            // 그 셀들은 NodeIdOf가 -1을 반환해 경로 탐색이 실패할 뿐,
+            // 노드 id가 다음 청크와 겹쳐 그래프 전체가 오염되는 일은 없다
+            m_CompCount[idx] = (uint16_t)std::min(comps, SLOTS_PER_CHUNK);
         }
     }
 
-    // 2 - 성분 개수 누적합으로 노드 id 배정 - 고정 상한이 없어 초과로 깨질 여지가 없다
-    uint32_t total = 0;
-    for (int i = 0; i < chunkCount; ++i)
-    {
-        m_NodeOffset[i] = total;
-        total += m_CompCount[i];
-    }
-
-    // 3 - 노드 -> 청크 역참조
-    m_NodeChunk.assign(total, 0);
-    for (int i = 0; i < chunkCount; ++i)
-    {
-        for (uint16_t c = 0; c < m_CompCount[i]; ++c)
-        {
-            m_NodeChunk[m_NodeOffset[i] + c] = (uint32_t)i;
-        }
-    }
-
-    // 4 - 간선 생성 (라벨과 노드 id가 모두 확정되고 나서)
-    m_Adjacency.assign(total, {});
+    // 2 - 간선 생성.
+    //    노드 id는 chunkIdx * SLOTS_PER_CHUNK로 즉시 결정되므로 별도 배정 단계가 없다
+    m_Adjacency.assign((size_t)chunkCount * SLOTS_PER_CHUNK, {});
     for (int cz = 0; cz < m_CountZ; ++cz)
     {
         for (int cx = 0; cx < m_CountX; ++cx)
@@ -294,16 +289,22 @@ void ChunkGraph::RefreshAround(const VoxelGrid& grid,
             &labels[(size_t)k * LABELS_PER_CHUNK]);
     }
 
-    // 성분 개수가 바뀌면 그 청크 이후의 노드 id가 전부 밀리므로 전체 재빌드.
+    // 성분 개수가 SLOTS_PER_CHUNK를 넘으면 노드 id 공간이 부족하다.
     // 라벨은 위에서 이미 계산했으니 여기서 다시 돌리지 않는다.
     for (int idx : edited)
     {
-        if (freshCount[slotOf[idx]] != m_CompCount[idx])
+        const uint16_t fresh = freshCount[slotOf[idx]];
+        m_MaxCompPerChunk = std::max(m_MaxCompPerChunk, (int)fresh);
+
+        if (fresh > SLOTS_PER_CHUNK)
         {
+            // 이 루프가 앞쪽 청크의 m_CompCount를 이미 건드렸으므로 그냥 나가면
+            // 반쯤 갱신된 그래프가 남는다. 전체 재빌드로 일관성부터 회복시킨다
             ++m_FullRebuildCount;
             Build(grid);
             return;
         }
+        m_CompCount[idx] = fresh;   // 개수 변경은 정상 - 오프셋이 고정이라 밀리지 않는다
     }
 
     for (int idx : dirtyEdges)
@@ -331,10 +332,11 @@ int ChunkGraph::NodeIdOf(const VoxelGrid& grid, const DirectX::XMINT3& cell) con
     int16_t labels[LABELS_PER_CHUNK];
     LabelChunk(grid, cx, cz, labels);
 
+    const int chunkIdx = cx + m_CountX * cz;
     const int16_t comp = labels[LocalIndex(cell.x % CHUNK_SIZE, cell.z % CHUNK_SIZE, slot)];
-    if (comp < 0 || (uint16_t)comp >= m_CompCount[cx + m_CountX * cz]) return -1;
+    if (comp < 0 || (uint16_t)comp >= m_CompCount[chunkIdx]) return -1;
 
-    return (int)m_NodeOffset[cx + m_CountX * cz] + comp;
+    return (int)NodeOffsetOf(chunkIdx) + comp;
 }
 
 const int16_t* ChunkGraph::LabelsOf(int chunkIdx, const std::vector<int16_t>& labels, const std::unordered_map<int, int>* slotOf)
@@ -351,11 +353,11 @@ const int16_t* ChunkGraph::LabelsOf(int chunkIdx, const std::vector<int16_t>& la
 
 
 
-bool ChunkGraph::FindChunkPath(const VoxelGrid& grid,
+bool ChunkGraph::FindNodePath(const VoxelGrid& grid,
     const DirectX::XMINT3& start, const DirectX::XMINT3& goal,
-    std::vector<int64_t>& outChunkPath) const
+    std::vector<uint32_t>& outNodePath) const
 {
-    outChunkPath.clear();
+    outNodePath.clear();
     if (m_Adjacency.empty()) return false;
 
     const int startNode = NodeIdOf(grid, start);
@@ -397,12 +399,13 @@ bool ChunkGraph::FindChunkPath(const VoxelGrid& grid,
 
         if (curr.node == (uint32_t)goalNode)
         {
+            // 노드 id를 그대로 담는다 - 청크키로 바꾸면 성분 정보가 소멸한다
             for (uint32_t at = (uint32_t)goalNode; at != UINT32_MAX; at = cameFrom[at])
             {
-                const int c = ChunkOfNode(at);
-                outChunkPath.push_back(MakeChunkKey(c % m_CountX, 0, c / m_CountX));
+                outNodePath.push_back(at);
             }
-            std::reverse(outChunkPath.begin(), outChunkPath.end());
+
+            std::reverse(outNodePath.begin(), outNodePath.end());
             return true;
         }
 
@@ -428,28 +431,20 @@ bool ChunkGraph::FindChunkPath(const VoxelGrid& grid,
 }
 
 // 성분 노드를 따라 bfs
-std::unordered_set<int64_t> ChunkGraph::ExpandChunks(const std::vector<int64_t>& seeds,
+std::unordered_set<uint32_t> ChunkGraph::ExpandNodes(const std::vector<uint32_t>& seeds,
     int marginChunks) const
 {
-    std::unordered_set<int64_t> result(seeds.begin(), seeds.end());
+    std::unordered_set<uint32_t> result(seeds.begin(), seeds.end());
     if (marginChunks <= 0) return result;
 
     // 성분 노드를 따라 퍼진다 - 갈라진 청크의 반대쪽으로는 새지 않는다
     std::vector<int> depth(m_Adjacency.size(), -1);
     std::queue<uint32_t> pending;
 
-    for (int64_t key : seeds)
+    for (uint32_t node : seeds)
     {
-        int cx, cy, cz;
-        DecodeChunkKey(key, cx, cy, cz);
-        if (cx < 0 || cx >= m_CountX || cz < 0 || cz >= m_CountZ) continue;
-
-        const int idx = cx + m_CountX * cz;
-        for (uint16_t c = 0; c < m_CompCount[idx]; ++c)
-        {
-            const uint32_t node = m_NodeOffset[idx] + c;
-            if (depth[node] < 0) { depth[node] = 0; pending.push(node); }
-        }
+        if (node >= m_Adjacency.size()) continue;
+        if (depth[node] < 0) { depth[node] = 0; pending.push(node); }
     }
 
     while (!pending.empty())
@@ -462,25 +457,43 @@ std::unordered_set<int64_t> ChunkGraph::ExpandChunks(const std::vector<int64_t>&
         {
             if (depth[next] >= 0) continue;
             depth[next] = depth[curr] + 1;
-
-            const int c = ChunkOfNode(next);
-            result.insert(MakeChunkKey(c % m_CountX, 0, c / m_CountX));
+            result.insert(next);
             pending.push(next);
         }
     }
     return result;
 }
 
-std::unordered_set<int64_t> ChunkGraph::MaskCellsFromChunks(
-    const VoxelGrid& grid, const std::unordered_set<int64_t>& chunks)
+std::unordered_set<int64_t> ChunkGraph::MaskCellsFromNodes(
+    const VoxelGrid& grid, const std::unordered_set<uint32_t>& nodes) const
 {
-    std::unordered_set<int64_t> mask;
-    mask.reserve(chunks.size() * CHUNK_SIZE * CHUNK_SIZE);
+    // 같은 청크의 노드를 묶는다 - 청크당 라벨링은 한 번이면 충분하다.
+    // 값은 원하는 성분들의 비트마스크 (SLOTS_PER_CHUNK <= 32)
+    std::unordered_map<int, uint32_t> wantedComps;
+    wantedComps.reserve(nodes.size());
 
-    for (int64_t key : chunks)
+    for (uint32_t node : nodes)
     {
-        int cx, cy, cz;
-        DecodeChunkKey(key, cx, cy, cz);
+        const int chunkIdx = ChunkOfNode(node);
+        const uint32_t comp = node % SLOTS_PER_CHUNK;
+        wantedComps[chunkIdx] |= (1u << comp);
+    }
+
+    std::unordered_set<int64_t> mask;
+    mask.reserve(wantedComps.size() * CHUNK_SIZE * CHUNK_SIZE);
+
+    std::vector<int16_t> labels(LABELS_PER_CHUNK);
+
+    for (const auto& kv : wantedComps)
+    {
+        const int chunkIdx = kv.first;
+        const uint32_t wanted = kv.second;
+        const int cx = chunkIdx % m_CountX, cz = chunkIdx / m_CountX;
+
+        // 성분이 하나뿐이면 walkable 셀이 전부 그 성분이다 - 라벨링을 돌릴 이유가 없다.
+        // 청크당 약 4.7us이므로 이 분기가 마스크 비용을 좌우한다
+        const bool needLabels = (m_CompCount[chunkIdx] > 1);
+        if (needLabels) LabelChunk(grid, cx, cz, labels.data());
 
         for (int lz = 0; lz < CHUNK_SIZE; ++lz)
         {
@@ -489,12 +502,20 @@ std::unordered_set<int64_t> ChunkGraph::MaskCellsFromChunks(
                 const int x = cx * CHUNK_SIZE + lx;
                 const int z = cz * CHUNK_SIZE + lz;
 
-                // 모든 y층을 넣는다 - 어느 층으로 갈지는 Dijkstra가 정한다
                 VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
                 for (int slot = 0; slot < surfaces.count; ++slot)
                 {
                     const int y = surfaces.data[slot];
-                    if (grid.IsWalkable(x, y, z)) mask.insert(MakeCellKey(x, y, z));
+                    if (!grid.IsWalkable(x, y, z)) continue;
+
+                    if (needLabels)
+                    {
+                        // A*가 고른 층만 넣는다 - 여기서 층을 안 가리면
+                        // 다리 위로 가는 경로가 다리 아래까지 마스크에 끌어들인다
+                        const int16_t comp = labels[LocalIndex(lx, lz, slot)];
+                        if (comp < 0 || ((wanted >> comp) & 1u) == 0) continue;
+                    }
+                    mask.insert(MakeCellKey(x, y, z));
                 }
             }
         }
@@ -510,18 +531,24 @@ int ChunkGraph::GetSplitChunkCount() const
 }
 
 
-void ChunkGraph::ChunkPathToCells(const VoxelGrid& grid, const CorridorFlowField& field,
-    const std::vector<int64_t>& chunkPath, std::vector<DirectX::XMINT3>& outCells)
+void ChunkGraph::NodePathToCells(const VoxelGrid& grid, const CorridorFlowField& field,
+    const std::vector<uint32_t>& nodePath,
+    std::vector<DirectX::XMINT3>& outCells) const
 {
     outCells.clear();
-    outCells.reserve(chunkPath.size());
+    outCells.reserve(nodePath.size());
 
-    for (int64_t key : chunkPath)
+    std::vector<int16_t> labels(LABELS_PER_CHUNK);
+
+    for (uint32_t node : nodePath)
     {
-        int cx, cy, cz;
-        DecodeChunkKey(key, cx, cy, cz);
+        const int chunkIdx = ChunkOfNode(node);
+        const int16_t want = (int16_t)(node % SLOTS_PER_CHUNK);
+        const int cx = chunkIdx % m_CountX, cz = chunkIdx / m_CountX;
 
-        // 중앙에 가장 가까운 필드가 실제로 도달한 셀을 고르기
+        const bool needLabels = (m_CompCount[chunkIdx] > 1);
+        if (needLabels) LabelChunk(grid, cx, cz, labels.data());
+
         const int centerX = cx * CHUNK_SIZE + CHUNK_SIZE / 2;
         const int centerZ = cz * CHUNK_SIZE + CHUNK_SIZE / 2;
 
@@ -539,12 +566,17 @@ void ChunkGraph::ChunkPathToCells(const VoxelGrid& grid, const CorridorFlowField
                 const int distSq = dx * dx + dz * dz;
                 if (distSq >= bestDistSq) continue;   // 이미 더 가까운 후보가 있음
 
-                // 이 컬럼에서 필드가 도달한 층 중 비용이 가장 낮은 것 = 실제 이동에 쓰이는 층
+                VoxelGrid::SurfaceSpan surfaces = grid.GetSurfaceYList(x, z);
+
                 float bestCost = FLT_MAX;
                 int   bestY = -1;
-                for (int16_t y : grid.GetSurfaceYList(x, z))
+                for (int slot = 0; slot < surfaces.count; ++slot)
                 {
+                    const int y = surfaces.data[slot];
                     if (!grid.IsWalkable(x, y, z)) continue;
+
+                    // 이 노드가 가리키는 성분만 - 다른 층을 그리면 화면과 마스크가 어긋난다
+                    if (needLabels && labels[LocalIndex(lx, lz, slot)] != want) continue;
 
                     float c = 0.0f;
                     if (!field.SampleCost(grid, x, y, z, c)) continue;   // 미도달 층은 제외
@@ -558,6 +590,5 @@ void ChunkGraph::ChunkPathToCells(const VoxelGrid& grid, const CorridorFlowField
         }
 
         if (best.x >= 0) outCells.push_back(best);
-
     }
 }

@@ -4,7 +4,7 @@
 #include <cmath>
 #include <queue>
 
-constexpr float NPC_SPEED = 5.5f;
+constexpr float NPC_SPEED = 3.5f;
 
 const int TARGET_COUNT = 1000;
 
@@ -179,8 +179,8 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     }
 
     // --- 4. 청크 경로 -> 마스크 -> FlowField ---
-    std::vector<int64_t> chunkPath;
-    if (!m_SplitController.BuildLeafCorridor(*m_Grid, *m_ChunkGraph, leaf, goalCell, &chunkPath))  return false;
+    std::vector<uint32_t> nodePath;
+    if (!m_SplitController.BuildLeafCorridor(*m_Grid, *m_ChunkGraph, leaf, goalCell, &nodePath))  return false;
 
     // --- 5. 마스크가 실제 통로를 담았는지 확인 ---
     // 청크 그래프는 청크 내부가 벽/절벽으로 갈라진 경우를 모른다.
@@ -204,7 +204,7 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     m_Group.leafIds.push_back(0);
 
     // --- 6. 디버그 시각화용 셀 변환 ---
-    if (outPath) ChunkGraph::ChunkPathToCells(*m_Grid, leaf.field, chunkPath, *outPath);
+    if (outPath) m_ChunkGraph->NodePathToCells(*m_Grid, leaf.field, nodePath, *outPath);
 
     return true;
 }

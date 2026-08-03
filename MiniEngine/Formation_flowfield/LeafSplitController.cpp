@@ -27,26 +27,25 @@ LeafSplitController::LeafSplitController(std::vector<std::unique_ptr<LeafGroup>>
 // 기초 길찾기 로직
 //
 //------------------------
-bool LeafSplitController::BuildLeafCorridor(const VoxelGrid& grid, const ChunkGraph& chunkGraph, 
-    LeafGroup& leaf, const DirectX::XMINT3& goalCell, std::vector<int64_t>* outChunkPath)
+bool LeafSplitController::BuildLeafCorridor(const VoxelGrid& grid, const ChunkGraph& chunkGraph,
+    LeafGroup& leaf, const DirectX::XMINT3& goalCell,
+    std::vector<uint32_t>* outNodePath)
 {
-    std::vector<int64_t> chunkPath;
+    std::vector<uint32_t> nodePath;
     DirectX::XMINT3 centroidCell;
-    if (!FindLeafPath(grid, chunkGraph, leaf, goalCell, chunkPath, centroidCell)) return false;
+    if (!FindLeafPath(grid, chunkGraph, leaf, goalCell, nodePath, centroidCell)) return false;
 
-    // leaf.path를 여기서 확정
-    // 기존 코드에선 TrySplitLeaf만 child.path를 채우고 루트 leaf는 비어 있었다 -
-    // 그러면 첫 분리 때 parent.path가 empty라 경로 중복 검사가 통째로 건너뛰어진다.
-    leaf.path = chunkPath;
-    if (outChunkPath) *outChunkPath = chunkPath;
+    leaf.path = nodePath;
+    if (outNodePath) *outNodePath = nodePath;
 
-    BuildLeafField(grid, chunkGraph, leaf, goalCell, centroidCell, chunkPath);
+    BuildLeafField(grid, chunkGraph, leaf, goalCell, centroidCell, nodePath);
     return true;
 }
 
 
-bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-    std::vector<int64_t>& outChunkPath, DirectX::XMINT3& outCentroidCell)
+bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf,
+    const DirectX::XMINT3& goalCell,
+    std::vector<uint32_t>& outNodePath, DirectX::XMINT3& outCentroidCell)
 {
     if (leaf.members.empty()) return false;
 
@@ -85,43 +84,35 @@ bool LeafSplitController::FindLeafPath(const VoxelGrid& grid, const ChunkGraph& 
     }
     if (startCell.x < 0) return false;
 
-    if (!chunkGraph.FindChunkPath(grid, startCell, goalCell, outChunkPath))
+    if (!chunkGraph.FindNodePath(grid, startCell, goalCell, outNodePath))
         return false;
 
     return true;
 }
 
-void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-    const DirectX::XMINT3& centroidCell, const std::vector<int64_t>& chunkPath)
+void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf,
+    const DirectX::XMINT3& goalCell, const DirectX::XMINT3& centroidCell,
+    const std::vector<uint32_t>& nodePath)
 {
-    const int cx = centroidCell.x, cz = centroidCell.z;
-
     // 3 - margin: leaf 인원 + leaf 분포 반경
-    int maxDistFromCentroid = 0;
+    const int margin = ComputeMarginCells((int)leaf.members.size()) + 3;
+
+    // 4 - 마스크: A* 경로 노드 + leaf 멤버가 서 있는 노드를 시드로
+    // (센트로이드 기준 경로가 구석 멤버를 못 지나칠 수 있다)
+    std::vector<uint32_t> seeds = nodePath;
     for (int idx : leaf.members)
     {
         const auto& c = m_StartCells[idx];
         if (c.x < 0) continue;
-        int dx = c.x - cx, dz = c.z - cz;
-        int d = (int)std::round(std::sqrt((float)(dx * dx + dz * dz)));
-        maxDistFromCentroid = std::max(maxDistFromCentroid, d);
+
+        // 셀 -> 노드. 청크키로 넣으면 그 청크의 모든 성분이 시드가 되어
+        // 멤버가 서 있지도 않은 층까지 확장의 출발점이 된다
+        const int node = chunkGraph.NodeIdOf(grid, c);
+        if (node >= 0) seeds.push_back((uint32_t)node);
     }
 
-    int formationMargin = ComputeMarginCells((int)leaf.members.size());
-    int margin = std::max(formationMargin, maxDistFromCentroid) + 2;
-
-    // 4 - 마스크: A* 경로 + leaf 멤버 시작 셀만 시드로
-    // seeds = 경로 청크 + 멤버가 실제로 서 있는 청크
-    // (센트로이드 기준 경로가 구석 멤버를 못 지나칠 수 있다 - 기존 extraSeeds와 같은 목적)
-    std::vector<int64_t> seeds = chunkPath;
-    for (int idx : leaf.members)
-    {
-        const auto& c = m_StartCells[idx];
-        if (c.x >= 0) seeds.push_back(ChunkGraph::ChunkKeyOf(c.x, c.z));
-    }
-
-    auto chunks = chunkGraph.ExpandChunks(seeds, ChunkGraph::MarginChunksFor(margin));
-    auto mask = ChunkGraph::MaskCellsFromChunks(grid, chunks);
+    auto nodes = chunkGraph.ExpandNodes(seeds, ChunkGraph::MarginChunksFor(margin));
+    auto mask = chunkGraph.MaskCellsFromNodes(grid, nodes);
 
     // 5 - FlowField 계산
     leaf.field.Build(grid, goalCell, mask);
