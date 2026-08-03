@@ -19,18 +19,21 @@ public:
         std::vector<DirectX::XMINT3>& startCells);
 
     bool BuildLeafCorridor(const VoxelGrid& grid, const ChunkGraph& chunkGraph,
-        LeafGroup& leaf, const DirectX::XMINT3& goalCell, std::vector<int64_t>* outChunkPath = nullptr);
+        LeafGroup& leaf, const DirectX::XMINT3& goalCell,
+        std::vector<uint32_t>* outNodePath = nullptr);
 
     //void CheckSplitTriggers(const VoxelGrid& grid);   // 이동 루프 종료 후 호출
 
 private:
     // a* 실행
-    bool FindLeafPath(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-        std::vector<int64_t>& outChunkPath, DirectX::XMINT3& outCentroidCell);
+    bool FindLeafPath(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf,
+        const DirectX::XMINT3& goalCell,
+        std::vector<uint32_t>& outNodePath, DirectX::XMINT3& outCentroidCell);
 
     // margin / mask / field 구축
-    void BuildLeafField(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf, const DirectX::XMINT3& goalCell,
-        const DirectX::XMINT3& centroidCell, const std::vector<int64_t>& chunkPath);
+    void BuildLeafField(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf,
+        const DirectX::XMINT3& goalCell, const DirectX::XMINT3& centroidCell,
+        const std::vector<uint32_t>& nodePath);
 
     
 

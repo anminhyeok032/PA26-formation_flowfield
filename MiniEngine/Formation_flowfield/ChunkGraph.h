@@ -25,6 +25,11 @@ public:
     static constexpr int MAX_SLOTS = SurfaceChunk::SurfaceColumn::INLINE_CAPACITY;
     static constexpr int DIR_COUNT = 8;
     static constexpr int LABELS_PER_CHUNK = CHUNK_SIZE * CHUNK_SIZE * MAX_SLOTS;   // 256
+    static constexpr int SLOTS_PER_CHUNK = 4;
+
+    // m_NodeOffset 배열 자체가 불필요
+    static uint32_t NodeOffsetOf(int chunkIdx) { return (uint32_t)chunkIdx * SLOTS_PER_CHUNK; }
+
 
     static constexpr int SLOTS_PER_CHUNK = 4;   // 실측으로 정할 것 (아래 참고)
 
@@ -38,20 +43,27 @@ public:
 
     void Build(const VoxelGrid& grid);
 
-    // 지형 편집 후. 성분 개수가 그대로면 국소 갱신, 바뀌면 전체 재빌드
+    // 지형 편집 후, 성분 개수가 그대로면 국소 갱신  바뀌면 전체 재빌드
     void RefreshAround(const VoxelGrid& grid, const std::vector<DirectX::XMINT3>& editedCells);
 
-    // Chunk기반 A* path
-    bool FindChunkPath(const VoxelGrid& grid,
-        const DirectX::XMINT3& start, const DirectX::XMINT3& goal,
-        std::vector<int64_t>& outChunkPath) const;
+    // 셀 -> 노드 id  해당 청크를 그 자리에서 라벨링(저장하지 않음)
+    // 갈 수 없는 셀이면 -1
+    int NodeIdOf(const VoxelGrid& grid, const DirectX::XMINT3& cell) const;
 
-    // 마진만큼 주변으로 확장
-    std::unordered_set<int64_t> ExpandChunks(const std::vector<int64_t>& seeds,
+    // 성분 노드 단위 A*  청크키가 아니라 노드 id를 반환 -
+    // 청크키로 바꾸는 순간 어느 층으로 갈지가 사라져 마스크가 위아래를 모두 삼킨다
+    bool FindNodePath(const VoxelGrid& grid,
+        const DirectX::XMINT3& start, const DirectX::XMINT3& goal,
+        std::vector<uint32_t>& outNodePath) const;
+
+    // 마진만큼 주변 노드로 확장
+    std::unordered_set<uint32_t> ExpandNodes(const std::vector<uint32_t>& seeds,
         int marginChunks) const;
 
-    static std::unordered_set<int64_t> MaskCellsFromChunks(
-        const VoxelGrid& grid, const std::unordered_set<int64_t>& chunks);
+    // 노드가 가리키는 성분에 속한 셀만 마스크에 넣는다
+    // grid는 ExpandNodes 때와 같은 상태여야 한다 - 라벨 번호가 재현되지 않으면 성분이 어긋난다
+    std::unordered_set<int64_t> MaskCellsFromNodes(
+        const VoxelGrid& grid, const std::unordered_set<uint32_t>& nodes) const;
 
     static int MarginChunksFor(int marginCells)
     {
@@ -61,11 +73,18 @@ public:
     // 실측용 - 성분이 2개 이상인 청크 수
     int GetSplitChunkCount() const;
 
-    // 디버그 시각화용 - 청크 경로를 청크당 대표 셀 하나로 변환
+    // 실측용 - 관측된 최대 성분 수.SLOTS_PER_CHUNK를 낮출 수 있는지 판단하는 근거.
+    // 이 값이 SLOTS_PER_CHUNK를 넘으면 넘친 성분은 노드를 받지 못한 상태다
+    int GetMaxCompPerChunk() const { return m_MaxCompPerChunk; }
+
+    // 실측용 - 국소 갱신이 전체 재빌드로 폴백한 횟수
+    int GetFullRebuildCount() const { return m_FullRebuildCount; }
+
+    // 디버그 시각화용 - 노드 경로를 노드당 대표 셀 하나로 변환
     // 실제 이동에는 쓰이지 않으므로 대표 셀 선정은 근사로 충분
-    static void ChunkPathToCells(const VoxelGrid& grid, const CorridorFlowField& field,
-        const std::vector<int64_t>& chunkPath,
-        std::vector<DirectX::XMINT3>& outCells);
+    void NodePathToCells(const VoxelGrid& grid, const CorridorFlowField& field,
+        const std::vector<uint32_t>& nodePath,
+        std::vector<DirectX::XMINT3>& outCells) const;
 
 
 
@@ -96,25 +115,22 @@ private:
     int  LabelChunk(const VoxelGrid& grid, int cx, int cz, int16_t* outLabels) const;
 
 
-
-
-    // 셀 -> 노드 id. 해당 청크를 그 자리에서 라벨링한다(저장하지 않음)
-    int  NodeIdOf(const VoxelGrid& grid, const DirectX::XMINT3& cell) const;
-
-    int  ChunkOfNode(uint32_t node) const { return (int)m_NodeChunk[node]; }
+    // 고정 stride라 역참조 배열 없이 나눗셈으로 되돌린다
+    static int ChunkOfNode(uint32_t node) { return (int)(node / SLOTS_PER_CHUNK); }
 
     std::vector<uint16_t> m_CompCount;    // 청크당 성분 개수
-    std::vector<uint32_t> m_NodeOffset;   // 청크당 첫 노드 id (prefix sum)
-    std::vector<uint32_t> m_NodeChunk;    // 노드 -> 청크 인덱스 (역참조)
+
 
     // 각 청크 면마다의 인접 리스트 (단방향)
     // m_NodeOffset[idx] + srcComp -> 출발노드의 id
-    //      / vec.. m_NodeOffset[nChunkIdx]- 주변청크 인덱스 + dstComp-> 도착노드 id
+    // m_NodeOffset[nChunkIdx]- 주변청크 인덱스 + dstComp-> 도착노드 id
     std::vector<std::vector<uint32_t>> m_Adjacency; 
 
+    int m_FullRebuildCount = 0;
+    int m_MaxCompPerChunk = 0;
 
-   // 라벨 버퍼 접근. slotOf가 nullptr이면 청크 인덱스를 그대로 슬롯으로 사용(전체 빌드용)
-   // 아니면 필요한 청크만 담은 조밀 버퍼에서 찾는다(증분 갱신용)
+    // 라벨 버퍼 접근. slotOf가 nullptr이면 청크 인덱스를 그대로 슬롯으로 사용(전체 빌드용)
+    // 아니면 필요한 청크만 담은 조밀 버퍼에서 찾는다(증분 갱신용)
     static const int16_t* LabelsOf(int chunkIdx, const std::vector<int16_t>& labels,
         const std::unordered_map<int, int>* slotOf);
 
@@ -122,8 +138,6 @@ private:
     void BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
         const std::vector<int16_t>& labels,
         const std::unordered_map<int, int>* slotOf);
-
-    int m_FullRebuildCount = 0;
 
 
     int m_CountX = 0;
