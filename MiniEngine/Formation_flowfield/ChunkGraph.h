@@ -30,12 +30,6 @@ public:
     // m_NodeOffset 배열 자체가 불필요
     static uint32_t NodeOffsetOf(int chunkIdx) { return (uint32_t)chunkIdx * SLOTS_PER_CHUNK; }
 
-
-    static constexpr int SLOTS_PER_CHUNK = 4;   // 실측으로 정할 것 (아래 참고)
-
-    // m_NodeOffset 배열 자체가 불필요해진다
-    static uint32_t NodeOffsetOf(int chunkIdx) { return (uint32_t)chunkIdx * SLOTS_PER_CHUNK; }
-
     static int64_t ChunkKeyOf(int x, int z)
     {
         return MakeChunkKey(x / CHUNK_SIZE, 0, z / CHUNK_SIZE);
@@ -92,11 +86,11 @@ public:
 
     struct MemoryFootprint
     {
-        size_t compCount, nodeOffset, nodeChunk;
+        size_t compCount;
         size_t adjacencyOuter, adjacencyData, adjacencySlack;
         size_t Total() const
         {
-            return compCount + nodeOffset + nodeChunk + adjacencyOuter + adjacencyData + adjacencySlack;
+            return compCount + adjacencyOuter + adjacencyData + adjacencySlack;
         }
     };
     MemoryFootprint GetMemoryFootprint() const;

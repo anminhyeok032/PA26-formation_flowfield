@@ -30,9 +30,9 @@ public:
 
     // 인덱스 -> 좌표 (IsValidIndex 확인 후 호출할 것)
     const VoxelGrid::CellCoord& CoordAt(int index) const { return m_Coords[index]; }
-    int CoordCount() const { return m_Coords.size(); }
+    int CoordCount() const { return (int)m_Coords.size(); }
 
-    int ChunkIndicesCount() const { return m_ChunkToIndices.bucket_count(); }
+    int ChunkIndicesCount() const { return (int)m_ChunkToIndices.bucket_count(); }
 
     // 청크 내 인덱스 목록 (없으면 nullptr)
     const std::vector<int>* IndicesInChunk(int64_t chunkKey) const;

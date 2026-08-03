@@ -4,7 +4,7 @@
 #include <cmath>
 #include <queue>
 
-constexpr float NPC_SPEED = 3.5f;
+constexpr float NPC_SPEED = 10.0f;
 
 const int TARGET_COUNT = 1000;
 

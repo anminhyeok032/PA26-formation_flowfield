@@ -7,12 +7,12 @@
 #include <unordered_map>
 #include <algorithm>
 
-constexpr float NPC_SPEED = 1.5f;
+constexpr float NPC_SPEED = 10.0f;
 constexpr float VOXEL_SIZE_REF = 0.5f;   // VoxelGrid::GetCellSize()와 반드시 일치해야 함
 
 // 이 칸 수만큼 이동할 시간 동안 못 움직이면 분리 검토.
 // waitLimit(0.3칸)의 20배 — 성분 분해 폴백까지 반복 실패한 상태를 의미한다
-constexpr float NPC_SPLIT_WAIT_CELLS = 0.1f;
+constexpr float NPC_SPLIT_WAIT_CELLS = 0.2f;
 constexpr float NPC_SPLIT_WAIT_SECONDS = (VOXEL_SIZE_REF / NPC_SPEED) * NPC_SPLIT_WAIT_CELLS;
 
 

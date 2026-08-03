@@ -118,7 +118,7 @@ void CoreTimer::Report(const char* filePath)
 
     if (anyAggregate)
     {
-        emit("\n* = 하위 스코프를 포함하는 집계 스코프. total을 합산하면 이중 계산됨.\n");
+        emit("\n* = include lower-scope. dont added total - double counted.\n");
     }
 
     // NpcUpdateCore의 calls = 실제로 이동이 돌아간 프레임 수.
@@ -146,7 +146,7 @@ void CoreTimer::Report(const char* filePath)
             // calls > 1 이면 지형 편집 중 전체 재빌드 폴백이 발생했다는 뜻.
             // 시뮬레이션에서 편집당 약 7%로 나왔던 항목 - 실측치가 이걸 넘으면
             // 노드 id 슬랙 할당으로 전환을 검토할 것.
-            sprintf_s(buf, "full builds = %llu (1 = 최초 로드만, 2+ = Refresh 폴백 발생)\n",
+            sprintf_s(buf, "full builds = %llu (1 = first loaded, 2+ = Refresh fallback occ)\n",
                 (unsigned long long)cgBuild.calls);
             emit(buf);
         }
@@ -160,7 +160,7 @@ void CoreTimer::Report(const char* filePath)
                 : 0.0;
             const double pureIncremental = cgRefresh.totalMs - fallbackMs;
 
-            sprintf_s(buf, "refresh: %llu회, 총 %.3f ms (그중 폴백 %.3f ms, 순수 증분 %.3f ms)\n",
+            sprintf_s(buf, "refresh: %lluTimes, total %.3f ms (fallback %.3f ms, pure %.3f ms)\n",
                 (unsigned long long)cgRefresh.calls, cgRefresh.totalMs,
                 fallbackMs, pureIncremental);
             emit(buf);
@@ -169,7 +169,7 @@ void CoreTimer::Report(const char* filePath)
         if (cgFind.calls > 0)
         {
             // 질의당 비용. 셀 단위 A*와 비교하려면 USE_CHUNK_GRAPH를 끄고 재측정할 것.
-            sprintf_s(buf, "path queries = %llu, 질의당 %.5f ms (max %.5f ms)\n",
+            sprintf_s(buf, "path queries = %llu, per %.5f ms (max %.5f ms)\n",
                 (unsigned long long)cgFind.calls,
                 cgFind.totalMs / (double)cgFind.calls, cgFind.maxMs);
             emit(buf);

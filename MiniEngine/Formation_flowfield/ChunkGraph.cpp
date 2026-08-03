@@ -607,8 +607,6 @@ ChunkGraph::MemoryFootprint ChunkGraph::GetMemoryFootprint() const
 {
     MemoryFootprint m{};
     m.compCount = m_CompCount.capacity() * sizeof(uint16_t);
-    m.nodeOffset = m_NodeOffset.capacity() * sizeof(uint32_t);
-    m.nodeChunk = m_NodeChunk.capacity() * sizeof(uint32_t);
     m.adjacencyOuter = m_Adjacency.capacity() * sizeof(std::vector<uint32_t>);
 
     for (const auto& list : m_Adjacency)
