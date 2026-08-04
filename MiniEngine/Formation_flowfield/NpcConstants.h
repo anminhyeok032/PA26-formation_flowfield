@@ -10,3 +10,10 @@ const int TARGET_COUNT = 1000;
 
 // 1칸 움직이는데 비율 (x / 1.0f)%
 constexpr float NPC_WAIT_RATIO = 0.5f;   
+
+// 증가한 마스크가 최초 대비 해당 배수 넘길시, 메모리 위해 전체 재구성 한번 하기
+constexpr float CHASE_MASK_GROWTH_LIMIT = 2.0f;
+
+
+// 증분 확장의 최소 홉
+constexpr int CHASE_MIN_HOPS = 2;

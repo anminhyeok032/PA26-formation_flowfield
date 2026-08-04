@@ -4,9 +4,39 @@
 #include <vector>	
 #include <memory>
 
+
+enum class FieldBuildMode
+{
+	// 최초 목적지 - A* + 멤버 시드 / 캐시를 새로 만든다
+	FullRebuild,
+
+	// 추격 갱신 - goal 노드에서 홉 확장분만 캐시에 추가 (A* x)
+	ChaseIncremental,
+};
+
+
+// 워커 스레드 전용 마스크 캐시
+// 워커 스레드 전용 IO
+struct FieldMaskCache
+{
+	std::unordered_set<uint32_t> nodes;    // 직전 노드 집합 - 신규 노드 차집합용
+	std::unordered_set<int64_t>  mask;     // 직전 셀 마스크 - 신규 셀들 누적
+
+	uint64_t generation = 0;               // 이 캐시를 만든 시점의 지형 상태
+	int      hops = 0;                     // FullRebuild가 쓴 홉 수 - 신규도 같은 폭을 유지
+	size_t   baseSize = 0;                 // 최초 마스크 셀 수 - 폭주 판정 기준선
+	int      leafId = -1;                  // 다른 leaf 요청이 오면 캐시 무효
+
+	bool IsEmpty() const { return mask.empty(); }
+	void Clear() { *this = FieldMaskCache{}; }
+};
+
+
 // 워커 스레드에 넘기는 작업 모음
 struct FieldBuildRequest
 {
+	FieldBuildMode mode = FieldBuildMode::FullRebuild;
+
 	int		leafId = -1;
 	DirectX::XMINT3 goalCell{ -1, -1, -1 };
 
@@ -24,7 +54,12 @@ struct FieldBuildRequest
 	uint64_t	generation = 0;
 
 	// 기본 생성 상태 = 요청 없음
-	bool IsValid() const { return leafId >= 0 && startCell.x >= 0; }
+	bool IsValid() const 
+	{ 
+		if (leafId < 0 || goalCell.x < 0)	return false;
+		if (mode == FieldBuildMode::ChaseIncremental) return true;
+		return startCell.x >= 0;
+	}
 
 	void Clear() { *this = FieldBuildRequest{}; }
 

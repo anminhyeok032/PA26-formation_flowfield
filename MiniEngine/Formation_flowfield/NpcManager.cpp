@@ -414,9 +414,14 @@ void NpcManager::SetChaseTarget(const DirectX::XMINT3& targetCell)
     {
         if (!leafPtr->active) continue;
 
-        // 현재 위치 기준 - m_StartCells는 목적지 설정 시점에 멈춰 있다
-        m_FieldWorker.Submit(m_SplitController.MakeRequest(
-            *leafPtr, targetCell, m_TerrainGeneration, m_Move.currCell));
+        // 캐시가 유효하면 워커가 goal 노드만 써서 증분으로 처리하고,
+        // 캐시가 없거나(최초 동기 빌드 직후) 무효면 이 재료로 전체 재구성
+        FieldBuildRequest req = m_SplitController.MakeRequest(
+            *leafPtr, targetCell, m_TerrainGeneration, m_Move.currCell);
+
+        req.mode = FieldBuildMode::ChaseIncremental;
+
+        m_FieldWorker.Submit(std::move(req));
     }
 
 }

@@ -8,6 +8,29 @@
 #include <algorithm>
 #include "NpcConstants.h"
 
+
+namespace
+{
+    // 청크 추가할지, 전체 재구성할지 판별 함수
+    bool CanUseMask(const FieldBuildRequest& req, const FieldMaskCache& cache)
+    {
+        if (req.mode != FieldBuildMode::ChaseIncremental)    return false;
+        if (cache.IsEmpty())                                 return false;  // 처음 갱신
+        if (cache.leafId != req.leafId)                      return false;  // 다른 그룹
+        if (cache.generation != req.generation)              return false;  // 지형이 바뀜
+        if (cache.hops <= 0)                                 return false;  // hop 초기화 실패
+
+        // mask 추가의 상한까지만
+        const size_t limit = (size_t)(cache.baseSize * CHASE_MASK_GROWTH_LIMIT);
+        if (cache.mask.size() > limit)                      return false;   // 상한 초과시 다시 생성
+
+        return true;
+    }
+}
+
+
+
+
 LeafSplitController::LeafSplitController(std::vector<std::unique_ptr<LeafGroup>>& leaves,
     NpcMoveData& move, NpcGroup& group, std::vector<DirectX::XMINT3>& startCells)
     : m_Leaves(leaves), m_Move(move), m_Group(group), m_StartCells(startCells) 
@@ -112,43 +135,87 @@ void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph
     leaf.field = move(built);   // shared_ptr<CorridorFlowField> -> shared_ptr<const>
 }
 
-FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const ChunkGraph& chunkGraph, const FieldBuildRequest& req, const std::atomic<bool>* cancelFlag)
+FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const ChunkGraph& chunkGraph, 
+    const FieldBuildRequest& req, FieldMaskCache& cache, 
+    const std::atomic<bool>* cancelFlag)
 {
     FieldBuildResult res;
     res.leafId = req.leafId;
     res.generation = req.generation;
 
-    if (req.startCell.x < 0) return res;    // 유효멤버 x
+    const bool CanExpand = CanUseMask(req, cache);
 
-    // 1- 성분 노드 A*
-    if (!chunkGraph.FindNodePath(grid, req.startCell, req.goalCell, res.nodePath))
-        return res;
-
-    // 2 - margin : 폭 or 실제 분포 반경
-    const int formationMargin = ComputeMarginCells(req.memberCount);
-    const int margin = std::max(formationMargin, req.maxDistFromCentroid) + 2;
-
-    // 3 - Seed : 경로 노드 + 멤버 서 있는 노드
-    std::vector<uint32_t> seeds = res.nodePath;
-    for (const auto& c : req.memberCells)
+    if (true == CanExpand)
     {
-        const int node = chunkGraph.NodeIdOf(grid, c);
-        if (node >= 0) seeds.push_back((uint32_t)node);
+        // --- 기존 마스크에다 확장 마스크만 추가해서 다익스트라 ---
+        const int goalNode = chunkGraph.NodeIdOf(grid, req.goalCell);
+        if (goalNode < 0)    return res;        // 못가는 곳
+
+        // margin 기존대로 확장
+        std::vector<uint32_t> seeds{ (uint32_t)goalNode };
+        auto nodes = chunkGraph.ExpandNodes(seeds, cache.hops);
+
+        // 캐시 없는 노드만 골라서 셀로 전개
+        std::unordered_set<uint32_t> fresh;
+        for (uint32_t n : nodes)
+        {
+            if (cache.nodes.insert(n).second)    fresh.insert(n);
+        }
+        if (!fresh.empty())
+        {
+            auto addCells = chunkGraph.MaskCellsFromNodes(grid, fresh);
+            cache.mask.insert(addCells.begin(), addCells.end());
+        }
+    }
+    // --- 전체 재구성 - 최초 목적지 / 지형 변경 / 마스크 폭주 ---
+    else
+    {
+        if (req.startCell.x < 0) return res;    // 유효멤버 x
+
+        // 1- 성분 노드 A*
+        if (!chunkGraph.FindNodePath(grid, req.startCell, req.goalCell, res.nodePath))
+            return res;
+
+        // 2 - margin : 폭 or 실제 분포 반경
+        const int formationMargin = ComputeMarginCells(req.memberCount);
+        const int margin = std::max(formationMargin, req.maxDistFromCentroid) + 2;
+        const int hops = ChunkGraph::MarginChunksFor(margin);
+
+        // 3 - Seed : 경로 노드 + 멤버 서 있는 노드
+        std::vector<uint32_t> seeds = res.nodePath;
+        for (const auto& c : req.memberCells)
+        {
+            const int node = chunkGraph.NodeIdOf(grid, c);
+            if (node >= 0) seeds.push_back((uint32_t)node);
+        }
+
+        auto nodes = chunkGraph.ExpandNodes(seeds, ChunkGraph::MarginChunksFor(margin));
+        auto mask = chunkGraph.MaskCellsFromNodes(grid, nodes);
+
+        // 캐시 재수립 - baseSize가 이후 증분의 폭주 판정 기준이 된다
+        cache.nodes = std::move(nodes);
+        cache.mask = std::move(mask);
+        cache.generation = req.generation;
+        cache.hops = std::max(hops, CHASE_MIN_HOPS);
+        cache.baseSize = cache.mask.size();
+        cache.leafId = req.leafId;
     }
 
-    auto nodes = chunkGraph.ExpandNodes(seeds, ChunkGraph::MarginChunksFor(margin));
-    auto mask = chunkGraph.MaskCellsFromNodes(grid, nodes);
 
     // 4 - Dijkstra + 방향 - (너무 느리면 여기 최적화 할것)
     auto built = std::make_shared<CorridorFlowField>();
-    built->Build(grid, req.goalCell, mask, cancelFlag);
+    built->Build(grid, req.goalCell, cache.mask, cancelFlag);
 
     // 취소 시, field 버퍼 스왑 금지
     if (cancelFlag && cancelFlag->load(std::memory_order_relaxed))   return res;
 
     // Build는 goal 컬럼을 못 찾으면 조용히 빈 필드를 남긴다
-    // 즉, 실패시, 옛날 필드 유지
-    if (!built->IsVisited(grid, req.goalCell.x, req.goalCell.y, req.goalCell.z))    return res;
+    // 즉, 실패시, 옛날 필드 유지 / 증가된 마스크가 goal을 못담음 - cache 지워주기
+    if (!built->IsVisited(grid, req.goalCell.x, req.goalCell.y, req.goalCell.z))
+    {
+        if (true == CanExpand)   cache.Clear();
+        return res;
+    }
 
     res.field = std::move(built);
     res.success = true;

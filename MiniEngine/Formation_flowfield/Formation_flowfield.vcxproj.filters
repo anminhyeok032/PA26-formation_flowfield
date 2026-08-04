@@ -39,6 +39,9 @@
     <Filter Include="Simulation\DebugCheck">
       <UniqueIdentifier>{ca9137ac-195e-44b2-9493-9cc342b4b5cc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="NPC\NpcManager">
+      <UniqueIdentifier>{e24d6fe4-60ba-4386-9937-ff6c8bcd0635}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -68,15 +71,6 @@
     <ClCompile Include="NpcRenderer.cpp">
       <Filter>Render</Filter>
     </ClCompile>
-    <ClCompile Include="NpcManager.cpp">
-      <Filter>NPC</Filter>
-    </ClCompile>
-    <ClCompile Include="NpcMovementSolver.cpp">
-      <Filter>NPC</Filter>
-    </ClCompile>
-    <ClCompile Include="LeafSplitController.cpp">
-      <Filter>NPC</Filter>
-    </ClCompile>
     <ClCompile Include="PreviewRenderer.cpp">
       <Filter>Render</Filter>
     </ClCompile>
@@ -97,6 +91,15 @@
     </ClCompile>
     <ClCompile Include="FieldWorker.cpp">
       <Filter>NPC\FlowField</Filter>
+    </ClCompile>
+    <ClCompile Include="LeafSplitController.cpp">
+      <Filter>NPC\NpcManager</Filter>
+    </ClCompile>
+    <ClCompile Include="NpcManager.cpp">
+      <Filter>NPC\NpcManager</Filter>
+    </ClCompile>
+    <ClCompile Include="NpcMovementSolver.cpp">
+      <Filter>NPC\NpcManager</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -150,21 +153,6 @@
     <ClInclude Include="NpcRenderer.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="NpcManager.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="NpcTypes.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="NpcMovementSolver.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="LeafSplitController.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="CellReservation.h">
-      <Filter>소스 파일</Filter>
-    </ClInclude>
     <ClInclude Include="PreviewRenderer.h">
       <Filter>Render</Filter>
     </ClInclude>
@@ -192,8 +180,23 @@
     <ClInclude Include="FieldWorker.h">
       <Filter>NPC\FlowField</Filter>
     </ClInclude>
+    <ClInclude Include="CellReservation.h">
+      <Filter>NPC\FlowField</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcTypes.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="LeafSplitController.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
     <ClInclude Include="NpcConstants.h">
-      <Filter>NPC</Filter>
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcManager.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcMovementSolver.h">
+      <Filter>NPC\NpcManager</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

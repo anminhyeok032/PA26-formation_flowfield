@@ -24,7 +24,7 @@ void FieldWorker::Worker()
 		}
 
 		FieldBuildResult res = LeafSplitController::RunBuild(
-			*m_Grid, *m_ChunkGraph, req, &m_Cancel);
+			*m_Grid, *m_ChunkGraph, req, m_MaskCache, &m_Cancel);
 
 		{
 			std::lock_guard<std::mutex> lk(m_Mutex);
@@ -109,6 +109,11 @@ void FieldWorker::CancelAndWait()
 		m_cvIdle.wait(lk, [this] {
 			return false == m_Busy.load(std::memory_order_acquire);
 			});
-		m_Cancel.store(false, std::memory_order_release);
+		m_Ready.Clear();
+
+		// 지형 바뀔 예정 - 마스크 셀 구성 무효
+		m_MaskCache.Clear();
 	}
+
+	m_Cancel.store(false, std::memory_order_release);
 }

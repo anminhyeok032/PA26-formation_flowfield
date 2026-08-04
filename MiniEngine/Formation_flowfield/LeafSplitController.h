@@ -27,7 +27,7 @@ public:
     // 워커 스레드 호출 계산용
     // cancelFlag가 세워지면 return
     static FieldBuildResult RunBuild(const VoxelGrid& grid, const ChunkGraph& chunkGraph,
-        const FieldBuildRequest& req,
+        const FieldBuildRequest& req, FieldMaskCache& cache,
         const std::atomic<bool>* cancelFlag);
 
     // 메인 스레드에서 요청을 구성. m_StartCells / leaf.members 스냅샷

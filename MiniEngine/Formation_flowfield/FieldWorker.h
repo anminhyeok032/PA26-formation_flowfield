@@ -33,6 +33,9 @@ public:
 private:
 	void Worker();
 
+	// Worker용 캐쉬
+	FieldMaskCache	m_MaskCache;
+	
 	const VoxelGrid* m_Grid = nullptr;
 	const ChunkGraph* m_ChunkGraph = nullptr;
 
