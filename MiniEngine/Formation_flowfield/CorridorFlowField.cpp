@@ -88,7 +88,9 @@ const CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindColu
     return &cache.chunk->At(lx, lz);
 }
 
-void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask)
+void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal,
+    const std::unordered_set<int64_t>& mask,
+    const std::atomic<bool>* cancelFlag)
 {
     m_Chunks.clear();
 
@@ -112,8 +114,17 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
     openList.push({ goal, 0.0f });
 
     std::vector<NeighborInfo> neighbors;
+    uint32_t sinceCheck = 0;
+
     while (!openList.empty())
     {
+        // 1024번 마다 캔슬인지 확인 - 추후 너무 느리면 숫자 키워라
+        if (++sinceCheck >= 1024)
+        {
+            sinceCheck = 0;
+            if (cancelFlag && cancelFlag->load(std::memory_order_relaxed))   return;
+        }
+
         const OpenEntry entry = openList.top();
         openList.pop();
 

@@ -1,10 +1,12 @@
 ﻿#pragma once
 #include "NpcTypes.h"
 #include "ChunkGraph.h"
+#include "FieldBuildJob.h"
 #include <DirectXMath.h>
 #include <unordered_set>
 #include <vector>
 #include <memory>
+#include <atomic>
 
 // NpcManager 비대화에 따라 분리됨 - leaf(경로/flowfield 소유 단위) 구축과
 // 병목에서의 자동 분리(TrySplitLeaf) 로직을 전담
@@ -22,6 +24,19 @@ public:
 
     //void CheckSplitTriggers(const VoxelGrid& grid);   // 이동 루프 종료 후 호출
 
+    // 워커 스레드 호출 계산용
+    // cancelFlag가 세워지면 return
+    static FieldBuildResult RunBuild(const VoxelGrid& grid, const ChunkGraph& chunkGraph,
+        const FieldBuildRequest& req,
+        const std::atomic<bool>* cancelFlag);
+
+    // 메인 스레드에서 요청을 구성. m_StartCells / leaf.members 스냅샷
+    FieldBuildRequest MakeRequest(const LeafGroup& leaf, const DirectX::XMINT3& goal,
+        uint64_t generation,
+        const std::vector<DirectX::XMINT3>& cellSource) const;
+
+
+
 private:
     // a* 실행
     bool FindLeafPath(const VoxelGrid& grid, const ChunkGraph& chunkGraph, LeafGroup& leaf,
@@ -33,7 +48,6 @@ private:
         const DirectX::XMINT3& goalCell, const DirectX::XMINT3& centroidCell,
         const std::vector<uint32_t>& nodePath);
 
-    
 
 
     /*

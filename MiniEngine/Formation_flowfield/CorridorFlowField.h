@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
+#include <atomic>
 
 class CorridorFlowField
 {
@@ -73,7 +74,9 @@ private:
 
 public:
     // Dijkstra를 이용한 flowfield 만들기
-    void Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask);
+    void Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, 
+        const std::unordered_set<int64_t>& mask,
+        const std::atomic<bool>* cancelFlag = nullptr);
 
     // (x,y,z) 셀의 이동 방향을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.
     // const는 위치 조회로 새로운 청크 할당 방지
@@ -88,7 +91,7 @@ public:
     const std::unordered_map<int64_t, std::unique_ptr<FlowFieldChunk>>& GetChunks() const { return m_Chunks; }
     static constexpr int CHUNK_SIZE = FlowFieldChunk::SIZE;
     // 셀 좌표 -> FlowField 청크 키. y는 청크 좌표에 관여하지 않음(2D + 슬롯 구조).
-    // TODO : FlowField를 2d->3d로 바꿀 때 이 함수만 고치면 전체가 따라옴
+    // FlowField를 2d->3d로 바꿀 때 이 함수만 고치면 전체가 따라옴
     static int64_t ChunkKeyOf(int x, int z)
     {
         return MakeChunkKey(x / FlowFieldChunk::SIZE, 0, z / FlowFieldChunk::SIZE);

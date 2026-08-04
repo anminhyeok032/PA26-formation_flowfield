@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "FieldWorker.h"
 
 
 class NpcManager
@@ -32,7 +33,7 @@ public:
 	// -- 시각화 / 렌더용 접근자 --
     // leaf는 내부 구현이지만, 시각화는 그룹 전체 상태를 그려야 하므로 개수와 인덱스 접근만 열어두기
     int GetLeafCount() const { return (int)m_Leaves.size(); }
-    const CorridorFlowField& GetLeafField(int idx) const { return m_Leaves[idx]->field; }
+    const CorridorFlowField& GetLeafField(int idx) const { return *m_Leaves[idx]->field; }
 
     // 그 셀이 어느 leaf에 포함되면 true (시각화 || 판정)
     bool IsVisitedAny(const VoxelGrid& grid, int x, int y, int z) const;
@@ -41,9 +42,25 @@ public:
 
     const std::vector<NpcRenderer::InstanceData>& GetInstances() const { return m_NpcInstances; }
     bool HasGoal() const { return m_Group.hasGoal; }
+    const DirectX::XMINT3& GetGoal() const { return m_Group.goal; }
 
     // 동적 지형 생성에 대한 갱신 ( TODO : 다중 그룹으로 변환시, 해당 갱신은 상위에서 한번에)
     void OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCells);
+
+    // --- 타겟 갱신 ---
+    // 추격 목표 갱신 -> 셀 바뀔때만 호출
+    void SetChaseTarget(const DirectX::XMINT3& targetCell);
+
+    // 지형 / 그래프 수정 직전 호출 - worker가 그리드 읽을때까지 block용
+    void CancelFieldWork() { m_FieldWorker.CancelAndWait(); }
+
+    // 시각화 갱신 트리거용
+    bool ConsumeFieldSwapped() 
+    {
+        bool v = m_FieldSwapped;
+        m_FieldSwapped = false;
+        return v;
+    }
 
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
@@ -67,6 +84,13 @@ private:
     // NpcManager 비대화에 따라 분리된 협력 객체 - 데이터는 NpcManager가 계속 소유, 로직만 위임
     NpcMovementSolver    m_MovementSolver;    // 프레임 단위 셀 이동 판정
     LeafSplitController  m_SplitController;   // leaf 구축 + 병목 분리
+
+    // flowfield 계산 전담 워커
+    FieldWorker m_FieldWorker;
+    bool m_FieldSwapped = false;    // 시각화 갱신용
+
+    // 지형 / 그래프 변경시 증가 - 결과 판정 확인용
+    uint64_t m_TerrainGeneration = 0;
 
     // 내부 헬퍼
     void InitGroupMovement();

@@ -95,6 +95,9 @@
     <ClCompile Include="ChunkGraph.cpp">
       <Filter>Simulation\Voxel</Filter>
     </ClCompile>
+    <ClCompile Include="FieldWorker.cpp">
+      <Filter>NPC\FlowField</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="FlowFieldArrowPS.hlsl">
@@ -182,6 +185,15 @@
     </ClInclude>
     <ClInclude Include="ChunkGraph.h">
       <Filter>Simulation\Voxel</Filter>
+    </ClInclude>
+    <ClInclude Include="FieldBuildJob.h">
+      <Filter>NPC\FlowField</Filter>
+    </ClInclude>
+    <ClInclude Include="FieldWorker.h">
+      <Filter>NPC\FlowField</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcConstants.h">
+      <Filter>NPC</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -6,15 +6,7 @@
 #include <queue>
 #include <unordered_map>
 #include <algorithm>
-
-constexpr float NPC_SPEED = 1.5f;
-constexpr float VOXEL_SIZE_REF = 0.5f;   // VoxelGrid::GetCellSize()와 반드시 일치해야 함
-
-// 이 칸 수만큼 이동할 시간 동안 못 움직이면 분리 검토.
-// waitLimit(0.3칸)의 20배 — 성분 분해 폴백까지 반복 실패한 상태를 의미한다
-constexpr float NPC_SPLIT_WAIT_CELLS = 0.1f;
-constexpr float NPC_SPLIT_WAIT_SECONDS = (VOXEL_SIZE_REF / NPC_SPEED) * NPC_SPLIT_WAIT_CELLS;
-
+#include "NpcConstants.h"
 
 LeafSplitController::LeafSplitController(std::vector<std::unique_ptr<LeafGroup>>& leaves,
     NpcMoveData& move, NpcGroup& group, std::vector<DirectX::XMINT3>& startCells)
@@ -98,7 +90,6 @@ void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph
     const int margin = ComputeMarginCells((int)leaf.members.size()) + 3;
 
     // 4 - 마스크: A* 경로 노드 + leaf 멤버가 서 있는 노드를 시드로
-    // (센트로이드 기준 경로가 구석 멤버를 못 지나칠 수 있다)
     std::vector<uint32_t> seeds = nodePath;
     for (int idx : leaf.members)
     {
@@ -115,8 +106,109 @@ void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph
     auto mask = chunkGraph.MaskCellsFromNodes(grid, nodes);
 
     // 5 - FlowField 계산
-    leaf.field.Build(grid, goalCell, mask);
+    auto built = std::make_shared<CorridorFlowField>();
+    built->Build(grid, goalCell, mask);
+
+    leaf.field = move(built);   // shared_ptr<CorridorFlowField> -> shared_ptr<const>
 }
+
+FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const ChunkGraph& chunkGraph, const FieldBuildRequest& req, const std::atomic<bool>* cancelFlag)
+{
+    FieldBuildResult res;
+    res.leafId = req.leafId;
+    res.generation = req.generation;
+
+    if (req.startCell.x < 0) return res;    // 유효멤버 x
+
+    // 1- 성분 노드 A*
+    if (!chunkGraph.FindNodePath(grid, req.startCell, req.goalCell, res.nodePath))
+        return res;
+
+    // 2 - margin : 폭 or 실제 분포 반경
+    const int formationMargin = ComputeMarginCells(req.memberCount);
+    const int margin = std::max(formationMargin, req.maxDistFromCentroid) + 2;
+
+    // 3 - Seed : 경로 노드 + 멤버 서 있는 노드
+    std::vector<uint32_t> seeds = res.nodePath;
+    for (const auto& c : req.memberCells)
+    {
+        const int node = chunkGraph.NodeIdOf(grid, c);
+        if (node >= 0) seeds.push_back((uint32_t)node);
+    }
+
+    auto nodes = chunkGraph.ExpandNodes(seeds, ChunkGraph::MarginChunksFor(margin));
+    auto mask = chunkGraph.MaskCellsFromNodes(grid, nodes);
+
+    // 4 - Dijkstra + 방향 - (너무 느리면 여기 최적화 할것)
+    auto built = std::make_shared<CorridorFlowField>();
+    built->Build(grid, req.goalCell, mask, cancelFlag);
+
+    // 취소 시, field 버퍼 스왑 금지
+    if (cancelFlag && cancelFlag->load(std::memory_order_relaxed))   return res;
+
+    // Build는 goal 컬럼을 못 찾으면 조용히 빈 필드를 남긴다
+    // 즉, 실패시, 옛날 필드 유지
+    if (!built->IsVisited(grid, req.goalCell.x, req.goalCell.y, req.goalCell.z))    return res;
+
+    res.field = std::move(built);
+    res.success = true;
+    return res;
+}
+
+FieldBuildRequest LeafSplitController::MakeRequest(const LeafGroup& leaf, const DirectX::XMINT3& goal,
+    uint64_t generation, const std::vector<DirectX::XMINT3>& cellSource) const
+{
+    FieldBuildRequest req;
+    req.leafId = leaf.leafId;
+    req.goalCell = goal;
+    req.generation = generation;
+
+    // 무게 중심
+    Math::Vector3 centroid(0.0f, 0.0f, 0.0f);
+    int validCount = 0;
+    req.memberCells.reserve(leaf.members.size());
+
+    for (int idx : leaf.members)
+    {
+        if (idx < 0 || idx >= (int)cellSource.size()) continue;   // 멤버 목록이 어긋난 경우 방어
+        const auto& c = cellSource[idx];
+        if (c.x < 0) continue;
+
+        req.memberCells.push_back(c);   // 값 복사
+        centroid += Math::Vector3((float)c.x, (float)c.y, (float)c.z);
+        ++validCount;
+    }
+
+    if (validCount == 0) return req;
+
+    req.memberCount = (int)leaf.members.size();
+    centroid = Math::Vector3(centroid) / (float)validCount;
+
+    const int cx = (int)std::round(centroid.GetX());
+    const int cy = (int)std::round(centroid.GetY());
+    const int cz = (int)std::round(centroid.GetZ());
+
+    // 출발점 선정 + 분포 반경을 한 루프에서
+    // 원래는 FindLeafPath와 BuildLeafField가 각각 members를 돌았다 - 같은 데이터라 합친다
+    int bestDistSq = INT_MAX;
+    for (const auto& c : req.memberCells)
+    {
+        const int dx = c.x - cx, dz = c.z - cz;
+        const int dsq = dx * dx + dz * dz;
+
+        if (dsq < bestDistSq) 
+        { 
+            bestDistSq = dsq; 
+            req.startCell = c; 
+        }
+
+        const int d = (int)std::round(std::sqrt((float)dsq));
+        req.maxDistFromCentroid = std::max(req.maxDistFromCentroid, d);
+    }
+    return req;
+
+}
+
 
 
 /*

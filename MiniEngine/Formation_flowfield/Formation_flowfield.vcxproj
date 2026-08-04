@@ -153,6 +153,7 @@
     <ClCompile Include="AStarPathfinder.cpp" />
     <ClCompile Include="CorridorFlowField.cpp" />
     <ClCompile Include="DebugVisualizer.cpp" />
+    <ClCompile Include="FieldWorker.cpp" />
     <ClCompile Include="FlowField.cpp" />
     <ClCompile Include="FlowFieldArrowRenderer.cpp" />
     <ClCompile Include="GridNeighbors.cpp" />
@@ -242,11 +243,14 @@
     <ClInclude Include="ChunkKey.h" />
     <ClInclude Include="CorridorFlowField.h" />
     <ClInclude Include="DebugVisualizer.h" />
+    <ClInclude Include="FieldBuildJob.h" />
+    <ClInclude Include="FieldWorker.h" />
     <ClInclude Include="FlowField.h" />
     <ClInclude Include="FlowFieldArrowRenderer.h" />
     <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
     <ClInclude Include="LeafSplitController.h" />
+    <ClInclude Include="NpcConstants.h" />
     <ClInclude Include="NpcManager.h" />
     <ClInclude Include="NpcMovementSolver.h" />
     <ClInclude Include="NpcRenderer.h" />

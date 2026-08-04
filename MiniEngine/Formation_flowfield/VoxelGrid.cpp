@@ -239,7 +239,7 @@ void VoxelGrid::ValidateWalkable()
 
         // 조건 3 — TODO : 장애물 마킹 (동적 변경 시)
         
-\
+
         // 청크에도 반영 (FlowField 계산 시 빠른 접근용)
         SetCell(cell.x, cell.y, cell.z, walkable ? CellType::Walkable : CellType::Blocked);
     }

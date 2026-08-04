@@ -136,14 +136,14 @@ void FlowField::Startup(void)
     m_Store.Initialize(&m_VoxelGrid);
     m_Store.Build();
 
-    // 동적 지형 생성기 초기화
-    m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
-
     // 청크 링크 그래프 빌드
     m_ChunkGraph.Build(m_VoxelGrid);
 
     // npc 배치 초기화
     m_Npc.Init(m_VoxelGrid, m_ChunkGraph);
+
+    // 동적 지형 생성기 초기화
+    m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
 
     // 디버그 시각화 값 초기화
     m_Debug.Initialize(&m_Store, &m_VoxelGrid, &m_Npc);
@@ -389,8 +389,14 @@ void FlowField::Update(float dt)
         }
         else
         {
+            // 커밋 시도 전에 워커를 세운다.
             PickResult pick = PickVoxel();
-            bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
+            const bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
+
+            // 커밋 시도 전에 워커를 세우기
+            // HandlePicking 안에서 grid가 수정되므로, 반환값을 보고 취소하면 이미 늦다
+            if (rightClicked) m_Npc.CancelFieldWork();
+
             if (true == m_TerrainEditor.HandlePicking(pick.hit, pick.cell, rightClicked))
             {
                 m_Npc.OnTerrainChanged(m_TerrainEditor.GetLastEditedCells());
@@ -402,12 +408,53 @@ void FlowField::Update(float dt)
     }
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+    // 추격시, flowfield 시각화 갱신
+    if (m_Npc.ConsumeFieldSwapped())
+    {
+        m_Debug.ReleaseChunks(0);
+        m_Debug.OccupyChunks(0);
+        m_Debug.BuildArrowInstances();
+    }
 
 
     // 전원 도착(HasGoal true->false) 시 시각화 초기화
-    const bool hasGoal = m_Npc.HasGoal();
-    if (m_PrevHasGoal && !hasGoal)   m_Debug.OnGroupArrived();
-    m_PrevHasGoal = hasGoal;
+    //const bool hasGoal = m_Npc.HasGoal();
+    //if (m_PrevHasGoal && !hasGoal)   m_Debug.OnGroupArrived();
+    //m_PrevHasGoal = hasGoal;
+
+
+
+    // --- 추격용 임시 처리 (플레이어 구현 시 삭제) ---
+    if (m_Npc.HasGoal())
+    {
+        // 우클릭으로 확정한 목표에서 출발. PickVoxel은 마우스 위치라 시작점으로 부적절하고,
+        // 매 프레임 레이캐스팅하는 비용도 불필요하다
+        if (m_ChaseCell.x < 0) m_ChaseCell = m_Npc.GetGoal();
+
+        int dx = 0, dz = 0;
+        if (GameInput::IsPressed(GameInput::kKey_up))    dz += 1;
+        if (GameInput::IsPressed(GameInput::kKey_down))  dz -= 1;
+        if (GameInput::IsPressed(GameInput::kKey_right)) dx += 1;
+        if (GameInput::IsPressed(GameInput::kKey_left))  dx -= 1;
+
+        if (dx != 0 || dz != 0)
+        {
+            const int nx = m_ChaseCell.x + dx;
+            const int nz = m_ChaseCell.z + dz;
+
+            const float cs = m_VoxelGrid.GetCellSize();
+            Math::Vector3 probe((float)nx * cs, (float)m_ChaseCell.y * cs, (float)nz * cs);
+
+            int sx, sy, sz;
+            if (m_VoxelGrid.FindNearestWalkable(probe, sx, sy, sz))
+            {
+                m_ChaseCell = { sx, sy, sz };
+                m_Npc.SetChaseTarget(m_ChaseCell);
+            }
+        }
+    }
+
+
 
     // F1: 솔리드 <-> 와이어프레임 토글
     // IsFirstPressed = 키를 막 누른 순간 한 번만 true

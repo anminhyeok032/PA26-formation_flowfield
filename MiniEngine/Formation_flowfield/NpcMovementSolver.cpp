@@ -1,13 +1,7 @@
 ﻿#include "NpcMovementSolver.h"
 #include "ChunkKey.h"
+#include "NpcConstants.h"
 
-constexpr float NPC_SPEED = 3.0f;
-constexpr float NPC_INER = 0.4f;                // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
-
-constexpr float NPC_WAIT_RATIO = 0.5f;   // 1칸 움직이는데 비율 (x / 1.0f)%
-constexpr float VOXEL_SIZE_REF = 0.5f;   // VoxelGrid::GetCellSize()와 반드시 일치해야 함
-constexpr float NPC_CARDINAL_WAIT_SECONDS = (VOXEL_SIZE_REF / NPC_SPEED) * NPC_WAIT_RATIO;
-constexpr float NPC_DIAGONAL_WAIT_SECONDS = (VOXEL_SIZE_REF * 1.41421356f / NPC_SPEED) * NPC_WAIT_RATIO;
 
 
 NpcMovementSolver::NpcMovementSolver(NpcMoveData& move, CellReservation& reserve)
@@ -25,7 +19,7 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, const std::vector<std
     const int lid = m_Move.leafId[i];
     if (lid < 0) { m_Move.active[i] = 0; return; }  // 미소속 방지
 
-    const CorridorFlowField& field = leaves[lid]->field;
+    const CorridorFlowField& field = *leaves[lid]->field;
 
     SnapToTargetCell(i);
     const DirectX::XMINT3 curr = m_Move.currCell[i];   // 값 복사 - 이하 안 바뀜
@@ -114,6 +108,10 @@ bool NpcMovementSolver::TryCandidate(const VoxelGrid& grid, size_t i, const Corr
 bool NpcMovementSolver::TryPrimaryDirection(const VoxelGrid& grid, size_t i, const CorridorFlowField& field, const DirectX::XMINT3& curr, float currCost,
     DirectX::XMINT3& best, bool& outWaited, float dt)
 {
+    const float NPC_CARDINAL_WAIT_SECONDS = (grid.GetCellSize() / NPC_SPEED) * NPC_WAIT_RATIO;
+    const float NPC_DIAGONAL_WAIT_SECONDS = (grid.GetCellSize() * 1.41421356f / NPC_SPEED) * NPC_WAIT_RATIO;
+
+
     outWaited = false;
 
     DirectX::XMINT3 desired;
