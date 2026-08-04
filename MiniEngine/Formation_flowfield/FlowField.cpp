@@ -148,6 +148,8 @@ void FlowField::Startup(void)
     // 디버그 시각화 값 초기화
     m_Debug.Initialize(&m_Store, &m_VoxelGrid, &m_Npc);
 
+    // 플레이어 초기화
+    m_Player.Init(m_VoxelGrid);
 }
 
 void FlowField::Cleanup(void)
@@ -424,36 +426,13 @@ void FlowField::Update(float dt)
 
 
 
-    // --- 추격용 임시 처리 (플레이어 구현 시 삭제) ---
-    if (m_Npc.HasGoal())
+    // --- 추격용 플레이어 ---
+    m_Player.Update(m_VoxelGrid, dt);
+    if (m_Player.ConsumeCellChanged())
     {
-        // 우클릭으로 확정한 목표에서 출발. PickVoxel은 마우스 위치라 시작점으로 부적절하고,
-        // 매 프레임 레이캐스팅하는 비용도 불필요하다
-        if (m_ChaseCell.x < 0) m_ChaseCell = m_Npc.GetGoal();
-
-        int dx = 0, dz = 0;
-        if (GameInput::IsPressed(GameInput::kKey_up))    dz += 1;
-        if (GameInput::IsPressed(GameInput::kKey_down))  dz -= 1;
-        if (GameInput::IsPressed(GameInput::kKey_right)) dx += 1;
-        if (GameInput::IsPressed(GameInput::kKey_left))  dx -= 1;
-
-        if (dx != 0 || dz != 0)
-        {
-            const int nx = m_ChaseCell.x + dx;
-            const int nz = m_ChaseCell.z + dz;
-
-            const float cs = m_VoxelGrid.GetCellSize();
-            Math::Vector3 probe((float)nx * cs, (float)m_ChaseCell.y * cs, (float)nz * cs);
-
-            int sx, sy, sz;
-            if (m_VoxelGrid.FindNearestWalkable(probe, sx, sy, sz))
-            {
-                m_ChaseCell = { sx, sy, sz };
-                m_Npc.SetChaseTarget(m_ChaseCell);
-            }
-        }
+        m_Npc.SetChaseTarget(m_Player.GetCell());
     }
-
+    m_Npc.SetExtraInstance(m_Player.MakeInstance(), m_Player.IsValid());
 
 
     // F1: 솔리드 <-> 와이어프레임 토글

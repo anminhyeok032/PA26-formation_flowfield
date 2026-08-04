@@ -42,6 +42,9 @@
     <Filter Include="NPC\NpcManager">
       <UniqueIdentifier>{e24d6fe4-60ba-4386-9937-ff6c8bcd0635}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Player">
+      <UniqueIdentifier>{b63371eb-ed4e-468b-92af-3cc003d9524c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -100,6 +103,9 @@
     </ClCompile>
     <ClCompile Include="NpcMovementSolver.cpp">
       <Filter>NPC\NpcManager</Filter>
+    </ClCompile>
+    <ClCompile Include="Player.cpp">
+      <Filter>Player</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -197,6 +203,9 @@
     </ClInclude>
     <ClInclude Include="NpcMovementSolver.h">
       <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="Player.h">
+      <Filter>Player</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

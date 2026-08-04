@@ -183,20 +183,6 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     std::vector<uint32_t> nodePath;
     if (!m_SplitController.BuildLeafCorridor(*m_Grid, *m_ChunkGraph, leaf, goalCell, &nodePath))  return false;
 
-    // --- 5. 마스크가 실제 통로를 담았는지 확인 ---
-    // 청크 그래프는 청크 내부가 벽/절벽으로 갈라진 경우를 모른다.
-    // 조용히 깨지지 않도록 여기서 잡는다. 뜨기 시작하면 margin 확대나 청크 세분화를 검토.
-    for (size_t i = 0; i < n; ++i)
-    {
-        const auto& c = m_StartCells[i];
-        if (c.x < 0)    continue;
-        if (!leaf.field->IsVisited(*m_Grid, c.x, c.y, c.z))
-        {
-            DEBUGPRINT("ChunkGraph: mask miss - npc %zu at (%d,%d,%d)\n", i, c.x, c.y, c.z);
-            break;   // 한 번만 알리면 충분
-        }
-    }
-
     leaf.active = true;
 
     m_Group.goal = goalCell;
@@ -490,12 +476,18 @@ void NpcManager::InitGroupMovement()
 
 void NpcManager::SyncInstances()
 {
+    const size_t npcCount = m_Move.size();
+    const size_t total = npcCount + (m_HasExtra ? 1 : 0);
+    m_NpcInstances.resize(total);
+
     for (size_t i = 0; i < m_Move.size(); ++i)
     {
         m_NpcInstances[i].position[0] = m_Move.position[i].GetX();
         m_NpcInstances[i].position[1] = m_Move.position[i].GetY();
         m_NpcInstances[i].position[2] = m_Move.position[i].GetZ();
     }
+
+    if (m_HasExtra) m_NpcInstances[npcCount] = m_ExtraInstance;
 }
 
 Math::Vector3 NpcManager::GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const

@@ -20,6 +20,8 @@
 #include "FlowFieldArrowRenderer.h"
 #include "NpcManager.h"
 
+#include "Player.h"
+
 // helper class
 #include "VoxelInstanceStore.h"
 #include "DebugVisualizer.h"
@@ -68,6 +70,9 @@ private:
     // 추격용 멤버
     DirectX::XMINT3 m_ChaseCell{ -1, -1, -1 };
     float           m_ChaseAccum = 0.0f;
+
+    // 플레이어
+    Player          m_Player;
 
 
     // ----------------- 목적지 복셀 선택(피킹) 관련 함수 -----------------
