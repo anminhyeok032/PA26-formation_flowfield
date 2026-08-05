@@ -444,11 +444,8 @@ void FlowField::Update(float dt)
     // 추격시, flowfield 시각화 갱신
     if (m_Npc.ConsumeFieldSwapped())
     {
-        m_Debug.ReleaseChunks(0);
-        m_Debug.OccupyChunks(0);
-        m_Debug.BuildArrowInstances();
+        m_Debug.RefreshFieldVisuals();
     }
-
 
 
     // --- 추격용 플레이어 ---
@@ -460,8 +457,7 @@ void FlowField::Update(float dt)
     if (m_Player.ConsumeCellChanged())
         m_Npc.SetChaseTarget(m_Player.GetCell());
 
-    m_Npc.SetExtraInstance(m_Player.MakeInstance(), m_Player.IsValid());
-
+    NpcRenderer::UpdatePlayerInstance(m_Player.MakeInstance(), m_Player.IsValid());
 
 
 

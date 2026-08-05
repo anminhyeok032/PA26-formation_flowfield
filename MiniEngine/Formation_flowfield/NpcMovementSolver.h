@@ -14,7 +14,8 @@ public:
     NpcMovementSolver(NpcMoveData& move, CellReservation& reserve);
 
     // 조건 조립 함수
-    void AdvanceCell(const VoxelGrid& grid, const std::vector<std::unique_ptr<LeafGroup>>& leaves, size_t i, float dt);
+    void AdvanceCell(const VoxelGrid& grid, const std::vector<std::unique_ptr<LeafGroup>>& leaves, 
+        size_t i, float dt, bool chasing);
 
 private:
     void SnapToTargetCell(size_t i);                                // 이동

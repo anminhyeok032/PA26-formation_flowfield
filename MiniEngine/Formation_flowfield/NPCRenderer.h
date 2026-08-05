@@ -49,6 +49,7 @@ namespace NpcRenderer
     void Initialize();
     void Shutdown();
     void UpdateInstances(const std::vector<InstanceData>& instances);
+    void UpdatePlayerInstance(const InstanceData& inst, bool enable);
     void Render(GraphicsContext& ctx, const Math::Matrix4& viewProj);
     void ToggleWireframe();
     bool IsWireframe();

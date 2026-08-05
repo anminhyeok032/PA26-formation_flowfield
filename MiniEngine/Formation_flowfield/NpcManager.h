@@ -62,12 +62,6 @@ public:
         return v;
     }
 
-    //----- 플레이어--------
-    void SetExtraInstance(const NpcRenderer::InstanceData& inst, bool enable)
-    {
-        m_ExtraInstance = inst;
-        m_HasExtra = enable;
-    }
 
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
@@ -104,8 +98,5 @@ private:
     void SyncInstances();   // SoA position -> m_NpcInstances -> UpdateInstances
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const;
 
-    // --- 플레이어 갱신 ---
-    NpcRenderer::InstanceData m_ExtraInstance{};
-    bool m_HasExtra = false;
 
 };

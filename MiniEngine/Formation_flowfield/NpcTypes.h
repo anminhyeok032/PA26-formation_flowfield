@@ -89,6 +89,7 @@ struct NpcGroup
     DirectX::XMINT3             goal{ 0,0,0 };
     std::vector<int>            leafIds;
     bool                        hasGoal = false;
+    bool                        isChasing = false;
 
     void Reset()
     {

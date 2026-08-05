@@ -187,6 +187,7 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 
     m_Group.goal = goalCell;
     m_Group.hasGoal = true;
+    m_Group.isChasing = false;
     m_Group.leafIds.clear();
     m_Group.leafIds.push_back(0);
 
@@ -233,7 +234,7 @@ void NpcManager::Update(float dt)
         if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
         {
 
-            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt);   // 도착 -> 셀 전환
+            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);   // 도착 -> 셀 전환
         }
         else
         {
@@ -399,6 +400,7 @@ void NpcManager::SetChaseTarget(const DirectX::XMINT3& targetCell)
     // 워커 완료를 기다리지 않고 즉시 갱신
     // 늦게 반영하면 그 사이 들어온 갱신이 안 바뀌었다고 판단해 요청 x
     m_Group.goal = targetCell;
+    m_Group.isChasing = true;
 
     for (auto& leafPtr : m_Leaves)
     {
@@ -480,18 +482,12 @@ void NpcManager::InitGroupMovement()
 
 void NpcManager::SyncInstances()
 {
-    const size_t npcCount = m_Move.size();
-    const size_t total = npcCount + (m_HasExtra ? 1 : 0);
-    m_NpcInstances.resize(total);
-
     for (size_t i = 0; i < m_Move.size(); ++i)
     {
         m_NpcInstances[i].position[0] = m_Move.position[i].GetX();
         m_NpcInstances[i].position[1] = m_Move.position[i].GetY();
         m_NpcInstances[i].position[2] = m_Move.position[i].GetZ();
     }
-
-    if (m_HasExtra) m_NpcInstances[npcCount] = m_ExtraInstance;
 }
 
 Math::Vector3 NpcManager::GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const

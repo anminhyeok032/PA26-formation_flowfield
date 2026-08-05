@@ -14,7 +14,9 @@ NpcMovementSolver::NpcMovementSolver(NpcMoveData& move, CellReservation& reserve
 //	이동시 규율
 //
 //---------------------------------------------------------------------
-void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, const std::vector<std::unique_ptr<LeafGroup>>& leaves, size_t i, float dt)
+void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, 
+    const std::vector<std::unique_ptr<LeafGroup>>& leaves,
+    size_t i, float dt, bool chasing)
 {
     const int lid = m_Move.leafId[i];
     if (lid < 0) { m_Move.active[i] = 0; return; }  // 미소속 방지
@@ -33,6 +35,9 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, const std::vector<std
     }
     if (currCost < 1e-4f)   // 목적지 도달
     {
+        // 추격에는 도착 x 
+        if (chasing) { HoldPosition(i, curr); return; }
+
         m_Move.active[i] = 0;
         m_Move.stopReason[i] = 0;
         return;
@@ -57,7 +62,7 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, const std::vector<std
 
     if (!found)
     {
-        if (!hasActiveBlocker)
+        if (!hasActiveBlocker && !chasing)
         {
             // 도착 확정: 더 가까워지는 길이 없고, 비켜줄 상대도 없음
             m_Move.active[i] = 0;
