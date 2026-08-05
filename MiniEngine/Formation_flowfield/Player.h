@@ -25,6 +25,10 @@ public:
 
     NpcRenderer::InstanceData MakeInstance() const;
 
+    // 이동의 앞 방향. 3인칭이면 카메라 yaw, 아니면 0(월드축)
+    // Player가 카메라를 참조하면 입력 계층이 렌더 계층에 묶인다
+    void SetMoveBasis(float yawRadians) { m_MoveYaw = yawRadians; }
+
 private:
     // 입력 방향으로 갈 수 있는 이웃 셀을 고른다. 없으면 false
     bool PickInputCell(const VoxelGrid& grid, DirectX::XMINT3& outCell);
@@ -44,4 +48,7 @@ private:
     bool  m_CellChanged = false;
 
     std::vector<NeighborInfo> m_NeighborScratch;   // 매 프레임 재할당 방지
+
+
+    float m_MoveYaw = 0.0f;
 };

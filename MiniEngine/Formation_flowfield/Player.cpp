@@ -4,13 +4,6 @@
 #include "GameInput.h"
 #include <cmath>
 
-namespace
-{
-    // 중앙에서 시작. 못 찾으면 나선형으로 넓혀가며 재시도한다.
-    // 맵 중앙이 물이나 절벽일 수 있어서 한 번만 찔러보면 실패한다
-    constexpr int SPAWN_SEARCH_RINGS = 16;
-    constexpr int SPAWN_RING_STEP = 4;      // 셀 단위 - 촘촘히 돌 이유가 없다
-}
 
 bool Player::Init(const VoxelGrid& grid)
 {
@@ -40,7 +33,7 @@ Math::Vector3 Player::GetStandPos(const VoxelGrid& grid, const DirectX::XMINT3& 
     Math::Vector3 cellCenter = grid.GetWorldPos(cell.x, cell.y, cell.z);
     const float cellSize = grid.GetCellSize();
 
-    // NpcManager::GetNpcStandPos와 동일 공식.
+    // NpcManager::GetNpcStandPos와 동일 공식
     // 셀 중심 -> 셀 윗면(절반) -> 반높이 -> 여유 0.1
     const float standY = cellCenter.GetY() + (cellSize * 0.5f) + m_HalfHeight + 0.1f;
     return Math::Vector3(cellCenter.GetX(), standY, cellCenter.GetZ());
@@ -48,17 +41,33 @@ Math::Vector3 Player::GetStandPos(const VoxelGrid& grid, const DirectX::XMINT3& 
 
 bool Player::PickInputCell(const VoxelGrid& grid, DirectX::XMINT3& outCell)
 {
-    int dx = 0, dz = 0;
-    if (GameInput::IsPressed(GameInput::kKey_up))    dz += 1;
-    if (GameInput::IsPressed(GameInput::kKey_down))  dz -= 1;
-    if (GameInput::IsPressed(GameInput::kKey_right)) dx -= 1;
-    if (GameInput::IsPressed(GameInput::kKey_left))  dx += 1;
+    // ix = 오른쪽, iz = 앞
+    float ix = 0.0f, iz = 0.0f;
+    if (GameInput::IsPressed(GameInput::kKey_up))    iz += 1.0f;
+    if (GameInput::IsPressed(GameInput::kKey_down))  iz -= 1.0f;
+    if (GameInput::IsPressed(GameInput::kKey_right)) ix += 1.0f;
+    if (GameInput::IsPressed(GameInput::kKey_left))  ix -= 1.0f;
 
-    if (dx == 0 && dz == 0) return false;
+    if (ix == 0.0f && iz == 0.0f) return false;
 
-    // 입력 방향을 좌표에 그냥 더하면 y를 알 수 없다.
-    // 계단은 y가 바뀌고, 그 값은 GetWalkableNeighbors가 이미 계산해 뒀다.
-    // NPC와 같은 함수를 쓰므로 통행 규칙이 자동으로 일치한다
+    // OrbitCamera의 orientation = MakeYRotation(h) * MakeXRotation(p)
+    // world = ix * right + iz * forward
+    const float s = std::sin(m_MoveYaw);
+    const float c = std::cos(m_MoveYaw);
+    const float wx = -ix * c + iz * s;
+    const float wz = ix * s + iz * c;
+
+    // 셀 이동은 8방향뿐 연속 각도를 45도 단위로 반올림해 확정
+    const float angle = std::atan2(wz, wx);
+    const int oct = ((int)std::lround(angle / (DirectX::XM_PI / 4.0f)) + 8) % 8;
+
+    static const int kDx[8] = { 1, 1, 0, -1, -1, -1,  0,  1 };
+    static const int kDz[8] = { 0, 1, 1,  1,  0, -1, -1, -1 };
+
+    const int dx = kDx[oct];
+    const int dz = kDz[oct];
+
+    // NPC와 같은 함수 로직 사용
     GetWalkableNeighbors(grid, m_CurrCell, m_NeighborScratch);
 
     for (const auto& n : m_NeighborScratch)
@@ -70,8 +79,7 @@ bool Player::PickInputCell(const VoxelGrid& grid, DirectX::XMINT3& outCell)
         }
     }
 
-    // 대각선이 막혔으면 축 하나만이라도 시도 - 벽에 비스듬히 붙었을 때
-    // 완전히 멈추지 않고 미끄러지게 한다
+    // 대각선이 막혔으면 축 하나만이라도 - 벽에 비스듬히 붙었을 때 멈추지 않게
     if (dx != 0 && dz != 0)
     {
         for (const auto& n : m_NeighborScratch)

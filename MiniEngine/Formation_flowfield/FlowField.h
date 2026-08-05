@@ -21,6 +21,7 @@
 #include "NpcManager.h"
 
 #include "Player.h"
+#include "PlayerOrbitCamera.h"
 
 // helper class
 #include "VoxelInstanceStore.h"
@@ -64,8 +65,10 @@ private:
 
     // 동적 지형 라이브러리
     TerrainEditor       m_TerrainEditor;
-    enum class EditMode { GroupMove, TerrainBuild };    // 편집 모드 (1: 그룹 이동 / 2: 지형 생성)
+    enum class EditMode { GroupMove, TerrainBuild, PlayerFollow };    // 편집 모드 (1: 그룹 이동 / 2: 지형 생성 / 3: 플레이어 모드)
     EditMode m_EditMode = EditMode::GroupMove;
+
+
 
     // 추격용 멤버
     DirectX::XMINT3 m_ChaseCell{ -1, -1, -1 };
@@ -73,6 +76,7 @@ private:
 
     // 플레이어
     Player          m_Player;
+    std::unique_ptr<PlayerOrbitCamera> m_FollowCam;
 
 
     // ----------------- 목적지 복셀 선택(피킹) 관련 함수 -----------------
