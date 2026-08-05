@@ -332,8 +332,12 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
         const int ccx = c.x / ChunkGraph::CHUNK_SIZE;
         const int ccz = c.z / ChunkGraph::CHUNK_SIZE;
         for (int dz = -1; dz <= 1; ++dz)
+        {
             for (int dx = -1; dx <= 1; ++dx)
+            {
                 affected.insert(MakeChunkKey(ccx + dx, 0, ccz + dz));
+            }
+        }
     }
 
     // NPC가 새로 막힌 셀 위에 서 있을 수 있으므로 현재 위치를 다시 스냅한다.

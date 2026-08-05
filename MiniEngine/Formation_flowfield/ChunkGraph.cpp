@@ -139,18 +139,20 @@ void ChunkGraph::BuildEdgesForChunk(const VoxelGrid& grid, int cx, int cz,
                 const int ay = surfaces.data[slot];
                 if (!grid.IsWalkable(ax, ay, az)) continue;
 
+
+                const int climbLimit = diag ? 1 : MAX_CLIMB_CELLS;
                 if (diag)
                 {
-                    const int gateX = FindConnectableSurfaceY(grid, ax + dx, az, ay);
-                    if (gateX < 0 || !grid.IsWalkable(ax + dx, gateX, az)) continue;
+                    const int gateX = FindReachableSurfaceY(grid, ax, ay, az, ax + dx, az, 1);
+                    if (gateX < 0) continue;
 
-                    const int gateZ = FindConnectableSurfaceY(grid, ax, az + dz, ay);
-                    if (gateZ < 0 || !grid.IsWalkable(ax, gateZ, az + dz)) continue;
+                    const int gateZ = FindReachableSurfaceY(grid, ax, ay, az, ax, az + dz, 1);
+                    if (gateZ < 0) continue;
                 }
 
                 const int bx = ax + dx, bz = az + dz;
-                const int by = FindConnectableSurfaceY(grid, bx, bz, ay);
-                if (by < 0 || !grid.IsWalkable(bx, by, bz)) continue;
+                const int by = FindReachableSurfaceY(grid, ax, ay, az, bx, bz, climbLimit);
+                if (by < 0) continue;
 
                 const int bslot = FindSurfaceSlot(grid, bx, by, bz);
                 if (bslot < 0) continue;
@@ -215,8 +217,8 @@ void ChunkGraph::Build(const VoxelGrid& grid)
         }
     }
 
-    // 2 - 간선 생성.
-    //    노드 id는 chunkIdx * SLOTS_PER_CHUNK로 즉시 결정되므로 별도 배정 단계가 없다
+    // 2 - 간선 생성
+    //    노드 id는 chunkIdx * SLOTS_PER_CHUNK로 즉시 결정
     m_Adjacency.assign((size_t)chunkCount * SLOTS_PER_CHUNK, {});
     for (int cz = 0; cz < m_CountZ; ++cz)
     {
@@ -241,7 +243,7 @@ void ChunkGraph::RefreshAround(const VoxelGrid& grid,
 
     // 라벨이 바뀌는 건 편집 셀이 든 청크뿐이다.
     // walkable 판정이 IsSurface(x,y+1,z) / CheckWalkableCondition(x,y+k,z)로
-    // 컬럼 내부에만 의존하고, 라벨링도 청크 내부 셀만 읽기 때문.
+    // 컬럼 내부에만 의존하고, 라벨링도 청크 내부 셀만 읽기 때문
     std::unordered_set<int> edited;
     for (const auto& cell : editedCells)
     {
@@ -258,12 +260,14 @@ void ChunkGraph::RefreshAround(const VoxelGrid& grid,
         {
             const int cx = idx % m_CountX, cz = idx / m_CountX;
             for (int dz = -1; dz <= 1; ++dz)
+            {
                 for (int dx = -1; dx <= 1; ++dx)
                 {
                     const int nx = cx + dx, nz = cz + dz;
                     if (nx < 0 || nx >= m_CountX || nz < 0 || nz >= m_CountZ) continue;
                     out.insert(nx + m_CountX * nz);
                 }
+            }
         }
         return out;
     };

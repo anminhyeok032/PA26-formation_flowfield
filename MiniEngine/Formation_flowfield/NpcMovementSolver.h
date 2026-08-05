@@ -20,9 +20,13 @@ private:
     void SnapToTargetCell(size_t i);                                // 이동
     void HoldPosition(size_t i, const DirectX::XMINT3& curr);       // 제자리 대기
 
-    // 특정 이웃 셀이 지금 이동 가능한 유효 후보인지 검사
-    bool TryCandidate(const VoxelGrid& grid, size_t i, const CorridorFlowField& field, const DirectX::XMINT3& curr, float currCost,
-        const DirectX::XMINT3& cand, DirectX::XMINT3& out) const;
+
+    // 이웃 목록에서 (x,z)의 실제 도착 y 추출
+    bool ResolveNeighborCell(int nx, int nz, DirectX::XMINT3& out)  const;
+
+    // 해석이 끝난 이웃 셀의 이동 가능 판정 (cost 감소 + 미점유 + 비교차)
+    bool AcceptCell(const VoxelGrid& grid, size_t i, const CorridorFlowField& field,
+        const DirectX::XMINT3& curr, float currCost, const DirectX::XMINT3& cell) const;
 
     // 1순위(FlowField 방향) + 대기 판정 + 성분 분해 슬라이딩 담당
     // return true = best에 후보 확정 / outWaited = true면 이번 프레임 대기 확정
@@ -47,4 +51,5 @@ private:
     CellReservation& m_Reserve;      // 각 복셀마다 npc 예약 리스트
 
     std::vector<NeighborInfo> m_NeighborScratch;   // AdvanceCell 전용 임시 버퍼
+
 };

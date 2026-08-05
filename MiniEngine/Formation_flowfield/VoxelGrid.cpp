@@ -503,6 +503,16 @@ VoxelGrid::CellType VoxelGrid::GetCell(int x, int y, int z) const
     ToChunkCoord(x, y, z, chunkIdx, lx, ly, lz);
     return m_Chunks[chunkIdx].Get(lx, ly, lz);
 }
+VoxelGrid::CellType VoxelGrid::GetCell(const DirectX::XMINT3 c) const
+{
+    if (c.x < 0 || c.x >= m_SizeX) return CellType::Blocked;
+    if (c.y < 0 || c.y >= m_SizeY) return CellType::Blocked;
+    if (c.z < 0 || c.z >= m_SizeZ) return CellType::Blocked;
+
+    int chunkIdx, lx, ly, lz;
+    ToChunkCoord(c.x, c.y, c.z, chunkIdx, lx, ly, lz);
+    return m_Chunks[chunkIdx].Get(lx, ly, lz);
+}
 
 bool VoxelGrid::IsWalkable(int x, int y, int z) const
 {

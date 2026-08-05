@@ -26,6 +26,17 @@ namespace
 
         return true;
     }
+
+    // 목적지 주변 버블 노드 집합에 합치기
+    void AddGoalBubble(const VoxelGrid& grid, const ChunkGraph& chunkGraph,
+        const DirectX::XMINT3& goalCell, std::unordered_set<uint32_t>& nodes)
+    {
+        const int goalNode = chunkGraph.NodeIdOf(grid, goalCell);
+        if (goalNode < 0) return;
+
+        auto bubble = chunkGraph.ExpandNodes({ (uint32_t)goalNode }, CHASE_GOAL_HOPS);
+        nodes.insert(bubble.begin(), bubble.end());
+    }
 }
 
 
@@ -126,6 +137,7 @@ void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph
     }
 
     auto nodes = chunkGraph.ExpandNodes(seeds, ChunkGraph::MarginChunksFor(margin));
+    AddGoalBubble(grid, chunkGraph, goalCell, nodes);
     auto mask = chunkGraph.MaskCellsFromNodes(grid, nodes);
 
     // 5 - FlowField 계산
@@ -178,8 +190,7 @@ FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const Chun
 
         // 2 - margin : 폭 or 실제 분포 반경
         const int formationMargin = ComputeMarginCells(req.memberCount);
-        const int margin = std::max(formationMargin, req.maxDistFromCentroid) + 2;
-        const int hops = ChunkGraph::MarginChunksFor(margin);
+        const int margin = std::max(formationMargin, req.maxDistFromCentroid) + 12;
 
         // 3 - Seed : 경로 노드 + 멤버 서 있는 노드
         std::vector<uint32_t> seeds = res.nodePath;
@@ -190,13 +201,14 @@ FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const Chun
         }
 
         auto nodes = chunkGraph.ExpandNodes(seeds, ChunkGraph::MarginChunksFor(margin));
+        AddGoalBubble(grid, chunkGraph, req.goalCell, nodes);
         auto mask = chunkGraph.MaskCellsFromNodes(grid, nodes);
 
         // 캐시 재수립 - baseSize가 이후 증분의 폭주 판정 기준이 된다
         cache.nodes = std::move(nodes);
         cache.mask = std::move(mask);
         cache.generation = req.generation;
-        cache.hops = std::max(hops, CHASE_MIN_HOPS);
+        cache.hops = CHASE_GOAL_HOPS;   // 확장도 같은 규칙으로 
         cache.baseSize = cache.mask.size();
         cache.leafId = req.leafId;
     }

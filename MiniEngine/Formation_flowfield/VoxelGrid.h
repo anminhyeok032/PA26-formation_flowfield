@@ -92,6 +92,7 @@ public:
         float maxDistance, int& outX, int& outY, int& outZ) const;
 
     CellType        GetCell(int x, int y, int z) const;
+    CellType        GetCell(const DirectX::XMINT3 c) const;
     bool            IsWalkable(int x, int y, int z) const;
     Math::Vector3   GetWorldPos(int x, int y, int z) const;
     int             GetSizeX()    const { return m_SizeX; }
