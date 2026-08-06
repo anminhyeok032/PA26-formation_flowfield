@@ -127,7 +127,7 @@ bool NpcMovementSolver::TryPrimaryDirection(const VoxelGrid& grid, size_t i, con
         if (m_Move.blockedTime[i] < waitLimit)
         {
             m_Move.blockedTime[i] += dt;
-            m_Move.congestionTime[i] += dt;
+            //m_Move.congestionTime[i] += dt;
             HoldPosition(i, curr);
             outWaited = true;
             return false;

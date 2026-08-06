@@ -12,12 +12,14 @@ bool Player::Init(const VoxelGrid& grid)
     m_HalfHeight = voxelSize * 3.0f / 1.5f;
 
 
-    const float cellSize = grid.GetCellSize();
     const int cx = grid.GetSizeX() / 2;
     const int cz = grid.GetSizeZ() / 2;
-    const int cy = grid.GetSurfaceY(cx, cz);
+
+    int px, py, pz;
+    const Math::Vector3 seed = grid.GetWorldPos(cx, 0, cz);
+    if (false == grid.FindNearestWalkable(seed, px, py, pz)) return false;
     
-    m_CurrCell = { cx, cy, cz };
+    m_CurrCell = { px, py, pz };
     m_TargetCell = m_CurrCell;
 
     m_Position = GetStandPos(grid, m_CurrCell);

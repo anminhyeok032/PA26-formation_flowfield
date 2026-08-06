@@ -42,7 +42,7 @@ private:
     Math::Vector3 m_Position{ 0.0f, 0.0f, 0.0f };
     Math::Vector3 m_TargetWorldPos{ 0.0f, 0.0f, 0.0f };
 
-    float m_HalfHeight = 1.5f / 2.0f;   // Init에서 NPC와 같은 값으로 맞출 것
+    float m_HalfHeight = 1.5f / 2.0f;
     float m_Width = 0.5f;
     float m_SpeedScale = 1.0f;   // NPC_SPEED 배수. 1.0 = 좀비와 동속
     bool  m_CellChanged = false;

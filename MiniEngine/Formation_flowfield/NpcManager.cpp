@@ -216,7 +216,7 @@ void NpcManager::Update(float dt)
 
     if (false == m_Group.hasGoal) return;
 
-    const float ARRIVE_EPS_SQ = 0.05f * 0.05f;
+    const float ARRIVE_EPS_SQ = 0.0001f;
     const size_t n = m_Move.size();
 
     bool anyMoved = false;

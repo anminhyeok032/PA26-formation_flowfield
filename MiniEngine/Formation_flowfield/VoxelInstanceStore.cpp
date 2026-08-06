@@ -1,6 +1,5 @@
 ﻿#include "VoxelInstanceStore.h"
 #include "ChunkKey.h"
-#include "CorridorFlowField.h"
 #include <algorithm>
 
 void VoxelInstanceStore::Build()
@@ -25,7 +24,7 @@ void VoxelInstanceStore::RebuildIndices()
     {
         const auto& c = m_Coords[i];
         m_CoordToIndex[MakeCellKey(c.x, c.y, c.z)] = (int)i;
-        m_ChunkToIndices[CorridorFlowField::ChunkKeyOf(c.x, c.z)].push_back((int)i);
+        m_ChunkToIndices[ChunkKeyOf(c.x, c.z)].push_back((int)i);
     }
 }
 
@@ -83,7 +82,7 @@ void VoxelInstanceStore::RemoveInstanceAt(int idx, std::vector<int>& dirty)
     const VoxelGrid::CellCoord co = m_Coords[idx];
 
     m_CoordToIndex.erase(MakeCellKey(co.x, co.y, co.z));
-    EraseFromChunkIndex(CorridorFlowField::ChunkKeyOf(co.x, co.z), idx);
+    EraseFromChunkIndex(ChunkKeyOf(co.x, co.z), idx);
 
     int lastIdx = (int)m_Instances.size() - 1;
     if (idx != lastIdx)
@@ -94,7 +93,7 @@ void VoxelInstanceStore::RemoveInstanceAt(int idx, std::vector<int>& dirty)
 
         const auto& sc = m_Coords[idx];
         m_CoordToIndex[MakeCellKey(sc.x, sc.y, sc.z)] = idx;
-        ReindexInChunkIndex(CorridorFlowField::ChunkKeyOf(sc.x, sc.z), lastIdx, idx);
+        ReindexInChunkIndex(ChunkKeyOf(sc.x, sc.z), lastIdx, idx);
 
         dirty.push_back(idx);
     }
@@ -121,7 +120,7 @@ void VoxelInstanceStore::AppendInstance(const VoxelGrid::TerrainEditDelta::Added
     m_Coords.push_back({ cell.x, cell.y, cell.z });
 
     m_CoordToIndex[MakeCellKey(cell.x, cell.y, cell.z)] = idx;
-    m_ChunkToIndices[CorridorFlowField::ChunkKeyOf(cell.x, cell.z)].push_back(idx);
+    m_ChunkToIndices[ChunkKeyOf(cell.x, cell.z)].push_back(idx);
 
     dirty.push_back(idx);
 }

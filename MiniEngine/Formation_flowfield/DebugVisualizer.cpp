@@ -82,7 +82,7 @@ uint32_t DebugVisualizer::GetLayeredColorType(int index) const
 
     if (true == m_ShowChunks)
     {
-        auto occIt = m_ChunkOccupants.find(CorridorFlowField::ChunkKeyOf(c.x, c.z));
+        auto occIt = m_ChunkOccupants.find(ChunkKeyOf(c.x, c.z));
         if (occIt != m_ChunkOccupants.end() && !occIt->second.empty())
         {
             if (m_Npc->IsVisitedAny(*m_Grid, c.x, c.y, c.z)) return 10u + (uint32_t)(occIt->second.back() % 8);
