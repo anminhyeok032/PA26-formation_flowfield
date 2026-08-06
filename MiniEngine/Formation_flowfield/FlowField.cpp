@@ -139,9 +139,6 @@ void FlowField::Startup(void)
     m_Store.Initialize(&m_VoxelGrid);
     m_Store.Build();
 
-    // 동적 지형 생성기 초기화
-    m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
-
     // 청크 링크 그래프 빌드
     {
         MemoryProbe probe("ChunkGraph::Build");
@@ -159,9 +156,15 @@ void FlowField::Startup(void)
     // npc 배치 초기화
     m_Npc.Init(m_VoxelGrid, m_ChunkGraph);
 
+    // 동적 지형 생성기 초기화
+    m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
+
     // 디버그 시각화 값 초기화
     m_Debug.Initialize(&m_Store, &m_VoxelGrid, &m_Npc);
 
+    // 플레이어 초기화
+    m_Player.Init(m_VoxelGrid);
+    m_FollowCam.reset(new PlayerOrbitCamera(m_Camera, 3.0f));
 }
 
 void FlowField::Cleanup(void)
@@ -339,6 +342,14 @@ void FlowField::HandleGroupMovePicking()
 
 void FlowField::OnEditModeChanged()
 {
+    // 3인칭에서 나가면 FlyingFPSCamera가 자기 내부 각도로 카메라를 덮어쓰기
+    // 현재 위치를 알려주지 않으면 진입 전 자리로 순간이동
+    if (m_EditMode != EditMode::PlayerFollow && m_FollowCam)
+    {
+        auto* fps = static_cast<FlyingFPSCamera*>(m_CameraController.get());
+        fps->SetHeadingPitchAndPosition(m_FollowCam->GetHeading(), 0.0f, m_Camera.GetPosition());
+    }
+
     if (m_EditMode == EditMode::GroupMove)
     {
         m_TerrainEditor.OnDeactivate();   // 미리보기 잔상 제거
@@ -392,10 +403,32 @@ void FlowField::Update(float dt)
         m_EditMode = EditMode::TerrainBuild;
         OnEditModeChanged();
     }
+    // 3 - 카메라 전환
+    if (GameInput::IsFirstPressed(GameInput::kKey_3) && m_EditMode != EditMode::PlayerFollow)
+    {
+        m_EditMode = EditMode::PlayerFollow;
+
+        // 3인칭은 마우스로 카메라를 돌리므로 캡처가 필요하다
+        if (!m_MouseCaptured)
+        {
+            m_MouseCaptured = true;
+            ShowCursor(FALSE);
+            GameInput::SetMouseExclusiveMode(true);
+        }
+        OnEditModeChanged();
+    }
+    // 카메라 갱신
+    if (m_EditMode == EditMode::PlayerFollow)
+    {
+        // FlyingFPSCamera를 부르면 궤도 카메라가 설정한 위치를 매 프레임 덮어쓴다
+        m_FollowCam->SetFocus(m_Player.GetPosition());
+        m_FollowCam->Update(dt);
+    }
+
 
 
     // 인게임 모드: 기존처럼 카메라만 조작됨 (마우스 회전 + WASD)
-    if (m_MouseCaptured)
+    else if (m_MouseCaptured)
     {
         m_CameraController->Update(dt);
     }
@@ -407,8 +440,14 @@ void FlowField::Update(float dt)
         }
         else
         {
+            // 커밋 시도 전에 워커를 세운다.
             PickResult pick = PickVoxel();
-            bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
+            const bool rightClicked = GameInput::IsFirstPressed(GameInput::kMouse1);
+
+            // 커밋 시도 전에 워커를 세우기
+            // HandlePicking 안에서 grid가 수정되므로, 반환값을 보고 취소하면 이미 늦다
+            if (rightClicked) m_Npc.CancelFieldWork();
+
             if (true == m_TerrainEditor.HandlePicking(pick.hit, pick.cell, rightClicked))
             {
                 m_Npc.OnTerrainChanged(m_TerrainEditor.GetLastEditedCells());
@@ -420,12 +459,25 @@ void FlowField::Update(float dt)
     }
 
     m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+    // 추격시, flowfield 시각화 갱신
+    if (m_Npc.ConsumeFieldSwapped())
+    {
+        m_Debug.RefreshFieldVisuals();
+    }
 
 
-    // 전원 도착(HasGoal true->false) 시 시각화 초기화
-    const bool hasGoal = m_Npc.HasGoal();
-    if (m_PrevHasGoal && !hasGoal)   m_Debug.OnGroupArrived();
-    m_PrevHasGoal = hasGoal;
+    // --- 추격용 플레이어 ---
+    // 이동의 앞을 카메라가 정한다. 3인칭이 아니면 월드축(0)으로 되돌린다
+    m_Player.SetMoveBasis(m_EditMode == EditMode::PlayerFollow
+        ? m_FollowCam->GetHeading() : 0.0f);
+
+    m_Player.Update(m_VoxelGrid, dt);
+    if (m_Player.ConsumeCellChanged())
+        m_Npc.SetChaseTarget(m_Player.GetCell());
+
+    NpcRenderer::UpdatePlayerInstance(m_Player.MakeInstance(), m_Player.IsValid());
+
+
 
     // F1: 솔리드 <-> 와이어프레임 토글
     // IsFirstPressed = 키를 막 누른 순간 한 번만 true

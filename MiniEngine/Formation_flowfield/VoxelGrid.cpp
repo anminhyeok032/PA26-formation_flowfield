@@ -239,7 +239,7 @@ void VoxelGrid::ValidateWalkable()
 
         // 조건 3 — TODO : 장애물 마킹 (동적 변경 시)
         
-\
+
         // 청크에도 반영 (FlowField 계산 시 빠른 접근용)
         SetCell(cell.x, cell.y, cell.z, walkable ? CellType::Walkable : CellType::Blocked);
     }
@@ -501,6 +501,16 @@ VoxelGrid::CellType VoxelGrid::GetCell(int x, int y, int z) const
 
     int chunkIdx, lx, ly, lz;
     ToChunkCoord(x, y, z, chunkIdx, lx, ly, lz);
+    return m_Chunks[chunkIdx].Get(lx, ly, lz);
+}
+VoxelGrid::CellType VoxelGrid::GetCell(const DirectX::XMINT3 c) const
+{
+    if (c.x < 0 || c.x >= m_SizeX) return CellType::Blocked;
+    if (c.y < 0 || c.y >= m_SizeY) return CellType::Blocked;
+    if (c.z < 0 || c.z >= m_SizeZ) return CellType::Blocked;
+
+    int chunkIdx, lx, ly, lz;
+    ToChunkCoord(c.x, c.y, c.z, chunkIdx, lx, ly, lz);
     return m_Chunks[chunkIdx].Get(lx, ly, lz);
 }
 

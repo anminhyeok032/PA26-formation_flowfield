@@ -14,9 +14,13 @@
 namespace
 {
     // dx, dy, dz (각 -1/0/1) -> 2비트씩 패킹
+    // dy는 -1 1 로 clamp 해놓음 - 벽타기시, 값이 넘치지만 화살표 시각화때문에
     uint8_t EncodeDirDelta(int dx, int dy, int dz)
     {
-        return (uint8_t)(dx + 1) | ((uint8_t)(dy + 1) << 2) | ((uint8_t)(dz + 1) << 4);
+        const int dyStore = (dy > 1) ? 1 : ((dy < -1) ? -1 : dy);   // c++14 업글하면 clamp로 바꾸기
+        return (uint8_t)((dx      + 1) & 0x3)       // 값 2비트만 원본 남겨주기
+            | ((uint8_t)((dyStore + 1) & 0x3) << 2)
+            | ((uint8_t)((dz      + 1) & 0x3) << 4);
     }
 
     void DecodeDirDelta(uint8_t packed, int& dx, int& dy, int& dz)
@@ -90,7 +94,9 @@ const CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindColu
     return &cache.chunk->At(lx, lz);
 }
 
-void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, const std::unordered_set<int64_t>& mask)
+void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal,
+    const std::unordered_set<int64_t>& mask,
+    const std::atomic<bool>* cancelFlag)
 {
     CORE_SCOPE(CorridorField_Build);
     m_Chunks.clear();
@@ -115,10 +121,18 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
     openList.push({ goal, 0.0f });
 
     std::vector<NeighborInfo> neighbors;
+    uint32_t sinceCheck = 0;
     {
         CORE_SCOPE(FieldDijkstra);
         while (!openList.empty())
         {
+            // 1024번 마다 캔슬인지 확인 - 추후 너무 느리면 숫자 키워라
+            if (++sinceCheck >= 1024)
+            {
+                sinceCheck = 0;
+                if (cancelFlag && cancelFlag->load(std::memory_order_relaxed))   return;
+            }
+
             const OpenEntry entry = openList.top();
             openList.pop();
 

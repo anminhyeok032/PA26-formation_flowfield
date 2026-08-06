@@ -1,13 +1,7 @@
 ﻿#include "NpcMovementSolver.h"
 #include "ChunkKey.h"
+#include "NpcConstants.h"
 
-constexpr float NPC_SPEED = 10.0f;
-constexpr float NPC_INER = 0.4f;                // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
-
-constexpr float NPC_WAIT_RATIO = 0.2f;   // 1칸 움직이는데 비율 (x / 1.0f)%
-constexpr float VOXEL_SIZE_REF = 0.5f;   // VoxelGrid::GetCellSize()와 반드시 일치해야 함
-constexpr float NPC_CARDINAL_WAIT_SECONDS = (VOXEL_SIZE_REF / NPC_SPEED) * NPC_WAIT_RATIO;
-constexpr float NPC_DIAGONAL_WAIT_SECONDS = (VOXEL_SIZE_REF * 1.41421356f / NPC_SPEED) * NPC_WAIT_RATIO;
 
 
 NpcMovementSolver::NpcMovementSolver(NpcMoveData& move, CellReservation& reserve)
@@ -20,12 +14,14 @@ NpcMovementSolver::NpcMovementSolver(NpcMoveData& move, CellReservation& reserve
 //	이동시 규율
 //
 //---------------------------------------------------------------------
-void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, const std::vector<std::unique_ptr<LeafGroup>>& leaves, size_t i, float dt)
+void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, 
+    const std::vector<std::unique_ptr<LeafGroup>>& leaves,
+    size_t i, float dt, bool chasing)
 {
     const int lid = m_Move.leafId[i];
     if (lid < 0) { m_Move.active[i] = 0; return; }  // 미소속 방지
 
-    const CorridorFlowField& field = leaves[lid]->field;
+    const CorridorFlowField& field = *leaves[lid]->field;
 
     SnapToTargetCell(i);
     const DirectX::XMINT3 curr = m_Move.currCell[i];   // 값 복사 - 이하 안 바뀜
@@ -39,6 +35,9 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, const std::vector<std
     }
     if (currCost < 1e-4f)   // 목적지 도달
     {
+        // 추격에는 도착 x 
+        if (chasing) { HoldPosition(i, curr); return; }
+
         m_Move.active[i] = 0;
         m_Move.stopReason[i] = 0;
         return;
@@ -63,7 +62,7 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, const std::vector<std
 
     if (!found)
     {
-        if (!hasActiveBlocker)
+        if (!hasActiveBlocker && !chasing)
         {
             // 도착 확정: 더 가까워지는 길이 없고, 비켜줄 상대도 없음
             m_Move.active[i] = 0;
@@ -90,40 +89,32 @@ void NpcMovementSolver::HoldPosition(size_t i, const DirectX::XMINT3& curr)
     m_Move.targetWorldPos[i] = m_Move.position[i];
 }
 
-// 특정 이웃 셀이 지금 이동 가능한 유효 후보인지 검사
-// (cost 낮아짐 + 미점유 + 비교차). walkable 여부는 m_NeighborScratch에 있는지로 판단
-bool NpcMovementSolver::TryCandidate(const VoxelGrid& grid, size_t i, const CorridorFlowField& field, const DirectX::XMINT3& curr, float currCost, const DirectX::XMINT3& cand, DirectX::XMINT3& out) const
-{
-    bool isNeighbor = false;
-    for (const auto& n : m_NeighborScratch)
-    {
-        if (n.pos.x == cand.x && n.pos.y == cand.y && n.pos.z == cand.z) { isNeighbor = true; break; }
-    }
-    if (!isNeighbor) return false;
-
-    float nc;
-    if (false == field.SampleCost(grid, cand.x, cand.y, cand.z, nc)) return false; // flowfield 아님
-    if (nc >= currCost)                                                    return false; // 목적지로 안 가까워짐
-    if (m_Reserve.Find(MakeCellKey(cand.x, cand.y, cand.z)) >= 0)          return false; // 점유됨
-    if (true == IsMoveCross(i, curr, cand))                                return false; // 교차
-
-    out = cand;
-    return true;
-}
 
 bool NpcMovementSolver::TryPrimaryDirection(const VoxelGrid& grid, size_t i, const CorridorFlowField& field, const DirectX::XMINT3& curr, float currCost,
     DirectX::XMINT3& best, bool& outWaited, float dt)
 {
+    const float NPC_CARDINAL_WAIT_SECONDS = (grid.GetCellSize() / NPC_SPEED) * NPC_WAIT_RATIO;
+    const float NPC_DIAGONAL_WAIT_SECONDS = (grid.GetCellSize() * 1.41421356f / NPC_SPEED) * NPC_WAIT_RATIO;
+
+
     outWaited = false;
 
     DirectX::XMINT3 desired;
     if (false == field.SampleDirection(grid, curr.x, curr.y, curr.z, desired))
         return false;
 
-    DirectX::XMINT3 desiredCell{ curr.x + desired.x, curr.y + desired.y, curr.z + desired.z };
+    // 저장된 y는 사용하지 않음 - Climb 때문에 지형으로 해석
+    DirectX::XMINT3 desiredCell;
+    // y값 주변 통해서 찾기
+    if(false == ResolveNeighborCell(curr.x + desired.x, curr.z + desired.z, desiredCell))
+        return false;
 
     // (1) 1순위 방향이 바로 가능하면 그대로
-    if (TryCandidate(grid, i, field, curr, currCost, desiredCell, best)) return true;
+    if (AcceptCell(grid, i, field, curr, currCost, desiredCell)) 
+    {
+        best = desiredCell; 
+        return true; 
+    }
 
     // (2) 막힌 이유가 곧 비킬 npc 때문이면 방향 안 바꾸고 대기
     int occ = m_Reserve.Find(MakeCellKey(desiredCell));
@@ -146,25 +137,37 @@ bool NpcMovementSolver::TryPrimaryDirection(const VoxelGrid& grid, size_t i, con
     // (3) 1순위가 대각선인데 막혔으면 -> 성분 분해 대안
     if (desired.x == 0 || desired.z == 0)   return false;
 
-    DirectX::XMINT3 zKeep{ curr.x,             curr.y + desired.y, curr.z + desired.z }; // x 버림 (직진 z)
-    DirectX::XMINT3 xKeep{ curr.x + desired.x, curr.y + desired.y, curr.z };             // z 버림 (직진 x)
-
-    bool xShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x + desired.x, curr.y, curr.z)) >= 0);
-    bool zShoulderBlocked = (m_Reserve.Find(MakeCellKey(curr.x, curr.y, curr.z + desired.z)) >= 0);
-
-    // 막힘 유발 축의 반대 성분을 우선 시도 - 3갈래로 나뉘어 있던 분기를
-    // 시도 순서(first/second)를 정하는 것"과 시도 자체로 분리해 중복 제거
-    DirectX::XMINT3 first = zKeep;
-    DirectX::XMINT3 second = xKeep;
-    if (zShoulderBlocked && !xShoulderBlocked)
+    // 어깨셀 분석
+    DirectX::XMINT3 zKeep, xKeep;   // x 버림(z직진) // z 버림(x직진)
+    // 각 어깨 정확한 위치 받기
+    const bool hasZ = ResolveNeighborCell( curr.x, curr.z + desired.z, zKeep);
+    const bool hasX = ResolveNeighborCell(curr.x + desired.x, curr.z, xKeep);
+    // 어깨 셀 예약 확인
+    const bool zBlocked = hasZ && (m_Reserve.Find(MakeCellKey(zKeep)) >= 0);
+    const bool xBlocked = hasX && (m_Reserve.Find(MakeCellKey(xKeep)) >= 0);
+   
+    // 막힌 곳 반대 우선 시도
+    const DirectX::XMINT3* order[2] = { &zKeep, &xKeep };
+    bool valid[2] = { hasZ, hasX };
+    if (zBlocked && !xBlocked)
     {
-        first = xKeep;
-        second = zKeep;
+        order[0] = &xKeep;
+        order[1] = &zKeep;
+        valid[0] = &hasX;
+        valid[1] = &hasZ;
     }
-    // xShoulderBlocked && !zShoulderBlocked, 그리고 "둘 다 막힘/둘 다 안 막힘" 모두 zKeep 우선(기본값)
 
-    if (TryCandidate(grid, i, field, curr, currCost, first, best)) return true;
-    if (TryCandidate(grid, i, field, curr, currCost, second, best)) return true;
+    // 갈 수 있는 어깨 셀 우선 검사
+    for (int k = 0; k < 2; ++k)
+    {
+        if (!valid[k])   continue;
+        if (AcceptCell(grid, i, field, curr, currCost, *order[k]))
+        {
+            best = *order[k];
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -237,6 +240,34 @@ Math::Vector3 NpcMovementSolver::GetNpcStandPos(const VoxelGrid& grid, const Dir
     float standY = cellCenter.GetY() + (cellSize * 0.5f) + halfHeight + 0.1f;
 
     return Math::Vector3(cellCenter.GetX(), standY, cellCenter.GetZ());
+}
+
+
+// y가 2비트로 표현해서 climb을 못 담는다
+// 따라서 주변 값들중에 같은거 찾아서 반환
+bool NpcMovementSolver::ResolveNeighborCell(int nx, int nz, DirectX::XMINT3& out) const
+{
+    for (const auto& n : m_NeighborScratch)
+    {
+        if(n.pos.x == nx && n.pos.z == nz)  
+        {
+            out = n.pos;
+            return true;
+        }
+    }
+    return false;
+}
+// 이웃 목록에서 이미 해석된 셀 검사
+bool NpcMovementSolver::AcceptCell(const VoxelGrid& grid, size_t i, 
+    const CorridorFlowField& field, const DirectX::XMINT3& curr, 
+    float currCost, const DirectX::XMINT3& cell) const
+{
+    float nc;
+    if (false == field.SampleCost(grid, cell.x, cell.y, cell.z, nc)) return false;  // flowfield 아님
+    if (nc >= currCost)                                              return false;  // 목적지 안가까워짐
+    if (m_Reserve.Find(MakeCellKey(cell) >= 0))                      return false;  // 예약됨
+    if (true == IsMoveCross(i, curr, cell))                          return false;  // 교차함
+    return true;
 }
 
 bool NpcMovementSolver::IsMoveCross(size_t i, const DirectX::XMINT3& curr, const DirectX::XMINT3& next) const

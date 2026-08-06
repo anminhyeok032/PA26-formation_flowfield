@@ -74,7 +74,6 @@ public:
 
     using CellType = VoxelChunk::CellType;
 
-    // TODO - 지형 동적 변경
     void SetCell(int x, int y, int z, CellType type);
 
     // 격자 좌표 하나 (우클릭 피킹 결과와 렌더 인스턴스를 매칭하기 위한 용도)
@@ -93,6 +92,7 @@ public:
         float maxDistance, int& outX, int& outY, int& outZ) const;
 
     CellType        GetCell(int x, int y, int z) const;
+    CellType        GetCell(const DirectX::XMINT3 c) const;
     bool            IsWalkable(int x, int y, int z) const;
     Math::Vector3   GetWorldPos(int x, int y, int z) const;
     int             GetSizeX()    const { return m_SizeX; }
@@ -210,7 +210,7 @@ private:
     int   m_SizeX = 0;
     int   m_SizeY = 0;
     int   m_SizeZ = 0;
-    float m_CellSize = 1.0f;
+    float m_CellSize = 0.5f;
 
     // m_Chunks 청크 배열 리사이즈 + 초기화 (m_SizeX/Y/Z, m_ChunkCount* 설정 후 호출)
     void AllocateChunks();
@@ -220,7 +220,6 @@ private:
     void AllocateSurfaceCache();                
     // 컬럼 하나(x,z)만 다시 스캔해서 캐시 갱신.
     // 지형 확정 직후 전체 컬럼에 대해 1회씩 호출되고,
-    // TODO : 동적 지형 도입 시 SetCell이 바뀐 컬럼에 대해 호출
     void RefreshSurfaceColumn(int x, int z); 
     // 지형이 확정된 직후(모든 SetCell 완료 후) 호출 — 표면 캐시 할당 + 전체 컬럼 1회 스캔.
     void BuildSurfaceCache();

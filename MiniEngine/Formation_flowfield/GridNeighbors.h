@@ -10,9 +10,20 @@ struct NeighborInfo
 };
 
 
+// 수직 이동 규칙
+// 1== 기존 바닥만 동작과 동일하게 움직임
+constexpr int MAX_CLIMB_CELLS = 4;
+
+// Climb 1칸당 추가 비용 - 몇칸까지 우회할지
+constexpr float CLIMB_COST_PER_CELL = 1.0f;
+
+
 // 표면 y 탐색 공통 로직
-// 현재 y와 높이차 1 이내 표면 중 가까운거 찾음. 없으면 -1
-int FindConnectableSurfaceY(const VoxelGrid& grid, int nx, int nz, int currY);
+// 현재 y와 높이차 CLIMB_COST_PER_CELL 이내 표면 중 가까운거 찾음. 없으면 -1
+int FindReachableSurfaceY(const VoxelGrid& grid, DirectX::XMINT3 curr,
+	int nx, int nz, int maxClimbCells = MAX_CLIMB_CELLS);
+int FindReachableSurfaceY(const VoxelGrid& grid, int x, int y, int z,
+	int nx, int nz, int maxClimbCells = MAX_CLIMB_CELLS);
 
 // 8 방향 높이차 포함
 // A*와 FlowField(BFS) 둘 다 반드시 이 함수 하나만 사용해야 함 — 각자 구현하면

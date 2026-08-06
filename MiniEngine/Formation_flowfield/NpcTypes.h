@@ -3,6 +3,7 @@
 #include <DirectXMath.h>
 #include <unordered_set>
 #include <vector>
+#include <memory>
 
 // NpcManager 비대화로 인해 분리된 순수 데이터 구조체 모음
 // (NpcMoveData / LeafGroup / NpcGroup)
@@ -54,18 +55,28 @@ struct LeafGroup
 {
     int                             leafId = -1;
     int                             parentId = -1;
-    CorridorFlowField               field;      // leaf 소유 flowfield
+    // 공유 포인터로 worker에서 새 필드로 통째로 교체 -> 여러 leaf가 같은 필드 가질수 있도록
+    std::shared_ptr<const CorridorFlowField> field = EmptyField();      // leaf 소유 flowfield
     std::vector<int>                members;    // Npc index
     std::unordered_set<int64_t>     excluded;   // 분리시, 막은(벽) 병목 복셀들(head는 항상 empty)
     int                             depth = 0;  // leaf depth (head==0)
     std::vector<uint32_t>            path;       // 이 leaf의 A* 경로(분리시, 겹칩 판별)
     bool                            active = false;
 
+    // 공용 빈 필드 - leaf들마다 따로 안만들려고
+    static const std::shared_ptr<const CorridorFlowField>& EmptyField()
+    {
+        static const std::shared_ptr<const CorridorFlowField> s_Empty
+            = std::make_shared<const CorridorFlowField>();
+        return s_Empty;
+    }
+
     void Reset()
     {
         members.clear();
         excluded.clear();
         path.clear();
+        field = EmptyField();
         depth = 0;
         active = false;
     }
@@ -78,6 +89,7 @@ struct NpcGroup
     DirectX::XMINT3             goal{ 0,0,0 };
     std::vector<int>            leafIds;
     bool                        hasGoal = false;
+    bool                        isChasing = false;
 
     void Reset()
     {

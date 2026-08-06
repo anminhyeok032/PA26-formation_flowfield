@@ -224,6 +224,15 @@ void DebugVisualizer::BuildArrowInstances()
     FlowFieldArrowRenderer::UpdateInstances(instances);
 }
 
+void DebugVisualizer::RefreshFieldVisuals()
+{
+    const std::vector<int64_t> prevKeys = m_OccupiedChunkKeys;
+
+    OccupyChunks(0);
+    RefreshDebugColors(prevKeys);   // gpu 업로드
+    BuildArrowInstances();
+}
+
 void DebugVisualizer::OnGroupArrived()
 {
     std::vector<int> changed;

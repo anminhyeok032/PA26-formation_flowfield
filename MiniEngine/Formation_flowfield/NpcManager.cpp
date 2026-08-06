@@ -3,10 +3,7 @@
 #include "GridNeighbors.h"
 #include <cmath>
 #include <queue>
-
-constexpr float NPC_SPEED = 10.0f;
-
-const int TARGET_COUNT = 1000;
+#include "NpcConstants.h"
 
 NpcManager::NpcManager()
     : m_MovementSolver(m_Move, m_Reserve)
@@ -88,6 +85,10 @@ void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph)
     m_Leaves[0]->leafId = 0;
     m_Leaves[0]->parentId = 0;
     m_Leaves[0]->active = false;
+
+    // grid/chunkGraph 포인터가 확정된 뒤에 기동
+    // 워커는 이 둘을 참조로만 들고 있으므로 수명이 NpcManager보다 길어야 함
+    m_FieldWorker.Start(grid, chunkgraph);
 }
 
 bool NpcManager::TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector3& rayDir)
@@ -184,29 +185,16 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
     std::vector<uint32_t> nodePath;
     if (!m_SplitController.BuildLeafCorridor(*m_Grid, *m_ChunkGraph, leaf, goalCell, &nodePath))  return false;
 
-    // --- 5. 마스크가 실제 통로를 담았는지 확인 ---
-    // 청크 그래프는 청크 내부가 벽/절벽으로 갈라진 경우를 모른다.
-    // 조용히 깨지지 않도록 여기서 잡는다. 뜨기 시작하면 margin 확대나 청크 세분화를 검토.
-    for (size_t i = 0; i < n; ++i)
-    {
-        const auto& c = m_StartCells[i];
-        if (c.x < 0)    continue;
-        if (!leaf.field.IsVisited(*m_Grid, c.x, c.y, c.z))
-        {
-            DEBUGPRINT("ChunkGraph: mask miss - npc %zu at (%d,%d,%d)\n", i, c.x, c.y, c.z);
-            break;   // 한 번만 알리면 충분
-        }
-    }
-
     leaf.active = true;
 
     m_Group.goal = goalCell;
     m_Group.hasGoal = true;
+    m_Group.isChasing = false;
     m_Group.leafIds.clear();
     m_Group.leafIds.push_back(0);
 
     // --- 6. 디버그 시각화용 셀 변환 ---
-    if (outPath) m_ChunkGraph->NodePathToCells(*m_Grid, leaf.field, nodePath, *outPath);
+    if (outPath) m_ChunkGraph->NodePathToCells(*m_Grid, *leaf.field, nodePath, *outPath);
 
     return true;
 }
@@ -214,6 +202,20 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 
 void NpcManager::Update(float dt)
 {
+    FieldBuildResult res = m_FieldWorker.TryAcquire();
+    if (res.success)
+    {
+        for (auto& leafPtr : m_Leaves)
+        {
+            if (leafPtr->leafId != res.leafId)   continue;
+            leafPtr->field = std::move(res.field);
+            if (!res.nodePath.empty())  leafPtr->path = std::move(res.nodePath);
+            leafPtr->active = true;
+            m_FieldSwapped = true;
+            break;
+        }
+    }
+
     if (false == m_Group.hasGoal) return;
 
     const float ARRIVE_EPS_SQ = 0.05f * 0.05f;
@@ -235,7 +237,7 @@ void NpcManager::Update(float dt)
             if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
             {
 
-            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt);   // 도착 -> 셀 전환
+            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);   // 도착 -> 셀 전환
         }
         else
         {
@@ -305,7 +307,7 @@ bool NpcManager::IsVisitedAny(const VoxelGrid& grid, int x, int y, int z) const
 {
     for (const auto& leafPtr : m_Leaves)
     {
-        if (leafPtr->field.IsVisited(grid, x, y, z)) return true;
+        if (leafPtr->field->IsVisited(grid, x, y, z)) return true;
     }
     return false;
 }
@@ -314,13 +316,18 @@ bool NpcManager::SampleDirectionAny(const VoxelGrid& grid, int x, int y, int z, 
 {
     for (const auto& leafPtr : m_Leaves)
     {
-        if (leafPtr->field.SampleDirection(grid, x, y, z, outDir))   return true;
+        if (leafPtr->field->SampleDirection(grid, x, y, z, outDir))   return true;
     }
     return false;
 }
 
 void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCells)
 {
+    // grid / chunkgraph 바뀌기전에 워커 세우기
+    m_FieldWorker.CancelAndWait();
+    ++m_TerrainGeneration;
+
+
     if (!m_Group.hasGoal || editedCells.empty()) return;
 
     // 영향 청크 = 편집 청크 + 8이웃.
@@ -331,8 +338,12 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
         const int ccx = c.x / ChunkGraph::CHUNK_SIZE;
         const int ccz = c.z / ChunkGraph::CHUNK_SIZE;
         for (int dz = -1; dz <= 1; ++dz)
+        {
             for (int dx = -1; dx <= 1; ++dx)
+            {
                 affected.insert(MakeChunkKey(ccx + dx, 0, ccz + dz));
+            }
+        }
     }
 
     // NPC가 새로 막힌 셀 위에 서 있을 수 있으므로 현재 위치를 다시 스냅한다.
@@ -363,7 +374,7 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
         // 이 필드가 영향 청크를 덮고 있었나 - LeafGroup에 별도 상태를 두지 않아도
         // CorridorFlowField가 이미 자기 청크 목록을 들고 있다
         bool overlaps = false;
-        for (const auto& entry : leaf.field.GetChunks())
+        for (const auto& entry : leaf.field->GetChunks())
         {
             if (affected.count(entry.first) > 0) { overlaps = true; break; }
         }
@@ -380,6 +391,36 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
             }
         }
     }
+}
+
+void NpcManager::SetChaseTarget(const DirectX::XMINT3& targetCell)
+{
+    // 최초 목적지가 설정돼야 leaf 구성과 이동 데이터가 존재한다
+    if (false == m_Group.hasGoal) return;
+
+    // 셀 단위 임계값 - 월드 좌표가 조금 움직인 것으로는 갱신하지 않는다
+    const auto& g = m_Group.goal;
+    if (targetCell.x == g.x && targetCell.y == g.y && targetCell.z == g.z) return;
+
+    // 워커 완료를 기다리지 않고 즉시 갱신
+    // 늦게 반영하면 그 사이 들어온 갱신이 안 바뀌었다고 판단해 요청 x
+    m_Group.goal = targetCell;
+    m_Group.isChasing = true;
+
+    for (auto& leafPtr : m_Leaves)
+    {
+        if (!leafPtr->active) continue;
+
+        // 캐시가 유효하면 워커가 goal 노드만 써서 증분으로 처리하고,
+        // 캐시가 없거나(최초 동기 빌드 직후) 무효면 이 재료로 전체 재구성
+        FieldBuildRequest req = m_SplitController.MakeRequest(
+            *leafPtr, targetCell, m_TerrainGeneration, m_Move.currCell);
+
+        req.mode = FieldBuildMode::ChaseIncremental;
+
+        m_FieldWorker.Submit(std::move(req));
+    }
+
 }
 
 
@@ -436,7 +477,7 @@ void NpcManager::InitGroupMovement()
     {
         const auto& c = m_Move.currCell[i];
         float v;
-        if (m_Leaves[0]->field.SampleCost(*m_Grid, c.x, c.y, c.z, v))   cost[i] = v;
+        if (m_Leaves[0]->field->SampleCost(*m_Grid, c.x, c.y, c.z, v))   cost[i] = v;
     }
     // 비용이 작은대로 오름차순 (거리 가까운게 그룹의 앞이 되도록)
     std::sort(m_MoveOrder.begin(), m_MoveOrder.end(), [&](int a, int b) {

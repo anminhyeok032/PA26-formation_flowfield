@@ -25,6 +25,9 @@ namespace NpcRenderer
     static uint32_t          s_IndexCount = 0;
     static bool              s_IsWireframe = true;                     // F1키 누르면 중첩 렌더
 
+    static StructuredBuffer  s_PlayerBuffer;
+    static uint32_t          s_PlayerCount = 0;
+
     static void GenerateSphere(int segments, int rings, std::vector<Vertex>& outVerts, std::vector<uint16_t>& outIndices)
     { 
         outVerts.clear();
@@ -264,6 +267,8 @@ namespace NpcRenderer
 
         s_InstanceBuffer.Create(L"NPC Instance Buffer",
             MAX_NPCS, sizeof(InstanceData));
+
+        s_PlayerBuffer.Create(L"Player Instance Buffer", 1, sizeof(InstanceData));
     }
 
     void Shutdown()
@@ -271,7 +276,9 @@ namespace NpcRenderer
         s_VertexBuffer.Destroy();
         s_IndexBuffer.Destroy();
         s_InstanceBuffer.Destroy();
+        s_PlayerBuffer.Destroy();
         s_InstanceCount = 0;
+        s_PlayerCount = 0;
         s_IsWireframe = false;
     }
 
@@ -298,9 +305,38 @@ namespace NpcRenderer
         }
     }
 
+    void UpdatePlayerInstance(const InstanceData& inst, bool enable)
+    {
+        s_PlayerCount = enable ? 1u : 0u;
+        if (0 == s_PlayerCount) return;
+
+        CommandContext::InitializeBuffer(s_PlayerBuffer, &inst, sizeof(InstanceData));
+    }
+
+    // 인스턴스 집합 하나를 솔리드 + 와이어 2패스로 그린다
+    static void DrawSet(GraphicsContext& ctx, StructuredBuffer& buf, uint32_t count)
+    {
+        if (0 == count) return;
+
+        ctx.SetBufferSRV(1, buf);   // 슬롯 1: SV_InstanceID로 인덱싱
+
+        uint32_t isWire = 0;
+        ctx.SetConstantArray(2, 1, &isWire);
+        ctx.SetPipelineState(s_SolidPSO);
+        ctx.DrawIndexedInstanced(s_IndexCount, count, 0, 0, 0);
+
+        if (true == s_IsWireframe)
+        {
+            isWire = 1;
+            ctx.SetConstantArray(2, 1, &isWire);
+            ctx.SetPipelineState(s_WireframePSO);
+            ctx.DrawIndexedInstanced(s_IndexCount, count, 0, 0, 0);
+        }
+    }
+    
     void Render(GraphicsContext& ctx, const Matrix4& viewProj)
     {
-        if (s_InstanceCount == 0) return;
+        if(0 == s_InstanceCount && 0 == s_PlayerCount) return;
 
         ctx.SetRootSignature(s_RootSig);
         ctx.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -326,21 +362,8 @@ namespace NpcRenderer
         ctx.SetBufferSRV(1, s_InstanceBuffer);
 
 
-        // 단 1번의 드로우콜로 s_InstanceCount개 전부 그리기 (gpu 인스턴싱)
-        // 1 - 솔리드 패스
-        uint32_t isWire = 0;
-        ctx.SetConstantArray(2, 1, &isWire);                // 슬롯2, 1개, 값=0
-        ctx.SetPipelineState(s_SolidPSO);
-        ctx.DrawIndexedInstanced(s_IndexCount, s_InstanceCount, 0, 0, 0);
-
-        // 2 - 와이어프레임 패스
-        if (true == s_IsWireframe)
-        {
-            isWire = 1;
-            ctx.SetConstantArray(2, 1, &isWire);            // 슬롯2, 1개, 값=1
-            ctx.SetPipelineState(s_WireframePSO);
-            ctx.DrawIndexedInstanced(s_IndexCount, s_InstanceCount, 0, 0, 0);
-        }
+        DrawSet(ctx, s_InstanceBuffer, s_InstanceCount);
+        DrawSet(ctx, s_PlayerBuffer, s_PlayerCount);
     }
 
     void ToggleWireframe()

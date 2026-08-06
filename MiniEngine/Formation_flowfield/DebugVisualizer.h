@@ -65,6 +65,8 @@ public:
 
     // ---- 화살표 ----
     void BuildArrowInstances();
+    // 필드 스왑시 색 + 화살표 갱신
+    void RefreshFieldVisuals();
 
     // ---- 도착 시 전체 해제 ----
     void OnGroupArrived();

@@ -39,6 +39,12 @@
     <Filter Include="Simulation\DebugCheck">
       <UniqueIdentifier>{ca9137ac-195e-44b2-9493-9cc342b4b5cc}</UniqueIdentifier>
     </Filter>
+    <Filter Include="NPC\NpcManager">
+      <UniqueIdentifier>{e24d6fe4-60ba-4386-9937-ff6c8bcd0635}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Player">
+      <UniqueIdentifier>{b63371eb-ed4e-468b-92af-3cc003d9524c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FlowField.cpp">
@@ -68,15 +74,6 @@
     <ClCompile Include="NpcRenderer.cpp">
       <Filter>Render</Filter>
     </ClCompile>
-    <ClCompile Include="NpcManager.cpp">
-      <Filter>NPC</Filter>
-    </ClCompile>
-    <ClCompile Include="NpcMovementSolver.cpp">
-      <Filter>NPC</Filter>
-    </ClCompile>
-    <ClCompile Include="LeafSplitController.cpp">
-      <Filter>NPC</Filter>
-    </ClCompile>
     <ClCompile Include="PreviewRenderer.cpp">
       <Filter>Render</Filter>
     </ClCompile>
@@ -94,6 +91,21 @@
     </ClCompile>
     <ClCompile Include="ChunkGraph.cpp">
       <Filter>Simulation\Voxel</Filter>
+    </ClCompile>
+    <ClCompile Include="FieldWorker.cpp">
+      <Filter>NPC\FlowField</Filter>
+    </ClCompile>
+    <ClCompile Include="LeafSplitController.cpp">
+      <Filter>NPC\NpcManager</Filter>
+    </ClCompile>
+    <ClCompile Include="NpcManager.cpp">
+      <Filter>NPC\NpcManager</Filter>
+    </ClCompile>
+    <ClCompile Include="NpcMovementSolver.cpp">
+      <Filter>NPC\NpcManager</Filter>
+    </ClCompile>
+    <ClCompile Include="Player.cpp">
+      <Filter>Player</Filter>
     </ClCompile>
     <ClCompile Include="ScopedCpuTimer.cpp">
       <Filter>Simulation\DebugCheck</Filter>
@@ -153,21 +165,6 @@
     <ClInclude Include="NpcRenderer.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="NpcManager.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="NpcTypes.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="NpcMovementSolver.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="LeafSplitController.h">
-      <Filter>NPC</Filter>
-    </ClInclude>
-    <ClInclude Include="CellReservation.h">
-      <Filter>소스 파일</Filter>
-    </ClInclude>
     <ClInclude Include="PreviewRenderer.h">
       <Filter>Render</Filter>
     </ClInclude>
@@ -188,6 +185,36 @@
     </ClInclude>
     <ClInclude Include="ChunkGraph.h">
       <Filter>Simulation\Voxel</Filter>
+    </ClInclude>
+    <ClInclude Include="FieldBuildJob.h">
+      <Filter>NPC\FlowField</Filter>
+    </ClInclude>
+    <ClInclude Include="FieldWorker.h">
+      <Filter>NPC\FlowField</Filter>
+    </ClInclude>
+    <ClInclude Include="CellReservation.h">
+      <Filter>NPC\FlowField</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcTypes.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="LeafSplitController.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcConstants.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcManager.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="NpcMovementSolver.h">
+      <Filter>NPC\NpcManager</Filter>
+    </ClInclude>
+    <ClInclude Include="Player.h">
+      <Filter>Player</Filter>
+    </ClInclude>
+    <ClInclude Include="PlayerOrbitCamera.h">
+      <Filter>Player</Filter>
     </ClInclude>
     <ClInclude Include="MemoryProbe.h">
       <Filter>Simulation\DebugCheck</Filter>

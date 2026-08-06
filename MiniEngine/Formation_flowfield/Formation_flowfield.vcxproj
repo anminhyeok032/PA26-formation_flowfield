@@ -153,6 +153,7 @@
     <ClCompile Include="AStarPathfinder.cpp" />
     <ClCompile Include="CorridorFlowField.cpp" />
     <ClCompile Include="DebugVisualizer.cpp" />
+    <ClCompile Include="FieldWorker.cpp" />
     <ClCompile Include="FlowField.cpp" />
     <ClCompile Include="FlowFieldArrowRenderer.cpp" />
     <ClCompile Include="GridNeighbors.cpp" />
@@ -163,6 +164,7 @@
     <ClCompile Include="NpcRenderer.cpp" />
     <ClCompile Include="PathCorridor.cpp" />
     <ClCompile Include="ChunkGraph.cpp" />
+    <ClCompile Include="Player.cpp" />
     <ClCompile Include="PreviewRenderer.cpp" />
     <ClCompile Include="TerrainEditor.cpp" />
     <ClCompile Include="ScopedCpuTimer.cpp" />
@@ -243,11 +245,14 @@
     <ClInclude Include="ChunkKey.h" />
     <ClInclude Include="CorridorFlowField.h" />
     <ClInclude Include="DebugVisualizer.h" />
+    <ClInclude Include="FieldBuildJob.h" />
+    <ClInclude Include="FieldWorker.h" />
     <ClInclude Include="FlowField.h" />
     <ClInclude Include="FlowFieldArrowRenderer.h" />
     <ClInclude Include="GridNeighbors.h" />
     <ClInclude Include="HeightMap.h" />
     <ClInclude Include="LeafSplitController.h" />
+    <ClInclude Include="NpcConstants.h" />
     <ClInclude Include="MemoryProbe.h" />
     <ClInclude Include="NpcManager.h" />
     <ClInclude Include="NpcMovementSolver.h" />
@@ -255,6 +260,8 @@
     <ClInclude Include="NpcTypes.h" />
     <ClInclude Include="PathCorridor.h" />
     <ClInclude Include="ChunkGraph.h" />
+    <ClInclude Include="Player.h" />
+    <ClInclude Include="PlayerOrbitCamera.h" />
     <ClInclude Include="PreviewRenderer.h" />
     <ClInclude Include="ScopedCpuTimer.h" />
     <ClInclude Include="TerrainEditor.h" />
