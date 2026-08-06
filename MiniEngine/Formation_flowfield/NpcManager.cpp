@@ -237,25 +237,27 @@ void NpcManager::Update(float dt)
             if (Math::LengthSquare(delta) < ARRIVE_EPS_SQ)
             {
 
-            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);   // 도착 -> 셀 전환
-        }
-        else
-        {
-            float distSq = Math::LengthSquare(delta);
-            float step = NPC_SPEED * dt;
+                m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);   // 도착 -> 셀 전환
 
-            if (step * step >= distSq)
-            {
-                // 이번 프레임 이동량이 남은 거리 이상 -> 목표에 정확히 스냅 (오버슈트 방지)
-                m_Move.position[i] = tgt;
             }
             else
             {
-                Math::Vector3 d = Math::Normalize(delta);
-                m_Move.position[i] = pos + d * step;
+                float distSq = Math::LengthSquare(delta);
+                float step = NPC_SPEED * dt;
+
+                if (step * step >= distSq)
+                {
+                    // 이번 프레임 이동량이 남은 거리 이상 -> 목표에 정확히 스냅 (오버슈트 방지)
+                    m_Move.position[i] = tgt;
+                }
+                else
+                {
+                    Math::Vector3 d = Math::Normalize(delta);
+                    m_Move.position[i] = pos + d * step;
+                }
             }
+            anyMoved = true;
         }
-        anyMoved = true;
     }
 
     for (auto& leaf : m_Leaves)
@@ -299,7 +301,7 @@ void NpcManager::Update(float dt)
         SyncInstances();
         NpcRenderer::UpdateInstances(m_NpcInstances);
     }
-    }
+    
 }
 
 
