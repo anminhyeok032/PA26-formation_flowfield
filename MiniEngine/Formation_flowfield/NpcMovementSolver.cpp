@@ -29,6 +29,9 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid,
     float currCost;
     if (false == field.SampleCost(grid, curr.x, curr.y, curr.z, currCost))
     {
+        // 추격에는 도착 x 
+        if (chasing) { HoldPosition(i, curr); return; }
+
         m_Move.active[i] = 0;
         m_Move.stopReason[i] = 1;   // 지형변경으로 인한 필드 밖
         return;

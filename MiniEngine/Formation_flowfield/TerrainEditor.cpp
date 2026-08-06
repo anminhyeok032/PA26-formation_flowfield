@@ -12,15 +12,19 @@ void TerrainEditor::Initialize(VoxelGrid* grid, VoxelInstanceStore* store,
 
 std::vector<DirectX::XMINT3> TerrainEditor::ComputeBoxCells(int hx, int hy, int hz) const
 {
-    constexpr int R = 1;   // 반경 1 -> 3x3x3
-    std::vector<DirectX::XMINT3> cells;
-    cells.reserve((2 * R + 1) * (2 * R + 1) * (2 * R + 1));
+    constexpr int R = 3;   // 반경 3 -> 3x3x3
+    // 중심으로부터 양옆으로 뻗어나갈 절반 거리 계산 (R=1이면 0, R=3이면 1)
+    int half = R / 2;
 
-    for (int y = hy + 1; y <= hy + 1 + (2 * R); ++y)
+    std::vector<DirectX::XMINT3> cells;
+    cells.reserve(R * R * R);
+
+    // X, Y, Z 모두 h를 중앙(Center)으로 두고 -half 부터 +half 까지 순회
+    for (int y = hy + 1; y <= hy + 1 + (half*2); ++y)
     {
-        for (int z = hz - R; z <= hz + R; ++z)
+        for (int z = hz - half; z <= hz + half; ++z)
         {
-            for (int x = hx - R; x <= hx + R; ++x)
+            for (int x = hx - half; x <= hx + half; ++x)
             {
                 cells.push_back({ x, y, z });
             }

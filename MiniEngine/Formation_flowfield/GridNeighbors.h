@@ -15,7 +15,7 @@ struct NeighborInfo
 constexpr int MAX_CLIMB_CELLS = 4;
 
 // Climb 1칸당 추가 비용 - 몇칸까지 우회할지
-constexpr float CLIMB_COST_PER_CELL = 1.0f;
+constexpr float CLIMB_COST_PER_CELL = 2.0f;
 
 
 // 표면 y 탐색 공통 로직

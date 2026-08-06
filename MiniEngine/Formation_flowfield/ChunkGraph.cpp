@@ -494,8 +494,7 @@ std::unordered_set<int64_t> ChunkGraph::MaskCellsFromNodes(
         const uint32_t wanted = kv.second;
         const int cx = chunkIdx % m_CountX, cz = chunkIdx / m_CountX;
 
-        // 성분이 하나뿐이면 walkable 셀이 전부 그 성분이다 - 라벨링을 돌릴 이유가 없다.
-        // 청크당 약 4.7us이므로 이 분기가 마스크 비용을 좌우한다
+        // 성분이 하나뿐이면 walkable 셀이 전부 그 성분이다 - 라벨링을 돌릴 이유x
         const bool needLabels = (m_CompCount[chunkIdx] > 1);
         if (needLabels) LabelChunk(grid, cx, cz, labels.data());
 

@@ -286,6 +286,7 @@ void NpcManager::Update(float dt)
     if (false == anyActive)
     {
         m_Group.hasGoal = false;
+        m_GroupArrived = true;
     }
 
     // m_SplitController.CheckSplitTriggers(*m_Grid);   // 루프 종료 후 - 여기서 leaf가 늘어날 수 있음
@@ -390,8 +391,7 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
 
 void NpcManager::SetChaseTarget(const DirectX::XMINT3& targetCell)
 {
-    // 최초 목적지가 설정돼야 leaf 구성과 이동 데이터가 존재한다
-    if (false == m_Group.hasGoal) return;
+    if (m_Leaves.empty() || 0 == m_Move.size())   return;
 
     // 셀 단위 임계값 - 월드 좌표가 조금 움직인 것으로는 갱신하지 않는다
     const auto& g = m_Group.goal;
@@ -400,7 +400,13 @@ void NpcManager::SetChaseTarget(const DirectX::XMINT3& targetCell)
     // 워커 완료를 기다리지 않고 즉시 갱신
     // 늦게 반영하면 그 사이 들어온 갱신이 안 바뀌었다고 판단해 요청 x
     m_Group.goal = targetCell;
-    m_Group.isChasing = true;
+
+    if (false == m_Group.isChasing)
+    {
+        ReactivateForChase();
+        m_Group.isChasing = true;
+    }
+    m_Group.hasGoal = true;
 
     for (auto& leafPtr : m_Leaves)
     {
@@ -499,4 +505,24 @@ Math::Vector3 NpcManager::GetNpcStandPos(const DirectX::XMINT3& cell, float half
     float standY = cellCenter.GetY() + (cellSize * 0.5f) + halfHeight + 0.1f;
 
     return Math::Vector3(cellCenter.GetX(), standY, cellCenter.GetZ());
+}
+
+void NpcManager::ReactivateForChase()
+{
+    // 기존 정지한 npc 되살리기
+    for (int i : m_MoveOrder)
+    {
+        if (m_Move.leafId[i] < 0)    continue;
+        if (m_Move.active[i])        continue;
+
+        m_Move.active[i] = 1;
+        m_Move.stopReason[i] = 0;
+        m_Move.blockedTime[i] = 0;
+    }
+
+    for (auto& leaf : m_Leaves)
+    {
+        if (leaf->members.empty())   continue;
+        leaf->active = true;
+    }
 }

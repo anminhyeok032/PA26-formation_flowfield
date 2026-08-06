@@ -16,4 +16,4 @@ constexpr float CHASE_MASK_GROWTH_LIMIT = 1.1f;
 
 
 // 목적지 주변 확보 범위
-constexpr int CHASE_GOAL_HOPS = 2;
+constexpr int CHASE_GOAL_HOPS = 6;

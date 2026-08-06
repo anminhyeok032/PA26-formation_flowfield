@@ -446,7 +446,11 @@ void FlowField::Update(float dt)
     {
         m_Debug.RefreshFieldVisuals();
     }
-
+    // 전원 도착 - 경로/확정목적지/청크 점유 전부 해제
+    if (m_Npc.ConsumeGroupArrived())
+    {
+        m_Debug.OnGroupArrived();
+    }
 
     // --- 추격용 플레이어 ---
     // 이동의 앞을 카메라가 정한다. 3인칭이 아니면 월드축(0)으로 되돌린다

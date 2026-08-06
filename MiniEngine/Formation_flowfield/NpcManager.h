@@ -62,6 +62,13 @@ public:
         return v;
     }
 
+    bool ConsumeGroupArrived()
+    {
+        bool v = m_GroupArrived;
+        m_GroupArrived = false;
+        return v;
+    }
+
 
 private:
     const VoxelGrid* m_Grid = nullptr;   // 참조만 (소유 X)
@@ -89,6 +96,7 @@ private:
     // flowfield 계산 전담 워커
     FieldWorker m_FieldWorker;
     bool m_FieldSwapped = false;    // 시각화 갱신용
+    bool m_GroupArrived = false;    // 시각화 해제용
 
     // 지형 / 그래프 변경시 증가 - 결과 판정 확인용
     uint64_t m_TerrainGeneration = 0;
@@ -98,5 +106,5 @@ private:
     void SyncInstances();   // SoA position -> m_NpcInstances -> UpdateInstances
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const;
 
-
+    void ReactivateForChase();
 };
