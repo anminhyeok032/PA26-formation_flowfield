@@ -21,7 +21,7 @@ struct NpcMoveData
     std::vector<DirectX::XMINT3> lastDir;               // 직전 이동 방향 (dx,dy,dz)
 
     std::vector<float> blockedTime;
-    std::vector<float> congestionTime;                  // 분리 트리거용 (길음)
+    //std::vector<float> congestionTime;                  // 분리 트리거용 (길음)
     std::vector<int> leafId;                            // 해당 NPC가 속한 leaf 인덱스(-1 = 무소속)
 
     std::vector<uint8_t> stopReason;                    // 0=정상도착, 1=필드밖(무효화)
@@ -41,7 +41,7 @@ struct NpcMoveData
         lastDir.resize(n, { 0,0,0 });
 
         blockedTime.assign(n, 0.0f);
-        congestionTime.assign(n, 0.0f);
+        //congestionTime.assign(n, 0.0f);
 
         leafId.resize(n, -1);
         stopReason.resize(n, 0);
@@ -58,7 +58,7 @@ struct LeafGroup
     // 공유 포인터로 worker에서 새 필드로 통째로 교체 -> 여러 leaf가 같은 필드 가질수 있도록
     std::shared_ptr<const CorridorFlowField> field = EmptyField();      // leaf 소유 flowfield
     std::vector<int>                members;    // Npc index
-    std::unordered_set<int64_t>     excluded;   // 분리시, 막은(벽) 병목 복셀들(head는 항상 empty)
+    //std::unordered_set<int64_t>     excluded;   // 분리시, 막은(벽) 병목 복셀들(head는 항상 empty)
     int                             depth = 0;  // leaf depth (head==0)
     std::vector<uint32_t>            path;       // 이 leaf의 A* 경로(분리시, 겹칩 판별)
     bool                            active = false;
@@ -74,7 +74,7 @@ struct LeafGroup
     void Reset()
     {
         members.clear();
-        excluded.clear();
+        //excluded.clear();
         path.clear();
         field = EmptyField();
         depth = 0;

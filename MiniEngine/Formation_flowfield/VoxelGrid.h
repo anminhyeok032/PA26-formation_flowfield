@@ -159,8 +159,7 @@ public:
     void ValidateWalkable();
     // 표면 복셀인지 확인 (위쪽이 비어있는 복셀)
     bool IsSurface(int x, int y, int z) const;
-    // x,z 위치의 표면 y값 반환
-    int  GetSurfaceY(int x, int z) const;
+
     // 맵 밖인지 반환
     bool IsInBounds(int x, int y, int z) const
     {

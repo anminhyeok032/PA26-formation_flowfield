@@ -254,17 +254,6 @@ bool VoxelGrid::IsSurface(int x, int y, int z) const
     return GetCell(x, above, z) == CellType::Empty;
 }
 
-int VoxelGrid::GetSurfaceY(int x, int z) const
-{
-    // 위에서 아래로 내려오면서 처음으로 채워진 복셀 찾기
-    for (int y = m_SizeY - 1; y >= 0; y--)
-    {
-        // Empty만 스킵 — Walkable이든 Blocked든 "채워진 것"으로 취급
-        if (GetCell(x, y, z) == CellType::Empty)  continue;
-        return y;
-    }
-    return 0;
-}
 
 
 VoxelGrid::SurfaceSpan VoxelGrid::GetSurfaceYList(int x, int z) const

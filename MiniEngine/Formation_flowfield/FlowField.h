@@ -13,7 +13,7 @@
 #include <memory>
 
 // npc pathfinding
-#include "AStarPathfinder.h"
+//#include "AStarPathfinder.h"
 #include "PathCorridor.h"
 #include "CorridorFlowField.h"
 #include "ChunkKey.h"

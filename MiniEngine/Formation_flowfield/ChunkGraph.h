@@ -21,7 +21,7 @@
 class ChunkGraph
 {
 public:
-    static constexpr int CHUNK_SIZE = CorridorFlowField::CHUNK_SIZE;
+    static constexpr int CHUNK_SIZE = CHUNK_SIZE;
     static constexpr int MAX_SLOTS = SurfaceChunk::SurfaceColumn::INLINE_CAPACITY;
     static constexpr int DIR_COUNT = 8;
     static constexpr int LABELS_PER_CHUNK = CHUNK_SIZE * CHUNK_SIZE * MAX_SLOTS;   // 256
@@ -30,10 +30,7 @@ public:
     // m_NodeOffset 배열 자체가 불필요
     static uint32_t NodeOffsetOf(int chunkIdx) { return (uint32_t)chunkIdx * SLOTS_PER_CHUNK; }
 
-    static int64_t ChunkKeyOf(int x, int z)
-    {
-        return MakeChunkKey(x / CHUNK_SIZE, 0, z / CHUNK_SIZE);
-    }
+
 
     void Build(const VoxelGrid& grid);
 
