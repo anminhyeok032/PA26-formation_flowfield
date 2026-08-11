@@ -76,6 +76,7 @@ private:
     std::vector<NpcRenderer::InstanceData> m_NpcInstances;
     int m_SelectedNpcIndex = -1;
     bool m_GroupSelected = false;
+    bool m_VisualDirty = false;
 
     std::vector<std::unique_ptr<LeafGroup>> m_Leaves;
     NpcGroup               m_Group;
@@ -96,6 +97,9 @@ private:
     FieldWorker m_FieldWorker;
     bool m_FieldSwapped = false;    // 시각화 갱신용
     bool m_GroupArrived = false;    // 시각화 해제용
+
+    // 마지막으로 워커에 submit한 목표셀
+    DirectX::XMINT3 m_LastRequestedGoal{ -1, -1, -1 };
 
     // 지형 / 그래프 변경시 증가 - 결과 판정 확인용
     uint64_t m_TerrainGeneration = 0;

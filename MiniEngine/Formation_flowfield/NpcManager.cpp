@@ -78,7 +78,7 @@ void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph, const
             seedCells.push_back({ sx, sy, sz });
     }
 
-    // ---------- 2. 이동 데이터 초기화 (유일한 호출 지점) ----------
+    // ---------- 2. 이동 데이터 초기화 ----------
     const size_t n = m_NpcInstances.size();
     m_Move.Resize(n);        
     m_Reserve.Reset(n);      
@@ -241,10 +241,9 @@ bool NpcManager::TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector
     m_GroupSelected = !m_GroupSelected;
     m_SelectedNpcIndex = m_GroupSelected ? hitIndex : -1;   // 필요 시 참조용으로만 보관
 
-    uint32_t color = m_GroupSelected ? 2u : 0u;
-    for (auto& inst : m_NpcInstances)
-        inst.colorType = color;
-
+    // 색은 SyncInstances가 상태 기준으로 계산 
+    m_VisualDirty = true;
+    SyncInstances();
     NpcRenderer::UpdateInstances(m_NpcInstances);
     return m_GroupSelected;
 }
@@ -295,20 +294,28 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
     if (m_Move.size() == 0) return;   // hasGoal 조기 이탈 제거 - Idle도 움직여야 한다
 
 
-    if (false == m_Group.hasGoal) return;
-
     // --- 2. 상태 전이 ---
     if (playerValid)
     {
-        m_Group.goal = playerCell;
         UpdateAgro(playerCell, dt);
         UpdateDeagro(playerCell, dt);
+
+        // 목표 셀이 바뀌면 필드를 다시 요청 - 플레이어 추종
+        if (m_Group.isChasing &&
+            (playerCell.x != m_LastRequestedGoal.x ||
+                playerCell.y != m_LastRequestedGoal.y ||
+                playerCell.z != m_LastRequestedGoal.z))
+        {
+            m_ChaseSetDirty = true;
+        }
+
+        m_Group.goal = playerCell;
     }
     PropagateAgro(dt);
 
     // --- 3. 필드 요청 ---
     // 파동을 매 프레임 요청하지 않고, 쌓았다가 한번에 걸기
-    m_FieldRequestTimer -= dt;
+    if(m_FieldRequestTimer > 0.0f)  m_FieldRequestTimer -= dt;
     if (true == m_ChaseSetDirty && m_FieldRequestTimer <= 0.0f)
     {
         RebuildChaseLeaf();
@@ -348,12 +355,13 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
                     // 현재 위치를 새 anchor로 - 일단 흩어지게 하고, 복귀 필수면 로직 수정
                     m_Move.anchorCell[i] = m_Move.currCell[i];
                     m_Move.state[i] = NPC_STATE_IDLE;
+                    m_VisualDirty = true;
                     m_Move.stateTimer[i] = 0.0f;
                 }
                 break;
 
             case NPC_STATE_CHASE:
-                if (!m_Move.active[i])
+                if (m_Move.active[i])
                 {
                     m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);
                 }
@@ -362,6 +370,7 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
                 break;
             }
         }
+        // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
         else
         {
             const float step = NPC_SPEED * dt;
@@ -371,27 +380,13 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
         }
     }
 
-    // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
-    for (int i : m_MoveOrder)
-    {
-        Math::Vector3 delta = m_Move.targetWorldPos[i] - m_Move.position[i];
-        const float distSq = Math::LengthSquare(delta);
-
-        if (distSq < ARRIVE_EPS_SQ)
-        {
-            if (m_Move.state[i] == NPC_STATE_CHASE && m_Move.active[i])
-                m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, true);
-        }
-        else
-        {
-            const float step = NPC_SPEED * dt;
-            if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
-            else m_Move.position[i] += Math::Normalize(delta) * step;
-            anyMoved = true;
-        }
+    
+    if (anyMoved) 
+    { 
+        SyncInstances(); 
+        NpcRenderer::UpdateInstances(m_NpcInstances);
+        m_VisualDirty = false;
     }
-
-    if (anyMoved) { SyncInstances(); NpcRenderer::UpdateInstances(m_NpcInstances); }
 }
 
 bool NpcManager::IsVisitedAny(const VoxelGrid& grid, int x, int y, int z) const
@@ -418,7 +413,7 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
 
     m_FieldWorker.CancelAndWait();     // 그리드 변경 전 필수 (기존과 동일)
     ++m_TerrainGeneration;
-    //m_SplitController.ClearMaskCache();
+
 
     // --- NPC 재스냅 + 예약 갱신 ---
     // InitGroupMovement의 m_Reserve.Reset()이 사라졌으므로 여기서 직접 처리해야 한다.
@@ -474,6 +469,10 @@ void NpcManager::SyncInstances()
         m_NpcInstances[i].position[0] = m_Move.position[i].GetX();
         m_NpcInstances[i].position[1] = m_Move.position[i].GetY();
         m_NpcInstances[i].position[2] = m_Move.position[i].GetZ();
+
+        // colorType = NPC_STATE
+        m_NpcInstances[i].colorType = m_GroupSelected ?
+            NpcRenderer::kNpcColorSelected : (uint32_t)m_Move.state[i];
     }
 }
 
@@ -517,6 +516,7 @@ void NpcManager::UpdateAgro(const DirectX::XMINT3& playerCell, float dt)
             if (dx * dx + dz * dz > R2)  continue;
 
             m_Move.state[i] = NPC_STATE_ALERTED;
+            m_VisualDirty = true;   // 시각화 플레그
             m_Move.propagationTimer[i] = 0.0f;
             m_ChaseSetDirty = true;     // Alerted도 마스크 앵커에 필드 갱신 해줘야함
         }
@@ -534,7 +534,7 @@ void NpcManager::PropagateAgro(float dt)
         {
             if (m_Move.state[i] != NPC_STATE_ALERTED)   continue;
 
-            m_Move.propagationTimer[i] = dt;
+            m_Move.propagationTimer[i] += dt;
 
             // 개체별 지연 - 파동이 계단식으로 안보이게
             const float j = (float)(m_Move.noiseSeed[i] & 0xFF) / 255.0f;   // 0..1
@@ -544,6 +544,7 @@ void NpcManager::PropagateAgro(float dt)
             if (m_Move.propagationTimer[i] < delay)  continue;
 
             m_Move.state[i] = NPC_STATE_CHASE;
+            m_VisualDirty = true;
             m_ChaseSetDirty = true;
 
             // 같은 그룹 내에서만 전파
@@ -616,6 +617,7 @@ void NpcManager::UpdateDeagro(const DirectX::XMINT3& playerCell, float dt)
         }
         group.deagroTimer = 0.0f;
         m_ChaseSetDirty = true;
+        m_VisualDirty = true;
     }
 
 }
@@ -658,5 +660,7 @@ void NpcManager::RebuildChaseLeaf()
         leaf, m_Group.goal, m_TerrainGeneration, m_Move.currCell, m_Move.state);
     req.mode = FieldBuildMode::ChaseIncremental;
     m_FieldWorker.Submit(std::move(req));
+
+    m_LastRequestedGoal = m_Group.goal;
 }
 

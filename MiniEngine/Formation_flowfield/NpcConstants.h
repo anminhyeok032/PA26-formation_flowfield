@@ -38,12 +38,12 @@ constexpr int       SPAWN_PLAYER_EXCLUSION_CELLS = AGRO_RADIUS_CELLS * 2;   // �
  
 
 // NPC 이동 속도(셀/초)
-constexpr float NPC_SPEED = 10.0f;
+constexpr float NPC_SPEED = 3.0f;
 
 // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
 constexpr float NPC_INER = 0.4f;                
 
-const int TARGET_COUNT = 1000;
+const int TARGET_COUNT = 1'0000;
 
 // 1칸 움직이는데 비율 (x / 1.0f)%
 constexpr float NPC_WAIT_RATIO = 0.05f;   
