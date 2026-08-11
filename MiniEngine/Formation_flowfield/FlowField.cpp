@@ -85,7 +85,7 @@ void FlowField::Startup(void)
             EndPos,
             15.0f,               // 터널 반지름
             1.0,              
-            true, true);        // 양쪽 다 개방
+            true, false);        // 양쪽 다 개방
 
         // 병목 협곡 지형 추가 (5주차 병목 테스트용)
         // 월드 좌표계: m_Size=514, cellSize=0.5 -> 유효 범위 0~257. 터널(z월드 90 부근)과 안 겹침.
@@ -139,8 +139,6 @@ void FlowField::Startup(void)
     // 청크 링크 그래프 빌드
     m_ChunkGraph.Build(m_VoxelGrid);
 
-    // npc 배치 초기화
-    m_Npc.Init(m_VoxelGrid, m_ChunkGraph);
 
     // 동적 지형 생성기 초기화
     m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
@@ -150,6 +148,10 @@ void FlowField::Startup(void)
 
     // 플레이어 초기화
     m_Player.Init(m_VoxelGrid);
+
+    // npc 배치 초기화
+    m_Npc.Init(m_VoxelGrid, m_ChunkGraph, m_Player.GetCell());
+
     m_FollowCam.reset(new PlayerOrbitCamera(m_Camera, 3.0f));
 }
 
@@ -440,7 +442,7 @@ void FlowField::Update(float dt)
         }
     }
 
-    m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+    //m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
     // 추격시, flowfield 시각화 갱신
     if (m_Npc.ConsumeFieldSwapped())
     {
@@ -458,8 +460,8 @@ void FlowField::Update(float dt)
         ? m_FollowCam->GetHeading() : 0.0f);
 
     m_Player.Update(m_VoxelGrid, dt);
-    if (m_Player.ConsumeCellChanged())
-        m_Npc.SetChaseTarget(m_Player.GetCell());
+    m_Npc.Update(dt, m_Player.GetCell(), m_Player.IsValid());
+
 
     NpcRenderer::UpdatePlayerInstance(m_Player.MakeInstance(), m_Player.IsValid());
 

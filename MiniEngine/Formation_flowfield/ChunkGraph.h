@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "VoxelGrid.h"
-#include "CorridorFlowField.h"   // CHUNK_SIZE 단일 진실
+#include "CorridorFlowField.h" 
 #include "ChunkKey.h"
 #include <DirectXMath.h>
 #include <vector>
@@ -18,7 +18,6 @@
 class ChunkGraph
 {
 public:
-    static constexpr int CHUNK_SIZE = CHUNK_SIZE;
     static constexpr int MAX_SLOTS = SurfaceChunk::SurfaceColumn::INLINE_CAPACITY;
     static constexpr int DIR_COUNT = 8;
     static constexpr int LABELS_PER_CHUNK = CHUNK_SIZE * CHUNK_SIZE * MAX_SLOTS;   // 256

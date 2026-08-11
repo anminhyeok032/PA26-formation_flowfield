@@ -150,7 +150,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="AStarPathfinder.cpp" />
     <ClCompile Include="CorridorFlowField.cpp" />
     <ClCompile Include="DebugVisualizer.cpp" />
     <ClCompile Include="FieldWorker.cpp" />
@@ -239,7 +238,6 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AStarPathfinder.h" />
     <ClInclude Include="CellReservation.h" />
     <ClInclude Include="ChunkKey.h" />
     <ClInclude Include="CorridorFlowField.h" />
@@ -261,7 +259,6 @@
     <ClInclude Include="Player.h" />
     <ClInclude Include="PlayerOrbitCamera.h" />
     <ClInclude Include="PreviewRenderer.h" />
-    <ClInclude Include="ScopedCpuTimer.h" />
     <ClInclude Include="TerrainEditor.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClCompile Include="VoxelInstanceStore.cpp" />

@@ -21,9 +21,6 @@
     <Filter Include="Simulation\Voxel">
       <UniqueIdentifier>{f9429f92-90a9-4ada-ab31-881012298d51}</UniqueIdentifier>
     </Filter>
-    <Filter Include="NPC\PathFinding">
-      <UniqueIdentifier>{2768acf4-4116-4384-a6ab-392d9aebdadf}</UniqueIdentifier>
-    </Filter>
     <Filter Include="NPC\PublicFunction">
       <UniqueIdentifier>{d024e92a-a954-468a-a681-85e8f0f39959}</UniqueIdentifier>
     </Filter>
@@ -55,9 +52,6 @@
     </ClCompile>
     <ClCompile Include="VoxelGrid.cpp">
       <Filter>Simulation\Voxel</Filter>
-    </ClCompile>
-    <ClCompile Include="AStarPathfinder.cpp">
-      <Filter>NPC\PathFinding</Filter>
     </ClCompile>
     <ClCompile Include="PathCorridor.cpp">
       <Filter>NPC\PublicFunction</Filter>
@@ -135,9 +129,6 @@
     <ClInclude Include="VoxelGrid.h">
       <Filter>Simulation\Voxel</Filter>
     </ClInclude>
-    <ClInclude Include="AStarPathfinder.h">
-      <Filter>NPC\PathFinding</Filter>
-    </ClInclude>
     <ClInclude Include="ChunkKey.h">
       <Filter>NPC\PublicFunction</Filter>
     </ClInclude>
@@ -169,9 +160,6 @@
       <Filter>Simulation\Terrain</Filter>
     </ClInclude>
     <ClInclude Include="DebugVisualizer.h">
-      <Filter>Simulation\DebugCheck</Filter>
-    </ClInclude>
-    <ClInclude Include="ScopedCpuTimer.h">
       <Filter>Simulation\DebugCheck</Filter>
     </ClInclude>
     <ClInclude Include="TerrainEditor.h">

@@ -17,6 +17,15 @@ public:
     void AdvanceCell(const VoxelGrid& grid, const std::vector<std::unique_ptr<LeafGroup>>& leaves, 
         size_t i, float dt, bool chasing);
 
+
+    // 필드 없이 anchorCell 반경 안을 배회 - Idle 전용
+    void AdvanceWanderCell(const VoxelGrid& grid, size_t i, float dt);
+
+    // 필드 없이 anchorCell 방향으로 한 칸 - Lost 전용
+    // 지형에 막히면 false - 호출측이 타임아웃으로 처리
+    bool AdvanceReturnCell(const VoxelGrid& grid, size_t i);
+
+
 private:
     void SnapToTargetCell(size_t i);                                // 이동
     void HoldPosition(size_t i, const DirectX::XMINT3& curr);       // 제자리 대기
@@ -39,7 +48,8 @@ private:
         DirectX::XMINT3& best, bool& outHasActiveBlocker);
 
     // 이동할 복셀 예약
-    void CommitMove(const VoxelGrid& grid, size_t i, const DirectX::XMINT3& curr, const DirectX::XMINT3& best);
+    void CommitMove(const VoxelGrid& grid, size_t i, const DirectX::XMINT3& curr, 
+        const DirectX::XMINT3& best);
 
     // 두 예약이 대각선 교차해서 지나가는지 확인
     bool IsMoveCross(size_t i, const DirectX::XMINT3& curr,
