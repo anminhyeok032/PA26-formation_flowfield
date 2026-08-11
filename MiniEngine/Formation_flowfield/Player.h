@@ -44,7 +44,7 @@ private:
 
     float m_HalfHeight = 1.5f / 2.0f;
     float m_Width = 0.5f;
-    float m_SpeedScale = 1.0f;   // NPC_SPEED 배수. 1.0 = 좀비와 동속
+    float m_SpeedScale = 2.0f;   // NPC_SPEED 배수. 1.0 = 좀비와 동속
     bool  m_CellChanged = false;
 
     std::vector<NeighborInfo> m_NeighborScratch;   // 매 프레임 재할당 방지

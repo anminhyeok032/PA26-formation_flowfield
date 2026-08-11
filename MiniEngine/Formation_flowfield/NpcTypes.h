@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "CorridorFlowField.h"
+#include "NpcConstants.h"
 #include <DirectXMath.h>
 #include <unordered_set>
 #include <vector>
@@ -17,14 +18,20 @@ struct NpcMoveData
     std::vector<uint8_t>            active;             // 이동중 = 1;
     std::vector<float>              halfHeight;         // scaleY 복사본
 
-    std::vector<int> claimedSlot;                       // -1 = 미청구
     std::vector<DirectX::XMINT3> lastDir;               // 직전 이동 방향 (dx,dy,dz)
 
-    std::vector<float> blockedTime;
-    //std::vector<float> congestionTime;                  // 분리 트리거용 (길음)
-    std::vector<int> leafId;                            // 해당 NPC가 속한 leaf 인덱스(-1 = 무소속)
+    std::vector<float>  blockedTime;                    // 다른 NPC가 길막한 시간
+    std::vector<int>    leafId;                         // 해당 NPC가 속한 leaf 인덱스(-1 = 무소속)
 
-    std::vector<uint8_t> stopReason;                    // 0=정상도착, 1=필드밖(무효화)
+    std::vector<uint8_t> stopReason;                    // 0=정상도착, 1=필드밖(무효화) - 지형변경으로 인한
+
+    std::vector<uint8_t>         state;                 // NPC_STATE_*
+    std::vector<DirectX::XMINT3> anchorCell;            // 스폰 지점 = 배회 중심 = 복귀 목표
+    std::vector<float>           stateTimer;            // Wander 대기 / Lost 타임아웃 겸용
+    std::vector<float>           propagationTimer;      // Alerted 지연 누적
+    std::vector<uint32_t>        noiseSeed;             // 개체별 결정론적 난수 시드
+
+
 
     size_t size() const { return position.size(); }     // 길막당한 프레임 체크용
 
@@ -37,7 +44,6 @@ struct NpcMoveData
         active.resize(n);
         halfHeight.resize(n);
 
-        claimedSlot.assign(n, -1);
         lastDir.resize(n, { 0,0,0 });
 
         blockedTime.assign(n, 0.0f);
@@ -45,6 +51,16 @@ struct NpcMoveData
 
         leafId.resize(n, -1);
         stopReason.resize(n, 0);
+
+        state.assign(n, NPC_STATE_IDLE);
+        anchorCell.resize(n, { -1,-1,-1 });
+        stateTimer.assign(n, 0.0f);
+        propagationTimer.assign(n, 0.0f);
+        noiseSeed.resize(n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            noiseSeed[i] = (uint32_t)(i * 2654435761u) | 1u;   // Knuth 승수, 0 방지
+        }
     }
 
 };
@@ -95,5 +111,30 @@ struct NpcGroup
     {
         leafIds.clear();
         hasGoal = false;
+    }
+};
+
+
+// 어그로 전파 범위 및 해제 판정 단위
+// 여러 behaviorGroup의 chase 멤버가 하나의 leaf 공유
+struct BehaviorGroup
+{
+    std::vector<int> members;
+
+    // 해제 계수 - 개체별 해제하면 그룹내의 STATE가 쪼개짐
+    float deagroTimer = 0.0f;
+
+    // broadpays용
+    DirectX::XMINT3 aabbMin{ 0,0,0 };
+    DirectX::XMINT3 aabbMax{ 0,0,0 };
+
+    bool HasAnyChasing(const NpcMoveData& move) const
+    {
+        for (int i : members)
+        {
+            if (move.state[i] == NPC_STATE_CHASE || move.state[i] == NPC_STATE_ALERTED)
+                return true;
+        }
+        return false;
     }
 };

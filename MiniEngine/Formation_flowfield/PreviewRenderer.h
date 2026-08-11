@@ -24,6 +24,12 @@ namespace PreviewRenderer
 	// 박스 상수 크기라 소량이면 충분 (3x3x3=27, 여유분 포함)
 	static const uint32_t MAX_INSTANCES = 64;
 
+	// 편집 미리보기(s_InstanceBuffer)와 별개로 유지되는 오버레이 세트
+	static const uint32_t MAX_OVERLAY_INSTANCES = 2048;
+
+	void UpdateOverlayInstances(const std::vector<InstanceData>& instances);
+
+
 	void Initialize();
 	void Shutdown();
 	void UpdateInstances(const std::vector<InstanceData>& instances);

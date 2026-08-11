@@ -72,7 +72,11 @@ private:
     enum class EditMode { GroupMove, TerrainBuild, PlayerFollow };    // 편집 모드 (1: 그룹 이동 / 2: 지형 생성 / 3: 플레이어 모드)
     EditMode m_EditMode = EditMode::GroupMove;
 
-
+    // Agro Range 시각화
+    std::vector<PreviewRenderer::InstanceData> m_RingInstances;
+    DirectX::XMINT3 m_RingBuiltAtCell{ INT32_MIN, INT32_MIN, INT32_MIN };
+    bool m_ShowAgroRing = false;
+    void BuildAgroRing(const DirectX::XMINT3& pc);
 
     // 추격용 멤버
     DirectX::XMINT3 m_ChaseCell{ -1, -1, -1 };

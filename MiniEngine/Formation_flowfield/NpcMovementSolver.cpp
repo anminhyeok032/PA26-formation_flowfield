@@ -3,7 +3,6 @@
 #include "NpcConstants.h"
 
 
-
 NpcMovementSolver::NpcMovementSolver(NpcMoveData& move, CellReservation& reserve)
     : m_Move(move), m_Reserve(reserve)
 {
@@ -29,6 +28,9 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid,
     float currCost;
     if (false == field.SampleCost(grid, curr.x, curr.y, curr.z, currCost))
     {
+        // 추격에는 도착 x 
+        if (chasing) { HoldPosition(i, curr); return; }
+
         m_Move.active[i] = 0;
         m_Move.stopReason[i] = 1;   // 지형변경으로 인한 필드 밖
         return;
@@ -75,6 +77,99 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid,
 
     CommitMove(grid, i, curr, best);
 
+}
+
+void NpcMovementSolver::AdvanceWanderCell(const VoxelGrid& grid, size_t i, float dt)
+{
+    SnapToTargetCell(i);    
+    const DirectX::XMINT3 curr = m_Move.currCell[i];
+
+
+    // 대기 중이면 아무것도 안함
+    // 전부 매 프레임 안 움직이게, 개체별로 대기시간 뿌리기
+    if (m_Move.stateTimer[i] > 0.0f)
+    {
+        m_Move.stateTimer[i] -= dt;
+        HoldPosition(i, curr);
+        return;
+    }
+
+    const DirectX::XMINT3 anchor = m_Move.anchorCell[i];
+
+    m_NeighborScratch.clear();
+    GetWalkableNeighbors(grid, curr, m_NeighborScratch);
+    if (m_NeighborScratch.empty())   return;
+
+    // anchor에서 멀어졌으면, anchor쪽으로 향하게
+    const int dax = anchor.x - curr.x, daz = anchor.z - curr.z;
+    const int currDistSq = dax * dax + daz * daz;
+    const bool tooFar = currDistSq > (WANDER_RADIUS_CELLS * WANDER_RADIUS_CELLS);
+
+
+    int candidates[8];
+    int count = 0;
+    for (size_t k = 0; k < m_NeighborScratch.size(); ++k)
+    {
+        const DirectX::XMINT3& p = m_NeighborScratch[k].pos;
+
+        if (tooFar)
+        {
+            const int ndx = anchor.x - p.x, ndz = anchor.z - p.z;
+            if (ndx * ndx + ndz * ndz >= currDistSq) continue;   // 더 멀어지면 제외
+        }
+        if (m_Reserve.Find(MakeCellKey(p)) >= 0)     continue;   // 점유됨
+        if (IsMoveCross(i, curr, p))                 continue;   // 서로 통과 방지
+
+        candidates[count++] = (int)k;
+    }
+    if (count == 0) { HoldPosition(i, curr); return; }
+
+    const int pick = candidates[NextRand(m_Move.noiseSeed[i]) % (uint32_t)count];
+    
+    CommitMove(grid, i, curr, m_NeighborScratch[pick].pos);
+
+    // 다음 셀까지 대기시간 재설정
+    const float t = (float)(NextRand(m_Move.noiseSeed[i]) & 0xFFFF) / 65535.0f;
+    m_Move.stateTimer[i] = WANDER_PAUSE_MIN_SEC + t * (WANDER_PAUSE_MAX_SEC - WANDER_PAUSE_MIN_SEC);
+
+}
+
+bool NpcMovementSolver::AdvanceReturnCell(const VoxelGrid& grid, size_t i)
+{
+    SnapToTargetCell(i);
+    const DirectX::XMINT3 curr = m_Move.currCell[i];
+    const DirectX::XMINT3 anchor = m_Move.anchorCell[i];
+
+    const int dx = anchor.x - curr.x, dz = anchor.z - curr.z;
+    const int currDistSq = dx * dx + dz * dz;
+    if (currDistSq == 0) { HoldPosition(i, curr); return true; }   // 도달
+
+    m_NeighborScratch.clear();
+    GetWalkableNeighbors(grid, curr, m_NeighborScratch);
+
+    // 필드 없이 anchor에 가장 가까워지는 이웃 하나.
+    // 복귀에 필드를 쓰면 목표가 개체마다 달라져 필드가 N개 필요해진다
+    int bestDistSq = currDistSq;
+    const DirectX::XMINT3* best = nullptr;
+    for (const auto& n : m_NeighborScratch)
+    {
+        if (m_Reserve.Find(MakeCellKey(n.pos)) >= 0) continue;
+        if (IsMoveCross(i, curr, n.pos))             continue;
+
+        const int ndx = anchor.x - n.pos.x, ndz = anchor.z - n.pos.z;
+        const int d = ndx * ndx + ndz * ndz;
+        if (d < bestDistSq) { bestDistSq = d; best = &n.pos; }
+    }
+
+    // 막힘 - 호출측이 타임아웃 처리
+    if (best == nullptr)
+    {
+        HoldPosition(i, curr); 
+        return false;
+    }  
+
+    CommitMove(grid, i, curr, *best);
+    return true;
 }
 
 void NpcMovementSolver::SnapToTargetCell(size_t i)
@@ -153,8 +248,8 @@ bool NpcMovementSolver::TryPrimaryDirection(const VoxelGrid& grid, size_t i, con
     {
         order[0] = &xKeep;
         order[1] = &zKeep;
-        valid[0] = &hasX;
-        valid[1] = &hasZ;
+        valid[0] = hasX;
+        valid[1] = hasZ;
     }
 
     // 갈 수 있는 어깨 셀 우선 검사
@@ -213,7 +308,8 @@ bool NpcMovementSolver::PickFallbackCell(const VoxelGrid& grid, size_t i, const 
 }
 
 
-void NpcMovementSolver::CommitMove(const VoxelGrid& grid, size_t i, const DirectX::XMINT3& curr, const DirectX::XMINT3& best)
+void NpcMovementSolver::CommitMove(const VoxelGrid& grid, size_t i, const DirectX::XMINT3& curr,
+    const DirectX::XMINT3& best)
 {
     if (m_Reserve.TryReserve(MakeCellKey(best), (int)i))
     {
@@ -265,7 +361,7 @@ bool NpcMovementSolver::AcceptCell(const VoxelGrid& grid, size_t i,
     float nc;
     if (false == field.SampleCost(grid, cell.x, cell.y, cell.z, nc)) return false;  // flowfield 아님
     if (nc >= currCost)                                              return false;  // 목적지 안가까워짐
-    if (m_Reserve.Find(MakeCellKey(cell) >= 0))                      return false;  // 예약됨
+    if (m_Reserve.Find(MakeCellKey(cell)) >= 0)                      return false;  // 예약됨
     if (true == IsMoveCross(i, curr, cell))                          return false;  // 교차함
     return true;
 }

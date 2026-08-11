@@ -19,17 +19,17 @@ public:
     NpcManager();
 
 	// 지형 참조 보관 + npc 인스턴스 저장
-	void Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph);
+	void Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph, const DirectX::XMINT3& playerStartCell);
 
 	// 좌클릭 선택
 	bool TrySelectNpc(const Math::Vector3& rayOrigin, const Math::Vector3& rayDir);
     bool HasSelection() const { return m_GroupSelected; }
 
-	// 우클릭 목적지 확정 -> A* -> 마스크 -> FlowField -> 이동초기화 파이프라인 전체 실행.
+    // 현재는 전원 강제 어그로 버튼으로만 사용
 	bool SetGroupDestination(const DirectX::XMINT3& goalCell, std::vector<DirectX::XMINT3>* outPath = nullptr);
 
-	// 매 프레임 이동
-	void Update(float dt);
+	// 매 프레임 이동 - Agro 판정 포함
+	void Update(float dt, const DirectX::XMINT3& playerCell, bool playerValid);
 
     bool IsVisitedAny(const VoxelGrid& grid, int x, int y, int z) const;
 
@@ -49,9 +49,8 @@ public:
     // 동적 지형 생성에 대한 갱신 ( TODO : 다중 그룹으로 변환시, 해당 갱신은 상위에서 한번에)
     void OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCells);
 
-    // --- 타겟 갱신 ---
-    // 추격 목표 갱신 -> 셀 바뀔때만 호출
-    void SetChaseTarget(const DirectX::XMINT3& targetCell);
+
+
 
     // 지형 / 그래프 수정 직전 호출 - worker가 그리드 읽을때까지 block용
     void CancelFieldWork() { m_FieldWorker.CancelAndWait(); }
@@ -64,6 +63,12 @@ public:
         return v;
     }
 
+    bool ConsumeGroupArrived()
+    {
+        bool v = m_GroupArrived;
+        m_GroupArrived = false;
+        return v;
+    }
 
     void ReportAndResetStats(const char* filePath = "Report/advancecell_stats.txt")
     {
@@ -94,6 +99,7 @@ private:
     std::vector<NpcRenderer::InstanceData> m_NpcInstances;
     int m_SelectedNpcIndex = -1;
     bool m_GroupSelected = false;
+    bool m_VisualDirty = false;
 
     std::vector<std::unique_ptr<LeafGroup>> m_Leaves;
     NpcGroup               m_Group;
@@ -113,14 +119,34 @@ private:
     // flowfield 계산 전담 워커
     FieldWorker m_FieldWorker;
     bool m_FieldSwapped = false;    // 시각화 갱신용
+    bool m_GroupArrived = false;    // 시각화 해제용
+
+    // 마지막으로 워커에 submit한 목표셀
+    DirectX::XMINT3 m_LastRequestedGoal{ -1, -1, -1 };
 
     // 지형 / 그래프 변경시 증가 - 결과 판정 확인용
     uint64_t m_TerrainGeneration = 0;
 
     // 내부 헬퍼
-    void InitGroupMovement();
     void SyncInstances();   // SoA position -> m_NpcInstances -> UpdateInstances
     Math::Vector3 GetNpcStandPos(const DirectX::XMINT3& cell, float halfHeight) const;
+
+
+
+    // ------ State 처리 ------
+    std::vector<BehaviorGroup> m_BehaviorGroups;
+    float m_FieldRequestTimer = 0.0f;   // 요청 배칭 쿨다운
+    bool m_ChaseSetDirty = false;       // Chase 집합 변경 대기 플래그
+
+    void UpdateAgro(const DirectX::XMINT3& playerCell, float dt);
+    void PropagateAgro(float dt);
+    void UpdateDeagro(const DirectX::XMINT3& playerCell, float dt);
+    void RebuildChaseLeaf();
+
+    // 스폰 헬퍼 - Init 비대 방지용
+    bool TrySpawnGroup(const VoxelGrid& grid, int seedX, int seedY, int seedZ,
+        int wantCount, float npcWidth, float npcHeight,
+        std::unordered_set<int64_t>& usedColumns);
 
 
     // ---- AdvanceCell 계측용 카운터 (디버그) ----
@@ -145,5 +171,4 @@ private:
     bool SampleCostCounted(int x, int y, int z, float& outCost);
     bool SampleDirectionCounted(int x, int y, int z, DirectX::XMINT3& outDir);
     int ReserveFindCounted(int64_t key);
-
 };

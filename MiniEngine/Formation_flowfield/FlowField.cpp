@@ -87,7 +87,7 @@ void FlowField::Startup(void)
             EndPos,
             15.0f,               // 터널 반지름
             1.0,              
-            true, true);        // 양쪽 다 개방
+            true, false);        // 양쪽 다 개방
 
 
         // 병목 협곡 지형 추가 (5주차 병목 테스트용)
@@ -153,8 +153,6 @@ void FlowField::Startup(void)
     Utility::Printf("[ChunkGraph] mem total=%.1fKB (adj=%.1fKB slack=%.1fKB)\n",
         mem.Total() / 1024.0, mem.adjacencyData / 1024.0, mem.adjacencySlack / 1024.0);
 
-    // npc 배치 초기화
-    m_Npc.Init(m_VoxelGrid, m_ChunkGraph);
 
     // 동적 지형 생성기 초기화
     m_TerrainEditor.Initialize(&m_VoxelGrid, &m_Store, &m_Debug, &m_ChunkGraph);
@@ -164,6 +162,10 @@ void FlowField::Startup(void)
 
     // 플레이어 초기화
     m_Player.Init(m_VoxelGrid);
+
+    // npc 배치 초기화
+    m_Npc.Init(m_VoxelGrid, m_ChunkGraph, m_Player.GetCell());
+
     m_FollowCam.reset(new PlayerOrbitCamera(m_Camera, 3.0f));
 }
 
@@ -371,7 +373,56 @@ void FlowField::OnEditModeChanged()
 
 }
 
+void FlowField::BuildAgroRing(const DirectX::XMINT3& pc)
+{
+    m_RingInstances.clear();
 
+    const float cellSize = m_VoxelGrid.GetCellSize();
+    const int radii[2] = { AGRO_RADIUS_CELLS, DEAGRO_RADIUS_CELLS };
+    const uint32_t cols[2] = { kColorAgroRing, kColorDeagroRing };
+
+    for (int r = 0; r < 2; ++r)
+    {
+        const int R = radii[r];
+        const int outer = R * R;
+        const int inner = (R - 1) * (R - 1);
+
+        for (int dz = -R; dz <= R; ++dz)
+        {
+            for (int dx = -R; dx <= R; ++dx)
+            {
+                const int d2 = dx * dx + dz * dz;
+                if (d2 > outer || d2 < inner) continue;   // 두께 1셀 고리
+
+                const int cx = pc.x + dx, cz = pc.z + dz;
+                if (cx < 0 || cx >= m_VoxelGrid.GetSizeX()) continue;
+                if (cz < 0 || cz >= m_VoxelGrid.GetSizeZ()) continue;
+
+                // 그 컬럼의 모든 표면 위에 하나씩
+                // 동굴 입구라면 바닥 표면과 천장 위 표면 둘 다 잡혀 양쪽에 링이 그려짐
+                VoxelGrid::SurfaceSpan surf = m_VoxelGrid.GetSurfaceYList(cx, cz);
+                for (int k = 0; k < surf.count; ++k)
+                {
+                    const int y = surf.data[k] + 1;   // 표면 바로 위 (정의상 항상 Empty)
+                    if (!m_VoxelGrid.IsInBounds(cx, y, cz)) continue;
+
+                    Math::Vector3 w = m_VoxelGrid.GetWorldPos(cx, y, cz);
+
+                    PreviewRenderer::InstanceData inst{};
+                    inst.position[0] = w.GetX();
+                    inst.position[1] = w.GetY();
+                    inst.position[2] = w.GetZ();
+                    inst.scale = cellSize * 0.88f;   // 셀보다 살짝 작게 - 좁은 틈에 박힌 박스는 주변 불투명 복셀에 가려져 검사 x
+                    inst.colorType = cols[r];
+                    m_RingInstances.push_back(inst);
+                }
+            }
+        }
+    }
+
+    PreviewRenderer::UpdateOverlayInstances(m_RingInstances);
+    m_RingBuiltAtCell = pc;
+}
 
 
 
@@ -458,13 +509,17 @@ void FlowField::Update(float dt)
         }
     }
 
-    m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
+    //m_Npc.Update(dt); // 모드(카메라/피킹)와 무관하게 매 프레임 이동은 계속 갱신
     // 추격시, flowfield 시각화 갱신
     if (m_Npc.ConsumeFieldSwapped())
     {
         m_Debug.RefreshFieldVisuals();
     }
-
+    // 전원 도착 - 경로/확정목적지/청크 점유 전부 해제
+    if (m_Npc.ConsumeGroupArrived())
+    {
+        m_Debug.OnGroupArrived();
+    }
 
     // --- 추격용 플레이어 ---
     // 이동의 앞을 카메라가 정한다. 3인칭이 아니면 월드축(0)으로 되돌린다
@@ -472,12 +527,20 @@ void FlowField::Update(float dt)
         ? m_FollowCam->GetHeading() : 0.0f);
 
     m_Player.Update(m_VoxelGrid, dt);
-    if (m_Player.ConsumeCellChanged())
-        m_Npc.SetChaseTarget(m_Player.GetCell());
+    m_Npc.Update(dt, m_Player.GetCell(), m_Player.IsValid());
+
 
     NpcRenderer::UpdatePlayerInstance(m_Player.MakeInstance(), m_Player.IsValid());
 
-
+    // Player가 셀 이동시, Agro Range 시각화 위치 재계산
+    if (m_ShowAgroRing && m_Player.IsValid())
+    {
+        const DirectX::XMINT3 pc = m_Player.GetCell();
+        if (pc.x != m_RingBuiltAtCell.x || pc.y != m_RingBuiltAtCell.y || pc.z != m_RingBuiltAtCell.z)
+        {
+            BuildAgroRing(pc);
+        }
+    }
 
     // F1: 솔리드 <-> 와이어프레임 토글
     // IsFirstPressed = 키를 막 누른 순간 한 번만 true
@@ -498,6 +561,21 @@ void FlowField::Update(float dt)
     {
         m_Debug.ToggleArrows();
         m_Debug.BuildArrowInstances();
+    }
+    // F4 - 어그로 / 해제 반경 시각화
+    if (GameInput::IsFirstPressed(GameInput::kKey_f4))
+    {
+        m_ShowAgroRing = !m_ShowAgroRing;
+        if (!m_ShowAgroRing)
+        {
+            m_RingInstances.clear();
+            PreviewRenderer::UpdateOverlayInstances(m_RingInstances);
+            m_RingBuiltAtCell = { INT32_MIN, INT32_MIN, INT32_MIN };
+        }
+        else
+        {
+            m_RingBuiltAtCell = { INT32_MIN, INT32_MIN, INT32_MIN };   // 다음 프레임에 재생성
+        }
     }
 }
 

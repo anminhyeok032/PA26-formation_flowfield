@@ -21,6 +21,12 @@ namespace NpcRenderer
 
     static const uint32_t MAX_NPCS = 10'0000;
 
+    // colorType 규약
+    //   0~3 : NPC_STATE_와 동일 (Idle=파랑 / Alerted=노랑 / Chase=빨강 / Lost=회색)
+    static constexpr uint32_t kNpcColorSelected = 5;
+    static constexpr uint32_t kNpcColorPlayer   = 10;
+    static constexpr uint32_t kNpcColorAgroRing = 11;
+
     // -----------------------------------------------------------------------
     // Capsule: NPC의 충돌/피킹 판정용 바운딩 볼륨.
     // 중심선(p0~p1) 주변 radius 거리 안의 공간 전체가 캡슐 내부.

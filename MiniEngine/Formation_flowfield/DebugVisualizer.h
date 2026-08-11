@@ -15,6 +15,8 @@ static constexpr uint32_t kColorHover       = 2;       // hovering
 static constexpr uint32_t kColorPath        = 3;       // A* path
 
 static constexpr uint32_t kColorPredEdit    = 20;      // terrain editor prediction
+static constexpr uint32_t kColorAgroRing    = 21;      // Agro Range 
+static constexpr uint32_t kColorDeagroRing  = 22;      // Deagro Range
 
 // 디버그 시각화 전담: 청크 점유색 / A* 경로 / 호버·확정 목적지 / FlowField 화살표
 // 게임 로직에는 관여x  비활성화 가능

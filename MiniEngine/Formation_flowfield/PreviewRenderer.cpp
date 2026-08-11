@@ -35,6 +35,9 @@ namespace PreviewRenderer
     static StructuredBuffer  s_InstanceBuffer;
     static uint32_t          s_InstanceCount = 0;
 
+    static StructuredBuffer  s_OverlayBuffer;
+    static uint32_t          s_OverlayCount = 0;
+
     void Initialize()
     {
         // VoxelRenderer와 동일한 루트시그니처 (b0 CBV, t0 SRV, b1 상수)
@@ -76,6 +79,9 @@ namespace PreviewRenderer
         s_VertexBuffer.Create(L"Preview VB", 8, sizeof(Vertex), s_CubeVerts);
         s_IndexBuffer.Create(L"Preview IB", 36, sizeof(uint16_t), s_CubeIndices);
         s_InstanceBuffer.Create(L"Preview Instance Buffer", MAX_INSTANCES, sizeof(InstanceData));
+
+        s_OverlayBuffer.Create(L"Preview Overlay Buffer",
+            MAX_OVERLAY_INSTANCES, sizeof(InstanceData));
     }
 
     void Shutdown()
@@ -84,6 +90,9 @@ namespace PreviewRenderer
         s_IndexBuffer.Destroy();
         s_InstanceBuffer.Destroy();
         s_InstanceCount = 0;
+
+        s_OverlayBuffer.Destroy();
+        s_OverlayCount = 0;
     }
 
     void UpdateInstances(const std::vector<InstanceData>& instances)
@@ -104,9 +113,20 @@ namespace PreviewRenderer
         }
     }
 
+    void UpdateOverlayInstances(const std::vector<InstanceData>& instances)
+    {
+        // 상한을 미리 크게 잡아 Create 재할당 경로를 아예 타지 않게
+        // GPU가 참조 중인 버퍼를 재생성하는 위험을 피하려는 목적
+        s_OverlayCount = (uint32_t)std::min<size_t>(instances.size(), MAX_OVERLAY_INSTANCES);
+        if (0 == s_OverlayCount) return;
+
+        CommandContext::InitializeBuffer(s_OverlayBuffer,
+            instances.data(), s_OverlayCount * sizeof(InstanceData));
+    }
+
     void Render(GraphicsContext& ctx, const Matrix4& viewProj)
     {
-        if (s_InstanceCount == 0) return;   // GroupMove 모드/허공 조준 시 비용 0
+        if (s_InstanceCount == 0 && s_OverlayCount == 0) return;   // GroupMove 모드/허공 조준 시 비용 0
 
         ctx.SetRootSignature(s_RootSig);
         ctx.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -125,16 +145,37 @@ namespace PreviewRenderer
 
         Matrix4 vpTransposed = Transpose(viewProj);
         ctx.SetDynamicConstantBufferView(0, sizeof(Matrix4), &vpTransposed);
-        ctx.SetBufferSRV(1, s_InstanceBuffer);
 
-        // CubePS의 b1(IsWireframePass)을 0으로 고정 — 미리보기는 와이어 패스 없음.
-        // 이 세팅을 빼면 루트파라미터 미바인딩으로 GPU 검증 에러.
-        uint32_t isWire = 0;
-        ctx.SetConstantArray(2, 1, &isWire);
+        // 지형 편집 미리보기
+        if (s_InstanceCount > 0)
+        {
+            ctx.SetBufferSRV(1, s_InstanceBuffer);
 
-        ctx.SetPipelineState(s_PreviewPSO);
-        ctx.DrawIndexedInstanced(36, s_InstanceCount, 0, 0, 0);
+            // CubePS의 b1(IsWireframePass)을 0으로 고정 — 미리보기는 와이어 패스 없음.
+            // 이 세팅을 빼면 루트파라미터 미바인딩으로 GPU 검증 에러.
+            uint32_t isWire = 0;
+            ctx.SetConstantArray(2, 1, &isWire);
+
+            ctx.SetPipelineState(s_PreviewPSO);
+            ctx.DrawIndexedInstanced(36, s_InstanceCount, 0, 0, 0);
+        }
+
+        // 오버레이 (어그로 링) - 같은 PSO/VB/IB, 인스턴스 버퍼만 교체
+        if (s_OverlayCount > 0)
+        {
+            /* s_OverlayBuffer SRV 바인딩 + DrawIndexedInstanced(36, s_OverlayCount, ...) */
+
+            ctx.SetBufferSRV(1, s_OverlayBuffer);
+
+            // CubePS의 b1(IsWireframePass)을 0으로 고정 — 미리보기는 와이어 패스 없음.
+            // 이 세팅을 빼면 루트파라미터 미바인딩으로 GPU 검증 에러.
+            uint32_t isWire = 0;
+            ctx.SetConstantArray(2, 1, &isWire);
+
+            ctx.SetPipelineState(s_PreviewPSO);
+            ctx.DrawIndexedInstanced(36, s_OverlayCount, 0, 0, 0);
+        }
     }
 
-    uint32_t GetInstanceCount() { return s_InstanceCount; }
+    uint32_t GetInstanceCount() { return s_InstanceCount + s_OverlayCount; }
 }
