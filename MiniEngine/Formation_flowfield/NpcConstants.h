@@ -1,6 +1,18 @@
 ﻿#pragma once
 #include <cstdint>
 
+// ------ NPC 설정 -------
+constexpr float NPC_SPEED       = 3.0f;     // NPC 이동 속도(셀/초)
+constexpr float NPC_INER        = 0.4f;     // 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
+constexpr int   TARGET_COUNT    = 1'0000;
+constexpr float NPC_WAIT_RATIO  = 0.05f;    // 1칸 움직이는데 비율 (x / 1.0f)%
+
+
+// ------ Flowfield mask 설정값 ------
+constexpr float CHASE_MASK_GROWTH_LIMIT = 1.1f; // 증가한 마스크가 최초 대비 해당 배수 넘길시, 메모리 위해 전체 재구성 한번 하기
+constexpr int   CHASE_GOAL_HOPS         = 6;    // 목적지 주변 확보 범위
+
+
 // ------ NPC STATE ------
 constexpr uint8_t	NPC_STATE_IDLE		= 0;		// 배회 / 필드 사용x
 constexpr uint8_t	NPC_STATE_ALERTED	= 1;		// 어그로 판정 / 추격 시작 전 // 필드 사용 x
@@ -9,8 +21,8 @@ constexpr uint8_t	NPC_STATE_LOST		= 3;		// anchorCell 복귀	/ 필드 사용 x
 
 // ------ NPC AGRO ------
 constexpr int		AGRO_RADIUS_CELLS	= 25;		// sphere 반경 = 마스크 크기
-constexpr int		DEAGRO_RADIUS_CELLS	= 40;		// 감지의 1.6배 - 경계 진동 방지
-constexpr float		DEAGRO_HOLD_SEC		= 3.0f;		// 해제 지연 - 경계 지속 토글 방지
+constexpr int		DEAGRO_RADIUS_CELLS	= 50;		// 감지의 2배 - 경계 진동 방지
+
 
 // ------ AGRO 전파 ------
 constexpr float		PROPAGATION_DELAY_SEC		= 0.4f;	// Alerted -> Chase 지연 시간
@@ -26,7 +38,6 @@ constexpr float		FIELD_REQUEST_COOLDOWN_SEC = 0.2f;	// summit 쿨타임
 constexpr int		WANDER_RADIUS_CELLS		= 6;
 constexpr float		WANDER_PAUSE_MIN_SEC	= 1.0f;
 constexpr float		WANDER_PAUSE_MAX_SEC	= 3.0f;
-constexpr float		LOST_TIMEOUT_SEC		= 15.0f;
 
 
 // ------ 그룹 크기 분포 ------
@@ -42,25 +53,10 @@ constexpr int REGION_SIZE_CELLS = 64;
 // 잠든 그룹 깨우는 범위
 // WAKEUP_RADIUS - AGRO_RADIUS = 100 - 25 = 75
 constexpr int WAKEUP_RADIUS_CELLS = AGRO_RADIUS_CELLS * 4;
+// 활성 리전 반경. 플레이어가 리전 어디에 있든 이 거리까지는 활성이 보장된다
+constexpr int ACTIVE_REGION_RINGS = (WAKEUP_RADIUS_CELLS + REGION_SIZE_CELLS - 1) / REGION_SIZE_CELLS;
 
 
-// NPC 이동 속도(셀/초)
-constexpr float NPC_SPEED = 3.0f;
-
-// 다른 방향 찾아갈때, 기존 방향으로 가게 하는 보정값
-constexpr float NPC_INER = 0.4f;                
-
-const int TARGET_COUNT = 1'0000;
-
-// 1칸 움직이는데 비율 (x / 1.0f)%
-constexpr float NPC_WAIT_RATIO = 0.05f;   
-
-// 증가한 마스크가 최초 대비 해당 배수 넘길시, 메모리 위해 전체 재구성 한번 하기
-constexpr float CHASE_MASK_GROWTH_LIMIT = 1.1f;
-
-
-// 목적지 주변 확보 범위
-constexpr int CHASE_GOAL_HOPS = 6;
 
 
 // xorshift32 - 개체별 결정론적 난수. std::rand는 스레드 안전하지 않고 전역 상태를 공유한다

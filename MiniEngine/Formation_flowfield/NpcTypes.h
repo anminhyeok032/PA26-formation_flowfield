@@ -129,8 +129,6 @@ struct BehaviorGroup
 {
     std::vector<int> members;
 
-    // 해제 계수 - 개체별 해제하면 그룹내의 STATE가 쪼개짐
-    float deagroTimer = 0.0f;
 
     // broadpays용
     DirectX::XMINT3 aabbMin{ 0,0,0 };
@@ -144,6 +142,18 @@ struct BehaviorGroup
         for (int i : members)
         {
             if (move.state[i] == NPC_STATE_CHASE || move.state[i] == NPC_STATE_ALERTED)
+                return true;
+        }
+        return false;
+    }
+
+    // 진정 안된 그룹 - 휴면 시키면 안된다
+    bool HasAnyAwake(const NpcMoveData& move) const
+    {
+        for (int i : members)
+        {
+            const uint8_t s = move.state[i];
+            if(s == NPC_STATE_CHASE || s == NPC_STATE_ALERTED || s == NPC_STATE_LOST)
                 return true;
         }
         return false;

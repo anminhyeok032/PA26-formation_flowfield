@@ -140,7 +140,7 @@ private:
     int m_ActiveGroupCount = 0;     // m_GroupOrder앞 몇개가 활성화 되어있는지 cnt
 
     int m_LastRegionX = INT32_MIN, m_LastRegionZ = INT32_MIN;
-    std::vector<int> m_PersistentGroups; // 추격 및 경계 상태
+    //std::vector<int> m_PersistentGroups; // 추격 및 경계 상태
 
     // GroupOrder 앞으로 swap
     void ActivateGroup(int g);
