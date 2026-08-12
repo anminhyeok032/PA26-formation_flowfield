@@ -251,6 +251,8 @@ FieldBuildRequest LeafSplitController::MakeRequest(const LeafGroup& leaf, const 
 
     for (int idx : leaf.members)
     {
+        // Chase/Alerted만 앵커. Idle이 섞이면 마스크가 맵 전체로 벌어진다
+        if (!StateHas(stateSource[idx], NSF_MASK_ANCHOR)) continue;
         if (idx < 0 || idx >= (int)cellSource.size()) continue;   // 멤버 목록이 어긋난 경우 방어
         const auto& c = cellSource[idx];
         if (c.x < 0) continue;

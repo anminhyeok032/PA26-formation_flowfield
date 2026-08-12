@@ -124,6 +124,10 @@ private:
     void UpdateDeagro(const DirectX::XMINT3& playerCell, float dt);
     void RebuildChaseLeaf();
 
+    // state를 직접 대입하는 코드는 이 함수 밖에 두지 않는다 (propagationTimer/blockedTime/active/stopReason)
+    void SetNpcState(size_t i, uint8_t next);
+
+
     // 스폰 헬퍼 - Init 비대 방지용
     bool TrySpawnGroup(const VoxelGrid& grid, int seedX, int seedY, int seedZ,
         int wantCount, float npcWidth, float npcHeight,

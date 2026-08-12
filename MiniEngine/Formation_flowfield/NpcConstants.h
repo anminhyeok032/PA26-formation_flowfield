@@ -14,10 +14,39 @@ constexpr int   CHASE_GOAL_HOPS         = 6;    // 목적지 주변 확보 범�
 
 
 // ------ NPC STATE ------
-constexpr uint8_t	NPC_STATE_IDLE		= 0;		// 배회 / 필드 사용x
-constexpr uint8_t	NPC_STATE_ALERTED	= 1;		// 어그로 판정 / 추격 시작 전 // 필드 사용 x
-constexpr uint8_t	NPC_STATE_CHASE		= 2;		// 추격 / 필드 사용 o
-constexpr uint8_t	NPC_STATE_LOST		= 3;		// anchorCell 복귀	/ 필드 사용 x
+// 상태를 추가할 때 고쳐야 할 곳은 아래 표 하나다.
+// 조건식을 코드 곳곳에 열거하면(예: state != IDLE && state != LOST)
+// 새 상태가 어느 술어에 속하는지 매번 재판단해야 하고, 빠뜨려도 컴파일이 통과한다
+constexpr uint8_t   NPC_STATE_IDLE      = 0;        // 배회 / 필드 사용 x
+constexpr uint8_t   NPC_STATE_ALERTED   = 1;        // 어그로 판정, 추격 시작 전 / 필드 사용 x
+constexpr uint8_t   NPC_STATE_CHASE     = 2;        // 추격 / 필드 사용 o
+constexpr uint8_t   NPC_STATE_LOST      = 3;        // anchorCell 복귀 / 필드 사용 x
+constexpr int       NPC_STATE_COUNT     = 4;
+
+// 상태가 어느 시스템에 속하는지를 나타내는 술어
+// 각 축의 경계가 서로 다르기 때문에(감지는 IDLE|LOST, 앵커는 ALERTED|CHASE)
+// state 값 하나로는 표현이 안 되고, 조건식으로 흩어두면 유지가 안 된다
+enum NpcStateFlags : uint8_t
+{
+    NSF_NONE            = 0,
+    NSF_AGRO_TARGET     = 1 << 0,   // 자극(Stimulus)에 반응하는가      - UpdateAgro
+    NSF_MASK_ANCHOR     = 1 << 1,   // 회랑 마스크를 잡아당기는가        - MakeRequest / RebuildChaseLeaf / UpdateDeagro
+    NSF_FIELD_USER      = 1 << 2,   // FlowField를 구독해 이동하는가     - AdvanceCell
+    NSF_PROPAGATABLE    = 1 << 3,   // 그룹 내 전파로 감염되는가         - PropagateAgro
+};
+
+constexpr uint8_t NPC_STATE_FLAGS[NPC_STATE_COUNT] =
+{
+    /* IDLE    */ NSF_AGRO_TARGET | NSF_PROPAGATABLE,
+    /* ALERTED */ NSF_MASK_ANCHOR,                      // 곧 추격하므로 마스크를 미리 확보
+    /* CHASE   */ NSF_MASK_ANCHOR | NSF_FIELD_USER,
+    /* LOST    */ NSF_AGRO_TARGET,                      // 복귀 중에도 재감지 대상
+};
+
+inline bool StateHas(uint8_t state, uint8_t flag)
+{
+    return (NPC_STATE_FLAGS[state] & flag) != 0;
+}
 
 // ------ NPC AGRO ------
 constexpr int		AGRO_RADIUS_CELLS	= 25;		// sphere 반경 = 마스크 크기
