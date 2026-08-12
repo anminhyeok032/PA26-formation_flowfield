@@ -22,7 +22,7 @@ void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph, const
     m_NpcInstances.clear();
     m_BehaviorGroups.clear();
 
-    // TODO : 생성 임시 시드화 - 추후 io를 이용해서 따로 저장해 읽어오도록 교체할것
+    // TODO : 생성 임시 시드화 - 추후 I/O를 이용해서 따로 저장해 읽어오도록 교체할것
      // ---------- 1. 다중 시드 스폰 ----------
     std::unordered_set<int64_t> usedColumns;
     std::vector<DirectX::XMINT3> seedCells;
@@ -139,6 +139,31 @@ void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph, const
 
     // 워커는 grid/chunkGraph를 참조로만 들고 있으므로 포인터 확정 후 기동
     m_FieldWorker.Start(grid, chunkgraph);
+
+    // 리전 버킷 배정
+    m_RegionCountX = (grid.GetSizeX() + REGION_SIZE_CELLS - 1) / REGION_SIZE_CELLS;
+    m_RegionCountZ = (grid.GetSizeZ() + REGION_SIZE_CELLS - 1) / REGION_SIZE_CELLS;
+    m_Regions.assign((size_t)m_RegionCountX* m_RegionCountZ, RegionCell{});
+
+    m_GroupOrder.clear();
+    m_GroupSlot.assign(m_BehaviorGroups.size(), -1);
+
+    for (size_t i = 0; i < m_BehaviorGroups.size(); ++i)
+    {
+        auto& group = m_BehaviorGroups[i];
+        const int cx = (group.aabbMin.x + group.aabbMax.x) / 2;
+        const int cz = (group.aabbMin.z + group.aabbMax.z) / 2;
+        const int rx = std::min(std::max(cx / REGION_SIZE_CELLS, 0), m_RegionCountX - 1);
+        const int rz = std::min(std::max(cz / REGION_SIZE_CELLS, 0), m_RegionCountZ - 1);
+
+        group.regionIndex = rz * m_RegionCountX + rx;
+        m_Regions[group.regionIndex].groupIndices.push_back((int)i);
+
+        m_GroupSlot[i] = (int)m_GroupOrder.size();
+        m_GroupOrder.push_back((int)i);
+    }
+    m_ActiveGroupCount = 0;
+
 }
 
 bool NpcManager::TrySpawnGroup(const VoxelGrid& grid, int seedX, int seedY, int seedZ,
@@ -212,6 +237,84 @@ bool NpcManager::TrySpawnGroup(const VoxelGrid& grid, int seedX, int seedY, int 
 
     m_BehaviorGroups.push_back(std::move(grp));
     return true;
+}
+
+void NpcManager::ActivateGroup(int g)
+{
+    const int slot = m_GroupSlot[g];
+    if (slot < m_ActiveGroupCount)   return;    // 이미 활성화됨
+
+    const int boundary = m_ActiveGroupCount;
+    std::swap(m_GroupOrder[slot], m_GroupOrder[boundary]);
+    m_GroupSlot[m_GroupOrder[slot]] = slot;
+    m_GroupSlot[m_GroupOrder[boundary]] = boundary;
+    ++m_ActiveGroupCount;
+}
+
+void NpcManager::DeactivateGroup(int g)
+{
+    const int slot = m_GroupSlot[g];
+    if (slot >= m_ActiveGroupCount)  return;    // sleep 상태
+
+    // 잠들기 전 셀 스냅
+    for (int i : m_BehaviorGroups[g].members)
+    {
+        m_Move.position[i] = m_Move.targetWorldPos[i];
+        m_Move.currCell[i] = m_Move.targetCell[i];
+
+        // 휴면 색을 여기서 한 번만 칠하기
+        // SyncInstances가 휴면 그룹을 건너뛰므로 다음 프레임에 덮이지 않는다
+        m_NpcInstances[i].position[0] = m_Move.position[i].GetX();
+        m_NpcInstances[i].position[1] = m_Move.position[i].GetY();
+        m_NpcInstances[i].position[2] = m_Move.position[i].GetZ();
+        m_NpcInstances[i].colorType = NpcRenderer::kNpcColorDormant;
+    }
+    m_VisualDirty = true;
+
+    const int last = m_ActiveGroupCount - 1;
+    std::swap(m_GroupOrder[slot], m_GroupOrder[last]);
+    m_GroupSlot[m_GroupOrder[slot]] = slot;
+    m_GroupSlot[m_GroupOrder[last]] = last;
+    --m_ActiveGroupCount;
+}
+
+void NpcManager::RefreshActiveSet(const DirectX::XMINT3& playerCell)
+{
+    const int prx = playerCell.x / REGION_SIZE_CELLS;
+    const int prz = playerCell.z / REGION_SIZE_CELLS;
+
+    // region 안 바뀌었으면 activate 그대로
+    if (prx != m_LastRegionX || prz != m_LastRegionZ)
+    {
+        m_LastRegionX = prx;
+        m_LastRegionZ = prz;
+
+        // 전체 재구성
+        while (m_ActiveGroupCount > 0)
+        {
+            DeactivateGroup(m_GroupOrder[m_ActiveGroupCount - 1]);
+        }
+
+        const int pr = (WAKEUP_RADIUS_CELLS + REGION_SIZE_CELLS - 1) / REGION_SIZE_CELLS;
+
+        for (int dz = -pr; dz <= pr; ++dz)
+        {
+            for (int dx = -pr; dx <= pr; ++dx)
+            {
+                const int rx = prx + dx, rz = prz + dz;
+                if (rx < 0 || rx >= m_RegionCountX)   continue;
+                if (rz < 0 || rz >= m_RegionCountZ)   continue;
+
+                for (int g : m_Regions[rz * m_RegionCountX + rx].groupIndices)
+                {
+                    ActivateGroup(g);
+                }
+            }
+        }
+    }
+
+    // 추격 그룹 다시 활성
+    for (int g : m_PersistentGroups) ActivateGroup(g);
 }
 
 
@@ -293,12 +396,13 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
 
     if (m_Move.size() == 0) return;   // hasGoal 조기 이탈 제거 - Idle도 움직여야 한다
 
+    UpdateAgro();                   // 트리거 해소
 
     // --- 2. 상태 전이 ---
     if (playerValid)
     {
-        UpdateAgro(playerCell, dt);
-        UpdateDeagro(playerCell, dt);
+        RefreshActiveSet(playerCell);   // 활성 집합 확정
+        UpdateDeagro(playerCell, dt);   // 해제는 플레이어 거리를 직접 보니까 냅두기
 
         // 목표 셀이 바뀌면 필드를 다시 요청 - 플레이어 추종
         if (m_Group.isChasing &&
@@ -329,54 +433,57 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
     bool anyMoved = false;
 
 
-    for (int i : m_MoveOrder)
+    for (int k = 0; k < m_ActiveGroupCount; ++k)
     {
-        Math::Vector3 delta = m_Move.targetWorldPos[i] - m_Move.position[i];
-        const float distSq = Math::LengthSquare(delta);
-
-        // 셀에 도착한 프레임에만 다음 셀 정한다
-        if (distSq < ARRIVE_EPS_SQ)
+        for (int i : m_BehaviorGroups[m_GroupOrder[k]].members)
         {
-            switch (m_Move.state[i])
+            Math::Vector3 delta = m_Move.targetWorldPos[i] - m_Move.position[i];
+            const float distSq = Math::LengthSquare(delta);
+
+            // 셀에 도착한 프레임에만 다음 셀 정한다
+            if (distSq < ARRIVE_EPS_SQ)
             {
-            case NPC_STATE_IDLE:
-                m_MovementSolver.AdvanceWanderCell(*m_Grid, i, dt);
-                break;
-
-            case NPC_STATE_ALERTED:
-                break;  // 반응 대기 - 제자리
-
-            case NPC_STATE_LOST:
-                m_Move.stateTimer[i] += dt;
-                // 막혔거나 시간초과
-                if (!m_MovementSolver.AdvanceReturnCell(*m_Grid, i) ||
-                    m_Move.stateTimer[i] >= LOST_TIMEOUT_SEC)
+                switch (m_Move.state[i])
                 {
-                    // 현재 위치를 새 anchor로 - 일단 흩어지게 하고, 복귀 필수면 로직 수정
-                    m_Move.anchorCell[i] = m_Move.currCell[i];
-                    m_Move.state[i] = NPC_STATE_IDLE;
-                    m_VisualDirty = true;
-                    m_Move.stateTimer[i] = 0.0f;
-                }
-                break;
+                case NPC_STATE_IDLE:
+                    m_MovementSolver.AdvanceWanderCell(*m_Grid, i, dt);
+                    break;
 
-            case NPC_STATE_CHASE:
-                if (m_Move.active[i])
-                {
-                    m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);
+                case NPC_STATE_ALERTED:
+                    break;  // 반응 대기 - 제자리
+
+                case NPC_STATE_LOST:
+                    m_Move.stateTimer[i] += dt;
+                    // 막혔거나 시간초과
+                    if (!m_MovementSolver.AdvanceReturnCell(*m_Grid, i) ||
+                        m_Move.stateTimer[i] >= LOST_TIMEOUT_SEC)
+                    {
+                        // 현재 위치를 새 anchor로 - 일단 흩어지게 하고, 복귀 필수면 로직 수정
+                        m_Move.anchorCell[i] = m_Move.currCell[i];
+                        m_Move.state[i] = NPC_STATE_IDLE;
+                        m_VisualDirty = true;
+                        m_Move.stateTimer[i] = 0.0f;
+                    }
+                    break;
+
+                case NPC_STATE_CHASE:
+                    if (m_Move.active[i])
+                    {
+                        m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);
+                    }
+                    break;
+                default:
+                    break;
                 }
-                break;
-            default:
-                break;
             }
-        }
-        // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
-        else
-        {
-            const float step = NPC_SPEED * dt;
-            if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
-            else                       m_Move.position[i] += Math::Normalize(delta) * step;
-            anyMoved = true;
+            // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
+            else
+            {
+                const float step = NPC_SPEED * dt;
+                if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
+                else                       m_Move.position[i] += Math::Normalize(delta) * step;
+                anyMoved = true;
+            }
         }
     }
 
@@ -464,15 +571,20 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
 
 void NpcManager::SyncInstances()
 {
-    for (size_t i = 0; i < m_Move.size(); ++i)
+    // 활성 그룹만 갱신한다. 휴면 그룹은 위치가 고정이고 색도
+    // DeactivateGroup에서 한 번 칠해둔 회색이 그대로 유효
+    for (int k = 0; k < m_ActiveGroupCount; ++k)
     {
-        m_NpcInstances[i].position[0] = m_Move.position[i].GetX();
-        m_NpcInstances[i].position[1] = m_Move.position[i].GetY();
-        m_NpcInstances[i].position[2] = m_Move.position[i].GetZ();
+        for (int i : m_BehaviorGroups[m_GroupOrder[k]].members)
+        {
+            m_NpcInstances[i].position[0] = m_Move.position[i].GetX();
+            m_NpcInstances[i].position[1] = m_Move.position[i].GetY();
+            m_NpcInstances[i].position[2] = m_Move.position[i].GetZ();
 
-        // colorType = NPC_STATE
-        m_NpcInstances[i].colorType = m_GroupSelected ?
-            NpcRenderer::kNpcColorSelected : (uint32_t)m_Move.state[i];
+            // colorType = NPC_STATE
+            m_NpcInstances[i].colorType = m_GroupSelected ?
+                NpcRenderer::kNpcColorSelected : (uint32_t)m_Move.state[i];
+        }
     }
 }
 
@@ -489,38 +601,49 @@ Math::Vector3 NpcManager::GetNpcStandPos(const DirectX::XMINT3& cell, float half
 
 
 
-void NpcManager::UpdateAgro(const DirectX::XMINT3& playerCell, float dt)
+void NpcManager::UpdateAgro()
 {
-    const int R = AGRO_RADIUS_CELLS;
-    const int R2 = R * R;
-
-    for (auto& group : m_BehaviorGroups)
+    for (const auto& stim : m_Stimulus)
     {
-        // 브로드페이즈 - AABB R만큼 부풀려서 플레이어 밖이면 멤버 안보기
-        // TODO : 현재 그룹 수만큼 도는데, 병목이라 판단될 시, 맵 분할할것
-        if (playerCell.x < group.aabbMin.x - R || playerCell.x > group.aabbMax.x + R ||
-            playerCell.z < group.aabbMin.z - R || playerCell.z > group.aabbMax.z + R)
-            continue;
+        if (stim.cell.x < 0 || stim.radiusCells <= 0)    continue;
 
-        for (int i : group.members)
+        const int R = stim.radiusCells;
+        const int R2 = R * R;
+
+        for (int k = 0; k < m_ActiveGroupCount; ++k)
         {
-            if (m_Move.state[i] != NPC_STATE_IDLE && m_Move.state[i] != NPC_STATE_LOST)
+            auto& group = m_BehaviorGroups[m_GroupOrder[k]];
+
+            // 브로드페이즈 - AABB R만큼 부풀려서 자극 위치가 밖이면 멤버 안보기
+            // TODO : 현재 자극수 x 그룹수만큼 도는데, 자극원이 늘어 병목이면 공간 해시로 교체
+            if (stim.cell.x < group.aabbMin.x - R || stim.cell.x > group.aabbMax.x + R ||
+                stim.cell.z < group.aabbMin.z - R || stim.cell.z > group.aabbMax.z + R)
                 continue;
+            
+            for (int i : group.members)
+            {
+                if (m_Move.state[i] != NPC_STATE_IDLE && m_Move.state[i] != NPC_STATE_LOST)
+                    continue;
 
-            const auto& c = m_Move.currCell[i];
-            if (c.x < 0) continue;
+                const auto& c = m_Move.currCell[i];
+                if (c.x < 0) continue;
 
-            // xz 평면 원 - 일단 층 구분이 없음
-            // TODO : 추후 층 구분 필요시, 변경할것
-            const int dx = c.x - playerCell.x, dz = c.z - playerCell.z;
-            if (dx * dx + dz * dz > R2)  continue;
+                // xz 평면 원
+                // TODO : 층 구분 필요시, 변경할 것
+                const int dx = c.x - stim.cell.x, dz = c.z - stim.cell.z;
+                if (dx * dx + dz * dz > R2) continue;
 
-            m_Move.state[i] = NPC_STATE_ALERTED;
-            m_VisualDirty = true;   // 시각화 플레그
-            m_Move.propagationTimer[i] = 0.0f;
-            m_ChaseSetDirty = true;     // Alerted도 마스크 앵커에 필드 갱신 해줘야함
+                m_Move.state[i] = stim.targetState;
+                m_VisualDirty = true;   // 시각화 플래그
+                m_Move.propagationTimer[i] = 0.0f;
+                m_ChaseSetDirty = true; // 마스크 앵커 필드 갱신
+            }
+
         }
     }
+
+    // 트리거 해소
+    m_Stimulus.clear();
 }
 
 void NpcManager::PropagateAgro(float dt)
@@ -528,8 +651,11 @@ void NpcManager::PropagateAgro(float dt)
     int budget = MAX_PROPAGATIONS_PER_FRAME;    // 전체 확산 방지용 - 한번당 확산 제한
     const int PR2 = PROPAGATION_RADIUS_CELLS * PROPAGATION_RADIUS_CELLS;
 
-    for (auto& group : m_BehaviorGroups)
+
+    for (int k = 0; k < m_ActiveGroupCount; ++k)
     {
+        auto& group = m_BehaviorGroups[m_GroupOrder[k]];
+
         for (int i : group.members)
         {
             if (m_Move.state[i] != NPC_STATE_ALERTED)   continue;
@@ -574,8 +700,11 @@ void NpcManager::PropagateAgro(float dt)
 void NpcManager::UpdateDeagro(const DirectX::XMINT3& playerCell, float dt)
 {
     const int D2 = DEAGRO_RADIUS_CELLS * DEAGRO_RADIUS_CELLS;
-    for (auto& group : m_BehaviorGroups)
+
+    for (int k = 0; k < m_ActiveGroupCount; ++k)
     {
+        auto& group = m_BehaviorGroups[m_GroupOrder[k]];
+
         if (!group.HasAnyChasing(m_Move))
         {
             group.deagroTimer = 0.0f;
@@ -626,6 +755,15 @@ void NpcManager::RebuildChaseLeaf()
 {
     LeafGroup& leaf = *m_Leaves[0];
     leaf.members.clear();
+
+    m_PersistentGroups.clear();
+    for (size_t g = 0; g < m_BehaviorGroups.size(); ++g)
+    {
+        if (m_BehaviorGroups[g].HasAnyChasing(m_Move))
+        {
+            m_PersistentGroups.push_back((int)g);
+        }
+    }
 
     for (size_t i = 0; i < m_Move.size(); ++i)
     {

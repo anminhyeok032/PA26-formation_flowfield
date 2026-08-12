@@ -36,6 +36,13 @@ constexpr int		SPAWN_SEED_ATTEMPTS = 4000;		// 시드 후보 시도 상한
 constexpr int		SPAWN_MIN_SEED_DIST = 24;		// 시드 간 최소 간격(복셀 단위)
 constexpr int       SPAWN_PLAYER_EXCLUSION_CELLS = AGRO_RADIUS_CELLS * 2;   // 초기화 플레이어 주변 반경 비우기용
  
+// ------ 공간 분할 ------
+// Region은 Agro Radius보다 충분히 커야됨 - 청크사이즈의 배수여야 함
+constexpr int REGION_SIZE_CELLS = 64;
+// 잠든 그룹 깨우는 범위
+// WAKEUP_RADIUS - AGRO_RADIUS = 100 - 25 = 75
+constexpr int WAKEUP_RADIUS_CELLS = AGRO_RADIUS_CELLS * 4;
+
 
 // NPC 이동 속도(셀/초)
 constexpr float NPC_SPEED = 3.0f;

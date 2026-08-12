@@ -148,6 +148,6 @@ NpcRenderer::InstanceData Player::MakeInstance() const
     inst.position[2] = m_Position.GetZ();
     inst.scaleXZ = m_Width;     
     inst.scaleY = m_HalfHeight;
-    inst.colorType = 10;           // 0=기본, 1=선택됨, 10=플레이어
+    inst.colorType = NpcRenderer::kNpcColorPlayer;
     return inst;
 }

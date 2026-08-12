@@ -115,6 +115,14 @@ struct NpcGroup
 };
 
 
+// NPC 깨우는 Trigger - 플레이어 근접
+struct Stimulus
+{
+    DirectX::XMINT3 cell{ -1, -1, -1 };
+    int     radiusCells = 0;
+    uint8_t targetState = NPC_STATE_ALERTED;        // trigger 유발 state
+};
+
 // 어그로 전파 범위 및 해제 판정 단위
 // 여러 behaviorGroup의 chase 멤버가 하나의 leaf 공유
 struct BehaviorGroup
@@ -127,6 +135,9 @@ struct BehaviorGroup
     // broadpays용
     DirectX::XMINT3 aabbMin{ 0,0,0 };
     DirectX::XMINT3 aabbMax{ 0,0,0 };
+
+    // init에서 배정하는 npc region 인덱스
+    int regionIndex = -1;
 
     bool HasAnyChasing(const NpcMoveData& move) const
     {
