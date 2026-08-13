@@ -518,15 +518,26 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
                     break;  // 반응 대기 - 제자리
 
                 case NPC_STATE_LOST:
-                    // 막혔거나 시간초과
-                    if (!m_MovementSolver.AdvanceReturnCell(*m_Grid, i))
+                {
+                    const bool moved = m_MovementSolver.AdvanceReturnCell(*m_Grid, i);
+
+                    // 위에서는 이동 성공이랑 도착 구분이 안되서, 좌표로 확인
+                    const bool arrived = (m_Move.currCell[i].x == m_Move.anchorCell[i].x &&
+                        m_Move.currCell[i].z == m_Move.anchorCell[i].z);
+
+                    // 막힌건 시간 기다렸다가 포기
+                    if (moved)   m_Move.blockedTime[i] = 0.0f;
+                    else        m_Move.blockedTime[i] += dt;
+
+                    if (arrived || m_Move.blockedTime[i] >= LOST_STUCK_GIVEUP_SEC)
                     {
-                        // 현재 위치를 새 anchor로 - 일단 흩어지게 하고, 복귀 필수면 로직 수정
                         m_Move.anchorCell[i] = m_Move.currCell[i];
                         SetNpcState(i, NPC_STATE_IDLE);
+                        m_Move.blockedTime[i] = 0.0f;
                     }
-                    break;
 
+                    break;
+                }
                 case NPC_STATE_CHASE:
                     if (m_Move.active[i])
                     {
@@ -812,6 +823,7 @@ void NpcManager::UpdateDeagro(const DirectX::XMINT3& playerCell, float dt)
         // 해제된 개체는 LOST로 anchor 쪽으로 더 멀어지므로 되돌아올 경로도 없다
         for (int i : group.members)
         {
+            // 움직이고 있으면 continue;
             if (!StateHas(m_Move.state[i], NSF_MASK_ANCHOR)) continue;
 
             // ALERTED는 IDLE로 되돌린다.

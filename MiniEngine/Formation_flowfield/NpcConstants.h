@@ -35,12 +35,13 @@ enum NpcStateFlags : uint8_t
     NSF_PROPAGATABLE    = 1 << 3,   // 그룹 내 전파로 감염되는가         - PropagateAgro
 };
 
+// 상태 <-> 속성 매핑 테이블
 constexpr uint8_t NPC_STATE_FLAGS[NPC_STATE_COUNT] =
 {
     /* IDLE    */ NSF_AGRO_TARGET | NSF_PROPAGATABLE,
     /* ALERTED */ NSF_MASK_ANCHOR,                      // 곧 추격하므로 마스크를 미리 확보
     /* CHASE   */ NSF_MASK_ANCHOR | NSF_FIELD_USER,
-    /* LOST    */ NSF_AGRO_TARGET,                      // 복귀 중에도 재감지 대상
+    /* LOST    */ NSF_AGRO_TARGET | NSF_PROPAGATABLE,   // LOST에서도 전파
 };
 
 inline bool StateHas(uint8_t state, uint8_t flag)
@@ -67,6 +68,7 @@ constexpr float		FIELD_REQUEST_COOLDOWN_SEC = 0.2f;	// summit 쿨타임
 constexpr int		WANDER_RADIUS_CELLS		= 6;
 constexpr float		WANDER_PAUSE_MIN_SEC	= 1.0f;
 constexpr float		WANDER_PAUSE_MAX_SEC	= 3.0f;
+constexpr float     LOST_STUCK_GIVEUP_SEC   = 5.0f;     // 복귀중 이 이상 막히면 거점으로 삼아버림
 
 
 // ------ 그룹 크기 분포 ------
