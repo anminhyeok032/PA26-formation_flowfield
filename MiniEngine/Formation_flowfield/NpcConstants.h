@@ -73,7 +73,7 @@ constexpr float     LOST_STUCK_GIVEUP_SEC   = 5.0f;     // 복귀중 이 이상 
 
 
 // ------ 그룹 크기 분포 ------
-constexpr int		GROUP_SIZE_BUCKETS[4] = { 1, 4, 20, 120 };
+constexpr int		GROUP_SIZE_BUCKETS[4] = { 1, 4, 200, 120 };
 constexpr int		GROUP_SIZE_WEIGHTS[4] = { 40, 35, 20, 5 };	// 합계 100
 constexpr int		SPAWN_SEED_ATTEMPTS = 4000;		// 시드 후보 시도 상한
 constexpr int		SPAWN_MIN_SEED_DIST = 24;		// 시드 간 최소 간격(복셀 단위)

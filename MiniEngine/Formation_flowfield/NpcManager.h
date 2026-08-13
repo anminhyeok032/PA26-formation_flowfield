@@ -145,8 +145,6 @@ private:
 
     int m_LastRegionX = INT32_MIN, m_LastRegionZ = INT32_MIN;
 
-    std::vector<int> m_PendingRebucket; // region 재배정을 위한 자료구조
-    void FlushRebucket();               // 잠든 그룹의 리전 버킷을 새 거점 위치로 옮기기
 
     // 리전은 청크(8셀)와 별개 격자 - (청크 = 필드/그래프 메모리 블록, 리전 = 어그로 반경).
     int RegionIndexOf(int cellX, int cellZ) const

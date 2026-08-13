@@ -177,6 +177,8 @@ void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph, const
 
         // 거점 = 멤버들의 중심
         int sx = 0, sz = 0, cnt = 0;
+        // anchor
+        int ax, ay, az;
         for (int m : group.members)
         {
             const auto& c = m_Move.currCell[m];
@@ -186,7 +188,7 @@ void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph, const
 
         if (cnt > 0)
         {
-            int ax, ay, az;
+
             Math::Vector3 p = grid.GetWorldPos(sx / cnt, 0, sz / cnt);
             if (grid.FindNearestWalkable(p, ax, ay, az))
                 group.anchorCell = { ax, ay, az };
@@ -195,14 +197,13 @@ void NpcManager::Init(const VoxelGrid& grid, const ChunkGraph& chunkgraph, const
         }
 
         group.wanderRadius = GroupWanderRadius((int)group.members.size());
-        group.regionIndex = RegionIndexOf(group.anchorCell.x, group.anchorCell.z);
-        m_Regions[group.regionIndex].groupIndices.push_back((int)i);
+        group.regionIndex = RegionIndexOf(ax, az);
+        m_Regions[group.regionIndex].groupIndices.push_back((int)i);   // 처음엔 전부 휴면
 
         m_GroupSlot[i] = (int)m_GroupOrder.size();
         m_GroupOrder.push_back((int)i);
     }
     m_ActiveGroupCount = 0;
-
 }
 
 bool NpcManager::TrySpawnGroup(const VoxelGrid& grid, int seedX, int seedY, int seedZ,
@@ -303,6 +304,7 @@ void NpcManager::DeactivateGroup(int g)
     int sx = 0, sz = 0, cnt = 0;
     for (int i : group.members)
     {
+        // 보간 중이던 개체가 셀 사이에 얼어붙지 않도록 목표 셀로
         m_Move.position[i] = m_Move.targetWorldPos[i];
         m_Move.currCell[i] = m_Move.targetCell[i];
 
@@ -325,25 +327,11 @@ void NpcManager::DeactivateGroup(int g)
     }
     m_VisualDirty = true;
 
-    // --- 거점 재배치 (조건부) ---
-    // 복귀를 포기할 만큼 멀 때만 anchor 옮기기
+    // 버킷에는 휴면 그룹만
     if (cnt > 0)
     {
-        const int mx = sx / cnt, mz = sz / cnt;
-        const int adx = mx - group.anchorCell.x, adz = mz - group.anchorCell.z;
-
-        if (adx * adx + adz * adz > ANCHOR_DIST_CELLS * ANCHOR_DIST_CELLS)
-        {
-            int ax, ay, az;
-            Math::Vector3 p = m_Grid->GetWorldPos(mx, 0, mz);
-            if (m_Grid->FindNearestWalkable(p, ax, ay, az))
-            {
-                group.anchorCell = { ax, ay, az };
-
-                // region 모아서 erase 하기
-                m_PendingRebucket.push_back(g);
-            }
-        }
+        group.regionIndex = RegionIndexOf(sx / cnt, sz / cnt);
+        m_Regions[group.regionIndex].groupIndices.push_back(g);
     }
 
 
@@ -354,23 +342,6 @@ void NpcManager::DeactivateGroup(int g)
     --m_ActiveGroupCount;
 }
 
-// 잠든 그룹의 리전 버킷을 새 거점 위치로 옮기기
-void NpcManager::FlushRebucket()
-{
-    for (int g : m_PendingRebucket)
-    {
-        auto& group = m_BehaviorGroups[g];
-        const int newRegion = RegionIndexOf(group.anchorCell.x, group.anchorCell.z);
-        if (newRegion == group.regionIndex) continue;
-
-        auto& oldBucket = m_Regions[group.regionIndex].groupIndices;
-        oldBucket.erase(std::remove(oldBucket.begin(), oldBucket.end(), g), oldBucket.end());
-        m_Regions[newRegion].groupIndices.push_back(g);
-        group.regionIndex = newRegion;
-    }
-    m_PendingRebucket.clear();
-}
-
 
 void NpcManager::RefreshActiveSet(const DirectX::XMINT3& playerCell)
 {
@@ -379,61 +350,53 @@ void NpcManager::RefreshActiveSet(const DirectX::XMINT3& playerCell)
     if (prx == m_LastRegionX && prz == m_LastRegionZ) return;
 
     const int pr = ACTIVE_REGION_RINGS;
-    const bool first = (m_LastRegionX == INT32_MIN);   // 첫 호출은 이전 범위가 없다
+    const int minX = prx - pr, maxX = prx + pr;
+    const int minZ = prz - pr, maxZ = prz + pr;
 
-    const int newMinX = prx - pr, newMaxX = prx + pr;
-    const int newMinZ = prz - pr, newMaxZ = prz + pr;
+    // 활성 사각형(셀 단위). 그룹 AABB와 겹치는지 보기 위해 리전 -> 셀로 환산
+    const int actMinX = minX * REGION_SIZE_CELLS;
+    const int actMaxX = (maxX + 1) * REGION_SIZE_CELLS - 1;
+    const int actMinZ = minZ * REGION_SIZE_CELLS;
+    const int actMaxZ = (maxZ + 1) * REGION_SIZE_CELLS - 1;
 
-    // --- 빠져나간 리전만 재우기 ---
-    // 전체를 재우고 다시 깨우면, 계속 활성이어야 할 그룹도 DeactivateGroup을 거쳐
-    // 상태 정규화(LOST->IDLE)에 당한다. ActivateGroup은 상태를 복원하지 않는다
-    if (!first)
+    // ---- 1. 재우기 ----
+    // ACTIVE_REGION_RINGS 안에 있는지 살아있는 그룹 aabb 와 겹칩으로 검사 판정
+    for (int k = m_ActiveGroupCount - 1; k >= 0; --k)
     {
-        const int oldMinX = m_LastRegionX - pr, oldMaxX = m_LastRegionX + pr;
-        const int oldMinZ = m_LastRegionZ - pr, oldMaxZ = m_LastRegionZ + pr;
+        const int g = m_GroupOrder[k];
+        const auto& group = m_BehaviorGroups[g];
 
-        for (int rz = oldMinZ; rz <= oldMaxZ; ++rz)
-        {
-            for (int rx = oldMinX; rx <= oldMaxX; ++rx)
-            {
-                if (rx >= newMinX && rx <= newMaxX &&
-                    rz >= newMinZ && rz <= newMaxZ) continue;   // 여전히 범위 안
-                if (rx < 0 || rx >= m_RegionCountX) continue;
-                if (rz < 0 || rz >= m_RegionCountZ) continue;
+        // 겹침 판정. 중심점으로 하면 늘어진 그룹에서 깨진다 -
+        // 앞쪽 멤버가 플레이어 옆인데 중심이 뒤에 있어 잠들어버린다
+        const bool overlap =
+            group.aabbMax.x >= actMinX && group.aabbMin.x <= actMaxX &&
+            group.aabbMax.z >= actMinZ && group.aabbMin.z <= actMaxZ;
+        if (overlap) continue;
 
-                for (int g : m_Regions[rz * m_RegionCountX + rx].groupIndices)
-                {
-                    DeactivateGroup(g);
-                }
-            }
-        }
+        // 뒤에서부터 도는 이유: DeactivateGroup이 slot <-> last swap해서
+        DeactivateGroup(g);
     }
 
-    // --- 새로 들어온 리전만 깨운다 ---
-    for (int rz = newMinZ; rz <= newMaxZ; ++rz)
+    // ---- 2. 깨우기 - 활성 범위 리전 버킷 비우기 ----
+    for (int rz = minZ; rz <= maxZ; ++rz)
     {
-        for (int rx = newMinX; rx <= newMaxX; ++rx)
+        for (int rx = minX; rx <= maxX; ++rx)
         {
-            if (!first)
-            {
-                const int oldMinX = m_LastRegionX - pr, oldMaxX = m_LastRegionX + pr;
-                const int oldMinZ = m_LastRegionZ - pr, oldMaxZ = m_LastRegionZ + pr;
-                if (rx >= oldMinX && rx <= oldMaxX &&
-                    rz >= oldMinZ && rz <= oldMaxZ) continue;   // 이미 활성
-            }
             if (rx < 0 || rx >= m_RegionCountX) continue;
             if (rz < 0 || rz >= m_RegionCountZ) continue;
 
-            for (int g : m_Regions[rz * m_RegionCountX + rx].groupIndices)
-            {
-                ActivateGroup(g);
-            }
+            // 버킷을 통째로 옮겨 비우기
+            auto& bucket = m_Regions[rz * m_RegionCountX + rx].groupIndices;
+            if (bucket.empty()) continue;
+
+            std::vector<int> taken;
+            taken.swap(bucket);
+            for (int g : taken) ActivateGroup(g);
         }
     }
+
     m_LastRegionX = prx;
     m_LastRegionZ = prz;
-    
-    FlushRebucket();
 }
 
 
@@ -560,7 +523,7 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
     {
         auto& group = m_BehaviorGroups[m_GroupOrder[k]];
         // 도착 판정 반경 - 배회 반경보다 1크게
-        const int arriveR2 = (group.wanderRadius + 1) * (group.wanderRadius + 1);
+        const int arriveR2 = (group.wanderRadius + 5) * (group.wanderRadius + 5);
 
         for (int i : group.members)
         {
@@ -676,10 +639,8 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
         if (m_Grid->FindNearestWalkable(p, ax, ay, az))
         {
             group.anchorCell = { ax, ay, az };
-            m_PendingRebucket.push_back((int)(&group - m_BehaviorGroups.data()));
         }
     }
-    FlushRebucket();   // 여기서는 순회 중이 아니므로 즉시 처리
     
 
     // --- 필드 재빌드는 워커에 맡긴다 ---
