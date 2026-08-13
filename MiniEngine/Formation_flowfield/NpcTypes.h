@@ -26,7 +26,6 @@ struct NpcMoveData
     std::vector<uint8_t> stopReason;                    // 0=정상도착, 1=필드밖(무효화) - 지형변경으로 인한
 
     std::vector<uint8_t>         state;                 // NPC_STATE_*
-    std::vector<DirectX::XMINT3> anchorCell;            // 스폰 지점 = 배회 중심 = 복귀 목표
     std::vector<float>           stateTimer;            // Wander 대기 / Lost 타임아웃 겸용
     std::vector<float>           propagationTimer;      // Alerted 지연 누적
     std::vector<uint32_t>        noiseSeed;             // 개체별 결정론적 난수 시드
@@ -53,7 +52,6 @@ struct NpcMoveData
         stopReason.resize(n, 0);
 
         state.assign(n, NPC_STATE_IDLE);
-        anchorCell.resize(n, { -1,-1,-1 });
         stateTimer.assign(n, 0.0f);
         propagationTimer.assign(n, 0.0f);
         noiseSeed.resize(n);
@@ -129,6 +127,12 @@ struct BehaviorGroup
 {
     std::vector<int> members;
 
+
+    // 그룹 공용 거점 - 배회 중심이자 복귀 목표
+    DirectX::XMINT3 anchorCell{ -1,-1,-1 };
+
+    // 배회 반경 - 멤버 수는 스폰 후 안 바뀌므로 Init에서 한 번 계산해 캐시
+    int wanderRadius = 3;
 
     // broadpays용
     DirectX::XMINT3 aabbMin{ 0,0,0 };

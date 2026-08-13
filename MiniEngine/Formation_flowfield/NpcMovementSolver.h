@@ -19,11 +19,13 @@ public:
 
 
     // 필드 없이 anchorCell 반경 안을 배회 - Idle 전용
-    void AdvanceWanderCell(const VoxelGrid& grid, size_t i, float dt);
+    void AdvanceWanderCell(const VoxelGrid& grid, size_t i, float dt, 
+        const DirectX::XMINT3& anchor, int radius);
 
     // 필드 없이 anchorCell 방향으로 한 칸 - Lost 전용
     // 지형에 막히면 false - 호출측이 타임아웃으로 처리
-    bool AdvanceReturnCell(const VoxelGrid& grid, size_t i);
+    bool AdvanceReturnCell(const VoxelGrid& grid, size_t i,
+        const DirectX::XMINT3& anchor);
 
 
 private:

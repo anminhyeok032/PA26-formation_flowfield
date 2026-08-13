@@ -134,7 +134,7 @@ private:
         std::unordered_set<int64_t>& usedColumns);
 
 
-    // 공간 분할
+    // ------ 공간 분할 -------
     struct RegionCell { std::vector<int> groupIndices; };
     std::vector<RegionCell> m_Regions;
     int m_RegionCountX = 0, m_RegionCountZ = 0;
@@ -144,7 +144,17 @@ private:
     int m_ActiveGroupCount = 0;     // m_GroupOrder앞 몇개가 활성화 되어있는지 cnt
 
     int m_LastRegionX = INT32_MIN, m_LastRegionZ = INT32_MIN;
-    //std::vector<int> m_PersistentGroups; // 추격 및 경계 상태
+
+    std::vector<int> m_PendingRebucket; // region 재배정을 위한 자료구조
+    void FlushRebucket();               // 잠든 그룹의 리전 버킷을 새 거점 위치로 옮기기
+
+    // 리전은 청크(8셀)와 별개 격자 - (청크 = 필드/그래프 메모리 블록, 리전 = 어그로 반경).
+    int RegionIndexOf(int cellX, int cellZ) const
+    {
+        const int rx = std::min(std::max(cellX / REGION_SIZE_CELLS, 0), m_RegionCountX - 1);
+        const int rz = std::min(std::max(cellZ / REGION_SIZE_CELLS, 0), m_RegionCountZ - 1);
+        return rz * m_RegionCountX + rx;
+    }
 
     // GroupOrder 앞으로 swap
     void ActivateGroup(int g);
