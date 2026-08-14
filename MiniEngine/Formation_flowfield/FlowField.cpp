@@ -527,6 +527,16 @@ void FlowField::Update(float dt)
         ? m_FollowCam->GetHeading() : 0.0f);
 
     m_Player.Update(m_VoxelGrid, dt);
+    // Player 근접시, Trigger Push
+    if (m_Player.IsValid())
+    {
+        Stimulus s;
+        s.cell = m_Player.GetCell();
+        s.radiusCells = AGRO_RADIUS_CELLS;
+        s.targetState = NPC_STATE_ALERTED;
+        m_Npc.PushStimulus(s);
+    }
+
     m_Npc.Update(dt, m_Player.GetCell(), m_Player.IsValid());
 
 

@@ -9,20 +9,22 @@ class GraphicsContext;
 
 namespace NpcRenderer
 {
-    struct InstanceData
+    struct alignas(16) InstanceData
     {
         float    position[3];       // 월드 위치 (타원체 중심)
         float    scaleXZ;           // XZ축 반지름 (가로 크기)
         float    scaleY;            // Y축 반지름 (세로 크기, 클수록 길쭉)
         uint32_t colorType;         // 0=기본, 1=선택됨
-        uint32_t pad[2];            // 16바이트 정렬
     };
     static_assert(sizeof(InstanceData) % 16 == 0, "NPCInstanceData must be 16-byte aligned");
 
     static const uint32_t MAX_NPCS = 10'0000;
 
     // colorType 규약
-    //   0~3 : NPC_STATE_와 동일 (Idle=파랑 / Alerted=노랑 / Chase=빨강 / Lost=회색)
+    //   0~3 : NPC_STATE_* 와 동일
+    //   4   : 휴면 그룹 (상태가 아니라 파티션 속성이라 별도 값)
+    //   5+  : 상태와 무관한 특수 색
+    static constexpr uint32_t kNpcColorDormant = 4;
     static constexpr uint32_t kNpcColorSelected = 5;
     static constexpr uint32_t kNpcColorPlayer   = 10;
     static constexpr uint32_t kNpcColorAgroRing = 11;

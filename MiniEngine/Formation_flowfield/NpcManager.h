@@ -49,7 +49,9 @@ public:
     // 동적 지형 생성에 대한 갱신 ( TODO : 다중 그룹으로 변환시, 해당 갱신은 상위에서 한번에)
     void OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCells);
 
-
+    // Trigger 등록 - Update에서 소비
+    // 메인 스레드용
+    void PushStimulus(const Stimulus& s) { m_Stimulus.push_back(s); }
 
 
     // 지형 / 그래프 수정 직전 호출 - worker가 그리드 읽을때까지 block용
@@ -138,15 +140,48 @@ private:
     float m_FieldRequestTimer = 0.0f;   // 요청 배칭 쿨다운
     bool m_ChaseSetDirty = false;       // Chase 집합 변경 대기 플래그
 
-    void UpdateAgro(const DirectX::XMINT3& playerCell, float dt);
+    std::vector<Stimulus> m_Stimulus;   // update에서 소비하는 trigger
+
+    void UpdateAgro();
     void PropagateAgro(float dt);
     void UpdateDeagro(const DirectX::XMINT3& playerCell, float dt);
     void RebuildChaseLeaf();
+
+    // state를 직접 대입하는 코드는 이 함수 밖에 두지 않는다 (propagationTimer/blockedTime/active/stopReason)
+    void SetNpcState(size_t i, uint8_t next);
+
 
     // 스폰 헬퍼 - Init 비대 방지용
     bool TrySpawnGroup(const VoxelGrid& grid, int seedX, int seedY, int seedZ,
         int wantCount, float npcWidth, float npcHeight,
         std::unordered_set<int64_t>& usedColumns);
+
+
+    // ------ 공간 분할 -------
+    struct RegionCell { std::vector<int> groupIndices; };
+    std::vector<RegionCell> m_Regions;
+    int m_RegionCountX = 0, m_RegionCountZ = 0;
+
+    std::vector<int> m_GroupOrder;  // 그룹 인덱스 - 살아있는 순서대로 vector 앞으로 swap해서 사용
+    std::vector<int> m_GroupSlot;   // grounpIdx -> m_GroupOrder - order 몇번째에 있는지 역방향 조회
+    int m_ActiveGroupCount = 0;     // m_GroupOrder앞 몇개가 활성화 되어있는지 cnt
+
+    int m_LastRegionX = INT32_MIN, m_LastRegionZ = INT32_MIN;
+
+
+    // 리전은 청크(8셀)와 별개 격자 - (청크 = 필드/그래프 메모리 블록, 리전 = 어그로 반경).
+    int RegionIndexOf(int cellX, int cellZ) const
+    {
+        const int rx = std::min(std::max(cellX / REGION_SIZE_CELLS, 0), m_RegionCountX - 1);
+        const int rz = std::min(std::max(cellZ / REGION_SIZE_CELLS, 0), m_RegionCountZ - 1);
+        return rz * m_RegionCountX + rx;
+    }
+
+    // GroupOrder 앞으로 swap
+    void ActivateGroup(int g);
+    // GroupOrder 뒤로 swap
+    void DeactivateGroup(int g);
+    void RefreshActiveSet(const DirectX::XMINT3& playerCell);
 
 
     // ---- AdvanceCell 계측용 카운터 (디버그) ----

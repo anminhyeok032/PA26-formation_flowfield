@@ -37,8 +37,8 @@ float4 main(VSOutput input) : SV_Target
     // 20: Preview Dynamic voxel (BlendTraditional + DepthReadOnly)
     if (input.colorType == 20) return float4(1.0f, 0.9f, 0.2f, 0.4f);  //- half alpha yellow
      // 21~22: Preview Agro/DeAgro voxel
-    if (input.colorType == 21) return float4(1.0f, 0.15f, 0.15f, 0.35f);  // half alpha Red     - Agro
-    if (input.colorType == 22) return float4(1.0f, 0.55f, 0.15f, 0.22f);  // half alpha Orange  - DeAgro
+    if (input.colorType == 21) return float4(1.0f, 0.15f, 0.15f, 0.4f);  // half alpha Red     - Agro
+    if (input.colorType == 22) return float4(1.0f, 0.55f, 0.15f, 0.5f);  // half alpha Orange  - DeAgro
 
     return float4(1.0f, 1.0f, 0.0f, 1.0f);  // UB - yellow
 }

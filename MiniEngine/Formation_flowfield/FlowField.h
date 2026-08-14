@@ -75,7 +75,7 @@ private:
     // Agro Range 시각화
     std::vector<PreviewRenderer::InstanceData> m_RingInstances;
     DirectX::XMINT3 m_RingBuiltAtCell{ INT32_MIN, INT32_MIN, INT32_MIN };
-    bool m_ShowAgroRing = false;
+    bool m_ShowAgroRing = true;
     void BuildAgroRing(const DirectX::XMINT3& pc);
 
     // 추격용 멤버

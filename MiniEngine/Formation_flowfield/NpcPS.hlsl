@@ -20,7 +20,8 @@ float4 main(float4 pos : SV_Position, uint colorType : COLOR) : SV_Target
 
     if (colorType == 1)    return float4(1.0, 0.85, 0.1, 1.0);  // Alerted - Yellow
     if (colorType == 2)    return float4(1.0, 0.15, 0.15, 1.0); // Chase   - Red
-    if (colorType == 3)    return float4(0.55, 0.55, 0.6, 1.0); // Lost    - Grey
+    if (colorType == 3)    return float4(0.94, 0.90, 0.78, 1.0); // Lost     - Ivy
+    if (colorType == 4)    return float4(0.42, 0.42, 0.45, 1.0); // Dormant  - Grey
 
     return float4(0.2, 0.5, 1.0, 1.0);                          // Idle    - Blue
 }

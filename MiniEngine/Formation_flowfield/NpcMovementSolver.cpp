@@ -79,7 +79,8 @@ void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid,
 
 }
 
-void NpcMovementSolver::AdvanceWanderCell(const VoxelGrid& grid, size_t i, float dt)
+void NpcMovementSolver::AdvanceWanderCell(const VoxelGrid& grid, size_t i, float dt,
+    const DirectX::XMINT3& anchor, int radius)
 {
     SnapToTargetCell(i);    
     const DirectX::XMINT3 curr = m_Move.currCell[i];
@@ -94,17 +95,19 @@ void NpcMovementSolver::AdvanceWanderCell(const VoxelGrid& grid, size_t i, float
         return;
     }
 
-    const DirectX::XMINT3 anchor = m_Move.anchorCell[i];
 
     m_NeighborScratch.clear();
     GetWalkableNeighbors(grid, curr, m_NeighborScratch);
-    if (m_NeighborScratch.empty())   return;
+    if (m_NeighborScratch.empty()) 
+    {
+        HoldPosition(i, curr); 
+        return; 
+    }
 
     // anchor에서 멀어졌으면, anchor쪽으로 향하게
     const int dax = anchor.x - curr.x, daz = anchor.z - curr.z;
     const int currDistSq = dax * dax + daz * daz;
-    const bool tooFar = currDistSq > (WANDER_RADIUS_CELLS * WANDER_RADIUS_CELLS);
-
+    const bool tooFar = currDistSq > (radius * radius);
 
     int candidates[8];
     int count = 0;
@@ -134,14 +137,17 @@ void NpcMovementSolver::AdvanceWanderCell(const VoxelGrid& grid, size_t i, float
 
 }
 
-bool NpcMovementSolver::AdvanceReturnCell(const VoxelGrid& grid, size_t i)
+bool NpcMovementSolver::AdvanceReturnCell(const VoxelGrid& grid, size_t i,
+    const DirectX::XMINT3& anchor)
 {
     SnapToTargetCell(i);
     const DirectX::XMINT3 curr = m_Move.currCell[i];
-    const DirectX::XMINT3 anchor = m_Move.anchorCell[i];
 
     const int dx = anchor.x - curr.x, dz = anchor.z - curr.z;
     const int currDistSq = dx * dx + dz * dz;
+
+
+    // 도착 판정은 호출자가 반경으로 
     if (currDistSq == 0) { HoldPosition(i, curr); return true; }   // 도달
 
     m_NeighborScratch.clear();
