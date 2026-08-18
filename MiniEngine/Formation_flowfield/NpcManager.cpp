@@ -546,72 +546,73 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
     const float ARRIVE_EPS_SQ = 0.0001f;
     bool anyMoved = false;
 
-
-    for (int k = 0; k < m_ActiveGroupCount; ++k)
     {
-        auto& group = m_BehaviorGroups[m_GroupOrder[k]];
-        // 도착 판정 반경 - 배회 반경보다 1크게
-        const int arriveR2 = (group.wanderRadius + 5) * (group.wanderRadius + 5);
-
-        for (int i : group.members)
+        CORE_SCOPE(NpcUpdateCore);
+        for (int k = 0; k < m_ActiveGroupCount; ++k)
         {
-            Math::Vector3 delta = m_Move.targetWorldPos[i] - m_Move.position[i];
-            const float distSq = Math::LengthSquare(delta);
+            auto& group = m_BehaviorGroups[m_GroupOrder[k]];
+            // 도착 판정 반경 - 배회 반경보다 1크게
+            const int arriveR2 = (group.wanderRadius + 5) * (group.wanderRadius + 5);
 
-            // 셀에 도착한 프레임에만 다음 셀 정한다
-            if (distSq < ARRIVE_EPS_SQ)
+            for (int i : group.members)
             {
-                switch (m_Move.state[i])
+                Math::Vector3 delta = m_Move.targetWorldPos[i] - m_Move.position[i];
+                const float distSq = Math::LengthSquare(delta);
+
+                // 셀에 도착한 프레임에만 다음 셀 정한다
+                if (distSq < ARRIVE_EPS_SQ)
                 {
-                case NPC_STATE_IDLE:
-                    m_MovementSolver.AdvanceWanderCell(*m_Grid, i, dt, group.anchorCell, group.wanderRadius);
-                    break;
+                    switch (m_Move.state[i])
+                    {
+                    case NPC_STATE_IDLE:
+                        m_MovementSolver.AdvanceWanderCell(*m_Grid, i, dt, group.anchorCell, group.wanderRadius);
+                        break;
 
-                case NPC_STATE_ALERTED:
-                    break;  // 반응 대기 - 제자리
+                    case NPC_STATE_ALERTED:
+                        break;  // 반응 대기 - 제자리
 
-                case NPC_STATE_LOST:
+                    case NPC_STATE_LOST:
+                    {
+                        const bool moved = m_MovementSolver.AdvanceReturnCell(*m_Grid, i, group.anchorCell);
+
+                        // 막힌건 시간 기다렸다가 포기 - 한번만 기다리면 멈춤이 잦다
+                        if (moved)   m_Move.blockedTime[i] = 0.0f;
+                        else        m_Move.blockedTime[i] += dt;
+
+                        // group anchor 들어왔는지 검사
+                        const int dx = m_Move.currCell[i].x - group.anchorCell.x;
+                        const int dz = m_Move.currCell[i].z - group.anchorCell.z;
+                        const bool arrived = (dx * dx + dz * dz <= arriveR2);
+
+                        if (arrived || m_Move.blockedTime[i] >= LOST_STUCK_GIVEUP_SEC)
+                        {
+                            SetNpcState(i, NPC_STATE_IDLE);
+                        }
+
+                        break;
+                    }
+                    case NPC_STATE_CHASE:
+                        if (m_Move.active[i])
+                        {
+                            // near없으면 자동으로 far
+                            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, m_NearField.get(), i, dt, m_Group.isChasing);
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
+                else
                 {
-                    const bool moved = m_MovementSolver.AdvanceReturnCell(*m_Grid, i, group.anchorCell);
-
-                    // 막힌건 시간 기다렸다가 포기 - 한번만 기다리면 멈춤이 잦다
-                    if (moved)   m_Move.blockedTime[i] = 0.0f;
-                    else        m_Move.blockedTime[i] += dt;
-
-                    // group anchor 들어왔는지 검사
-                    const int dx = m_Move.currCell[i].x - group.anchorCell.x;
-                    const int dz = m_Move.currCell[i].z - group.anchorCell.z;
-                    const bool arrived = (dx * dx + dz * dz <= arriveR2);
-
-                    if (arrived || m_Move.blockedTime[i] >= LOST_STUCK_GIVEUP_SEC)
-                    {
-                        SetNpcState(i, NPC_STATE_IDLE);
-                    }
-
-                    break;
+                    const float step = NPC_SPEED * dt;
+                    if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
+                    else                       m_Move.position[i] += Math::Normalize(delta) * step;
+                    anyMoved = true;
                 }
-                case NPC_STATE_CHASE:
-                    if (m_Move.active[i])
-                    {
-                        // near없으면 자동으로 far
-                        m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, m_NearField.get(), i, dt, m_Group.isChasing);
-                    }
-                    break;
-                default:
-                    break;
-                }
-            }
-            // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
-            else
-            {
-                const float step = NPC_SPEED * dt;
-                if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
-                else                       m_Move.position[i] += Math::Normalize(delta) * step;
-                anyMoved = true;
             }
         }
     }
-
     
     if (anyMoved || m_VisualDirty)
     { 

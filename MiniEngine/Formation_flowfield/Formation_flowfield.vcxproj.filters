@@ -207,6 +207,9 @@
     <ClInclude Include="MemoryProbe.h">
       <Filter>Simulation\DebugCheck</Filter>
     </ClInclude>
+    <ClInclude Include="ScopedCpuTimer.h">
+      <Filter>Simulation\DebugCheck</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="Heightmap.bmp">

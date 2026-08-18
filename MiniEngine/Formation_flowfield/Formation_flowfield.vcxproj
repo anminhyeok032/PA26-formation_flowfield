@@ -261,6 +261,7 @@
     <ClInclude Include="Player.h" />
     <ClInclude Include="PlayerOrbitCamera.h" />
     <ClInclude Include="PreviewRenderer.h" />
+    <ClInclude Include="ScopedCpuTimer.h" />
     <ClInclude Include="TerrainEditor.h" />
     <ClInclude Include="VoxelGrid.h" />
     <ClCompile Include="VoxelInstanceStore.cpp" />
