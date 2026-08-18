@@ -75,7 +75,8 @@ private:
 public:
     // Dijkstra를 이용한 flowfield 만들기
     void Build(const VoxelGrid& grid, const DirectX::XMINT3& goal, 
-        const std::unordered_set<int64_t>& mask,
+        const std::unordered_set<int64_t>* mask,
+        float maxCost = FLT_MAX,
         const std::atomic<bool>* cancelFlag = nullptr);
 
     // (x,y,z) 셀의 이동 방향을 조회. 이 좌표가 마스크 밖(계산 안 됨)이면 false.

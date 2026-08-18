@@ -463,7 +463,17 @@ bool NpcManager::SetGroupDestination(const DirectX::XMINT3& goalCell,
 void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool playerValid)
 {
     // --- 1. 워커 결과 수령 ---
-    FieldBuildResult res = m_FieldWorker.TryAcquire();
+    // near/far는 슬롯이 분리돼 있으므로 각각 수령
+    {
+        FieldBuildResult nres = m_FieldWorker.TryAcquireNear();
+        if (nres.success) 
+        {
+            m_NearField = std::move(nres.field);
+            m_FieldSwapped = true;      // 시각화 갱신
+        }
+    }
+
+    FieldBuildResult res = m_FieldWorker.TryAcquireFar();
     if (res.success)
     {
         for (auto& leafPtr : m_Leaves)
@@ -473,6 +483,10 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
             if (!res.nodePath.empty())  leafPtr->path = std::move(res.nodePath);
             leafPtr->active = true;
             m_FieldSwapped = true;
+
+            // 설치 확정되면 원점 갱신
+            m_FarFieldGoal = m_Group.goal;
+
             break;
         }
     }
@@ -490,11 +504,8 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
     {
         UpdateDeagro(playerCell, dt);   // 해제는 플레이어 거리를 직접 보니까 냅두기
 
-        // 목표 셀이 바뀌면 필드를 다시 요청 - 플레이어 추종
-        if (m_Group.isChasing &&
-            (playerCell.x != m_LastRequestedGoal.x ||
-                playerCell.y != m_LastRequestedGoal.y ||
-                playerCell.z != m_LastRequestedGoal.z))
+        // 목표 이동해서 far 재빌드 해야될지
+        if (m_Group.isChasing && IsFarFieldGoalTooOld())
         {
             m_ChaseSetDirty = true;
         }
@@ -505,12 +516,29 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
 
     // --- 3. 필드 요청 ---
     // 파동을 매 프레임 요청하지 않고, 쌓았다가 한번에 걸기
-    if(m_FieldRequestTimer > 0.0f)  m_FieldRequestTimer -= dt;
-    if (true == m_ChaseSetDirty && m_FieldRequestTimer <= 0.0f)
+    if (m_FieldRequestTimer > 0.0f)  m_FieldRequestTimer -= dt;
+
+    if (m_FieldRequestTimer <= 0.0f)
     {
-        RebuildChaseLeaf();
-        m_ChaseSetDirty = false;
         m_FieldRequestTimer = FIELD_REQUEST_COOLDOWN_SEC;
+
+        // (a) near - 목표가 있으면 무조건 매 쿨다운 갱신
+        if (m_Group.isChasing && m_Group.goal.x >= 0)
+        {
+            FieldBuildRequest nreq;
+            nreq.mode = FieldBuildMode::GoalBubble;
+            nreq.leafId = 0;                    // IsValid 통과용 - near는 leaf에 안 붙는다
+            nreq.goalCell = m_Group.goal;
+            nreq.generation = m_TerrainGeneration;
+            m_FieldWorker.Submit(std::move(nreq));
+        }
+
+        // (b) far - 모양 변화(앵커 집합) 또는 원점 노후화일 때
+        if (true == m_ChaseSetDirty)
+        {
+            RebuildChaseLeaf();
+            m_ChaseSetDirty = false;
+        }
     }
 
 
@@ -565,7 +593,8 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
                 case NPC_STATE_CHASE:
                     if (m_Move.active[i])
                     {
-                        m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, i, dt, m_Group.isChasing);
+                        // near없으면 자동으로 far
+                        m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, m_NearField.get(), i, dt, m_Group.isChasing);
                     }
                     break;
                 default:
@@ -612,6 +641,9 @@ bool NpcManager::IsVisitedAny(const VoxelGrid& grid, int x, int y, int z) const
 
 bool NpcManager::SampleDirectionAny(const VoxelGrid& grid, int x, int y, int z, DirectX::XMINT3& outDir) const
 {
+    // AdvanceCell과 동일한 우선순위여야 한다
+    if (m_NearField && m_NearField->SampleDirection(grid, x, y, z, outDir)) return true;
+
     for (const auto& leafPtr : m_Leaves)
     {
         if (leafPtr->field->SampleDirection(grid, x, y, z, outDir))   return true;
@@ -652,6 +684,12 @@ void NpcManager::OnTerrainChanged(const std::vector<DirectX::XMINT3>& editedCell
         m_ChaseSetDirty = true;
         m_FieldRequestTimer = 0.0f;
     }
+
+    // near 폐기
+    m_NearField.reset();
+
+    // far 원점 폐기
+    m_FarFieldGoal = { -1, -1, -1 };
 }
 
 
@@ -879,6 +917,21 @@ void NpcManager::RebuildChaseLeaf()
 
     m_LastRequestedGoal = m_Group.goal;
 }
+
+// far 원점이 near 밖으로 밀려났는지
+bool NpcManager::IsFarFieldGoalTooOld() const
+{
+    if (m_FarFieldGoal.x < 0)    return true;   // far 없음
+    if (m_Group.goal.x < 0)     return true;    // 목표 없음
+
+    const int dx = m_Group.goal.x - m_FarFieldGoal.x;
+    const int dz = m_Group.goal.z - m_FarFieldGoal.z;
+
+    // 직선 거리로 판정
+    const float d2 = float(dx * dx + dz * dz);
+    return d2 >= (FAR_FIELD_REBUILD_DIST * FAR_FIELD_REBUILD_DIST);
+}
+
 
 void NpcManager::SetNpcState(size_t i, uint8_t next)
 {
