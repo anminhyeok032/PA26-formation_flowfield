@@ -640,6 +640,9 @@ bool NpcManager::IsVisitedAny(const VoxelGrid& grid, int x, int y, int z) const
 
 bool NpcManager::SampleDirectionAny(const VoxelGrid& grid, int x, int y, int z, DirectX::XMINT3& outDir) const
 {
+    // AdvanceCell과 동일한 우선순위여야 한다
+    if (m_NearField && m_NearField->SampleDirection(grid, x, y, z, outDir)) return true;
+
     for (const auto& leafPtr : m_Leaves)
     {
         if (leafPtr->field->SampleDirection(grid, x, y, z, outDir))   return true;
