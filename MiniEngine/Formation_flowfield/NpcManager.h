@@ -100,6 +100,13 @@ private:
     bool m_FieldSwapped = false;    // 시각화 갱신용
     bool m_GroupArrived = false;    // 시각화 해제용
 
+    // near 필드 - 목표 주변 갱신용
+    std::shared_ptr<const CorridorFlowField> m_NearField;
+    // far 전용 목표점
+    DirectX::XMINT3 m_FarFieldGoal{ -1, -1, -1 };
+    // far가 낡았는지(목표가 원점에서 너무 멀어졌는지) 판정
+    bool IsFarFieldGoalTooOld() const;
+
     // 마지막으로 워커에 submit한 목표셀
     DirectX::XMINT3 m_LastRequestedGoal{ -1, -1, -1 };
 

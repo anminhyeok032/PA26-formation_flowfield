@@ -15,6 +15,7 @@ public:
 
     // 조건 조립 함수
     void AdvanceCell(const VoxelGrid& grid, const std::vector<std::unique_ptr<LeafGroup>>& leaves, 
+        const CorridorFlowField* nearField,
         size_t i, float dt, bool chasing);
 
 

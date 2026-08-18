@@ -142,7 +142,7 @@ void LeafSplitController::BuildLeafField(const VoxelGrid& grid, const ChunkGraph
 
     // 5 - FlowField 계산
     auto built = std::make_shared<CorridorFlowField>();
-    built->Build(grid, goalCell, mask);
+    built->Build(grid, goalCell, &mask, FLT_MAX);
 
     leaf.field = move(built);   // shared_ptr<CorridorFlowField> -> shared_ptr<const>
 }
@@ -155,6 +155,24 @@ FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const Chun
     res.leafId = req.leafId;
     res.generation = req.generation;
 
+    // ------ near 필드 갱신 : 목표 주변 원형 ------
+    if (req.mode == FieldBuildMode::GoalBubble)
+    {
+        auto built = std::make_shared<CorridorFlowField>();
+
+        // 마스크 nullptr - near 는 원형이라
+        built->Build(grid, req.goalCell, nullptr, NEAR_FIELD_RADIUS_COST, cancelFlag);
+
+        if (cancelFlag && cancelFlag->load(std::memory_order_relaxed))   return res;
+
+        res.field = std::move(built);
+        res.success = true;
+        res.goalCell = req.goalCell;   // GoalBubble / FullRebuild / ChaseIncremental 공통
+        return res;
+    }
+
+
+    // ------ FullBuild / ChaseIncremental 경로 빌드 -------
     const bool CanExpand = CanUseMask(req, cache);
 
     if (true == CanExpand)
@@ -214,9 +232,9 @@ FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const Chun
     }
 
 
-    // 4 - Dijkstra + 방향 - (너무 느리면 여기 최적화 할것)
+    // 4 - Dijkstra + 방향
     auto built = std::make_shared<CorridorFlowField>();
-    built->Build(grid, req.goalCell, cache.mask, cancelFlag);
+    built->Build(grid, req.goalCell, &cache.mask, FLT_MAX, cancelFlag);
 
     // 취소 시, field 버퍼 스왑 금지
     if (cancelFlag && cancelFlag->load(std::memory_order_relaxed))   return res;
@@ -231,6 +249,7 @@ FieldBuildResult LeafSplitController::RunBuild(const VoxelGrid& grid, const Chun
 
     res.field = std::move(built);
     res.success = true;
+    res.goalCell = req.goalCell;   // GoalBubble / FullRebuild / ChaseIncremental 공통
     return res;
 }
 

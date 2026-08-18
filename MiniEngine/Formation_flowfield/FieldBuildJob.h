@@ -12,6 +12,9 @@ enum class FieldBuildMode
 
 	// 추격 갱신 - goal 노드에서 홉 확장분만 캐시에 추가 (A* x)
 	ChaseIncremental,
+
+	// Goal 주변 near field - 목표에서 반경까지만
+	GoalBubble,
 };
 
 
@@ -56,8 +59,10 @@ struct FieldBuildRequest
 	// 기본 생성 상태 = 요청 없음
 	bool IsValid() const 
 	{ 
-		if (leafId < 0 || goalCell.x < 0)	return false;
-		if (mode == FieldBuildMode::ChaseIncremental) return true;
+		if (leafId < 0 || goalCell.x < 0)				return false;
+		if (mode == FieldBuildMode::ChaseIncremental)	return true;
+		if (mode == FieldBuildMode::GoalBubble)			return true;
+		
 		return startCell.x >= 0;
 	}
 
@@ -72,6 +77,8 @@ struct FieldBuildResult
 	int		leafId = -1;
 	uint64_t	generation = 0;
 	bool	success = false;
+
+	DirectX::XMINT3 goalCell{ -1, -1, -1 };	// 어느 목표를 원점으로 만들어 졌는지
 
 	std::shared_ptr<const CorridorFlowField> field;
 	std::vector<uint32_t>		nodePath;	// path 갱신용

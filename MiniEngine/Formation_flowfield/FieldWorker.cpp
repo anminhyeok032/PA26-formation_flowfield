@@ -12,14 +12,29 @@ void FieldWorker::Worker()
 			std::unique_lock<std::mutex> lk(m_Mutex);
 
 			// 요청 && 대기 x -> m_Ready 없을때
-			m_cvWork.wait(lk, [this] 
+			m_cvWork.wait(lk, [this] {
+				if (m_Quit)	return true;
+				for (int s = 0; s < SLOT_COUNT; ++s)
 				{
-					return m_Quit || (m_Pending.IsValid() && !m_Ready.success); 
-				});
+					if (m_Pending[s].IsValid() && !m_Ready[s].success)	return true;
+				}
+				return false; 
+			});
 			if (true == m_Quit)	return;
 
-			req = std::move(m_Pending);
-			m_Pending.Clear();
+			// near 우선
+			int pick = -1;
+			for (int s = 0; s < SLOT_COUNT; ++s)
+			{
+				if (m_Pending[s].IsValid() && !m_Ready[s].success)
+				{
+					pick = s;
+					break;
+				}
+			}
+
+			req = std::move(m_Pending[pick]);
+			m_Pending[pick].Clear();
 			m_Busy.store(true, std::memory_order_release);
 		}
 
@@ -28,7 +43,7 @@ void FieldWorker::Worker()
 
 		{
 			std::lock_guard<std::mutex> lk(m_Mutex);
-			if (res.success)	m_Ready = std::move(res);
+			if (res.success)	m_Ready[SlotOf(req.mode)] = std::move(res);
 			m_Busy.store(false, std::memory_order_release);
 		}
 		m_cvIdle.notify_all();	// CancelAndWait 대기 해제
@@ -56,14 +71,14 @@ void FieldWorker::Stop()
 	{
 		std::lock_guard<std::mutex> lk(m_Mutex);
 		m_Quit = true;
-		m_Pending.Clear();
+		for(int s = 0; s < SLOT_COUNT; ++s)	m_Pending[s].Clear();
 	}
 	m_cvWork.notify_all();
 
 	m_Thread.join();
 
 	// join 후에는 워커가 없으므로 락 없이 정리해도 안전하다
-	m_Ready.Clear();
+	for (int s = 0; s < SLOT_COUNT; ++s)	m_Ready[s].Clear();
 	m_Cancel.store(false, std::memory_order_release);
 	m_Grid = nullptr;
 	m_ChunkGraph = nullptr;
@@ -74,24 +89,23 @@ void FieldWorker::Submit(FieldBuildRequest&& req)
 {
 	// 유효 멤버 있는지 확인후, 깨우기
 	if (false == req.IsValid())	return;
-
+	const int slot = SlotOf(req.mode);
 	{
 		std::lock_guard<std::mutex> lk(m_Mutex);
-		m_Pending = std::move(req);	// 이전 대기 요청 덮어쓰기
+		m_Pending[slot] = std::move(req);	// 이전 대기 요청 덮어쓰기
 	}
 
 	m_cvWork.notify_one();
 }
 
-FieldBuildResult FieldWorker::TryAcquire()
+FieldBuildResult FieldWorker::TryAcquireSlot(int slot)
 {
 	FieldBuildResult res;
 	{
 		std::lock_guard<std::mutex> lk(m_Mutex);
-		if (false == m_Ready.success)	return res;	// 빈거 반환
-
-		res = std::move(m_Ready);
-		m_Ready.Clear();	// move 후 비워주기
+		if (false == m_Ready[slot].success)	return res;	// 빈거 반환
+		res = std::move(m_Ready[slot]);
+		m_Ready[slot].Clear();	// move 후 비워주기
 
 	}
 	
@@ -105,12 +119,14 @@ void FieldWorker::CancelAndWait()
 
 	{
 		std::unique_lock<std::mutex> lk(m_Mutex);
-		m_Pending.Clear();
+		for (int s = 0; s < SLOT_COUNT; ++s)	m_Pending[s].Clear();
+
 		m_cvIdle.wait(lk, [this] {
 			return false == m_Busy.load(std::memory_order_acquire);
 			});
-		m_Ready.Clear();
 
+		for (int s = 0; s < SLOT_COUNT; ++s)	m_Ready[s].Clear();
+		
 		// 지형 바뀔 예정 - 마스크 셀 구성 무효
 		m_MaskCache.Clear();
 	}

@@ -22,7 +22,8 @@ public:
 
 	// 완성 결과 수령 - 없으면 null
 	// 프레임 시작 시점에만 호출해야함 -> 중간 호출시, 값 깨짐
-	FieldBuildResult TryAcquire();
+	FieldBuildResult TryAcquireNear() { return TryAcquireSlot(SLOT_NEAR); }
+	FieldBuildResult TryAcquireFar() { return TryAcquireSlot(SLOT_FAR); }
 
 
 	// 지형 / 그래프 수정시, 필수 호출할 것
@@ -44,9 +45,19 @@ private:
 	std::condition_variable	m_cvWork;	// 메인 -> worker (요청 도착 / 종료)
 	std::condition_variable m_cvIdle;	// worker -> 메인 (작업 종료)
 
+	// mask 호출 기준
+	static constexpr int SLOT_NEAR	= 0;
+	static constexpr int SLOT_FAR	= 1;
+	static constexpr int SLOT_COUNT	= 2;
 
-	FieldBuildRequest	m_Pending;	// false면 대기 없음
-	FieldBuildResult	m_Ready;	// success == false 면 수령 대기 x
+	FieldBuildRequest	m_Pending[SLOT_COUNT];	// false면 대기 없음
+	FieldBuildResult	m_Ready[SLOT_COUNT];	// success == false 면 수령 대기 x
+
+	static int SlotOf(FieldBuildMode m)
+	{
+		return (m == FieldBuildMode::GoalBubble) ? SLOT_NEAR : SLOT_FAR;
+	}
+	FieldBuildResult TryAcquireSlot(int slot);
 
 	std::atomic<bool> m_Cancel{ false };
 	std::atomic<bool> m_Busy{ false };

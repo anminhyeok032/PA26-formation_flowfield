@@ -100,6 +100,14 @@ constexpr int WAKEUP_RADIUS_CELLS = AGRO_RADIUS_CELLS * 4;
 constexpr int ACTIVE_REGION_RINGS = (WAKEUP_RADIUS_CELLS + REGION_SIZE_CELLS - 1) / REGION_SIZE_CELLS;
 
 
+// ------ Flowfield LOD 분할 -------
+constexpr float NEAR_FIELD_RADIUS_COST = 32.0f;    // near field 반경 (Cost 단위)
+constexpr float FAR_FIELD_REBUILD_DIST = NEAR_FIELD_RADIUS_COST * 0.5f; // far 재빌드 트리거
+// g_far가 near 반경 밖이면 near에 진입하지 못한 채 g_far에 도착해버린다.
+// 그 지점의 far-cost는 0이라 AdvanceCell이 목적지 도달로 오판
+static_assert(FAR_FIELD_REBUILD_DIST < NEAR_FIELD_RADIUS_COST,
+    "far 원점이 near 안에 남아야 먼 NPC가 구간에 진입할 수 있다");
+
 
 
 // xorshift32 - 개체별 결정론적 난수. std::rand는 스레드 안전하지 않고 전역 상태를 공유한다

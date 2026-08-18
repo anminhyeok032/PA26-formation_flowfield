@@ -15,26 +15,45 @@ NpcMovementSolver::NpcMovementSolver(NpcMoveData& move, CellReservation& reserve
 //---------------------------------------------------------------------
 void NpcMovementSolver::AdvanceCell(const VoxelGrid& grid, 
     const std::vector<std::unique_ptr<LeafGroup>>& leaves,
+    const CorridorFlowField* nearField,
     size_t i, float dt, bool chasing)
 {
     const int lid = m_Move.leafId[i];
     if (lid < 0) { m_Move.active[i] = 0; return; }  // 미소속 방지
 
-    const CorridorFlowField& field = *leaves[lid]->field;
+    const CorridorFlowField& farField = *leaves[lid]->field;
 
     SnapToTargetCell(i);
     const DirectX::XMINT3 curr = m_Move.currCell[i];   // 값 복사 - 이하 안 바뀜
 
-    float currCost;
-    if (false == field.SampleCost(grid, curr.x, curr.y, curr.z, currCost))
-    {
-        // 추격에는 도착 x 
-        if (chasing) { HoldPosition(i, curr); return; }
+    // ----- near / far 필드 중 하나만 갱신 -----
+    const CorridorFlowField* pField = nullptr;
+    float currCost = 0.0f;
 
+    if (nearField && nearField->SampleCost(grid, curr.x, curr.y, curr.z, currCost))
+    {
+        pField = nearField;
+    }
+    // near 밖
+    else if (farField.SampleCost(grid, curr.x, curr.y, curr.z, currCost))
+    {
+        pField = &farField;
+    }
+    else
+    {
+        // 두 필드 어디에도 없다
+        if (chasing)
+        {
+            HoldPosition(i, curr);
+            return;
+        }
         m_Move.active[i] = 0;
-        m_Move.stopReason[i] = 1;   // 지형변경으로 인한 필드 밖
+        m_Move.stopReason[i] = 1;
         return;
     }
+    
+    const CorridorFlowField& field = *pField;
+
     if (currCost < 1e-4f)   // 목적지 도달
     {
         // 추격에는 도착 x 

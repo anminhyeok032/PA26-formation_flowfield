@@ -93,7 +93,8 @@ const CorridorFlowField::FlowFieldChunk::ColumnData* CorridorFlowField::FindColu
 }
 
 void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal,
-    const std::unordered_set<int64_t>& mask,
+    const std::unordered_set<int64_t>* mask,
+    float maxCost,
     const std::atomic<bool>* cancelFlag)
 {
     m_Chunks.clear();
@@ -145,15 +146,20 @@ void CorridorFlowField::Build(const VoxelGrid& grid, const DirectX::XMINT3& goal
 
         for (const auto& n : neighbors)
         {
+            // 비용 계산 -> 컷오프 -> 마스크 -> 청크 할당
+            const float predCost = currCost + n.cost;
+            
+            // 컷오프 - near 필드가 마스크 없이도 유한하게 닫히는 근거
+            if (predCost > maxCost)  continue;
+
             // 해당 y에 mask없으면 continue
-            if ( mask.find(MakeCellKey(n.pos)) == mask.end() ) continue;
+            if (mask &&  mask->find(MakeCellKey(n.pos)) == mask->end() ) continue;
 
             int next_idx;
             FlowFieldChunk::ColumnData* nChunk = FindOrCreateColumn(grid, n.pos.x, n.pos.y, n.pos.z, next_idx, chunkcache);
             if (!nChunk) continue;
 
-            const float predCost = currCost + n.cost;
-
+ 
             if (predCost < nChunk->cost[next_idx])
             {
                 nChunk->cost[next_idx] = predCost;
