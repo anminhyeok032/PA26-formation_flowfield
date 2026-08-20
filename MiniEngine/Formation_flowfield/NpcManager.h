@@ -126,6 +126,9 @@ private:
 
     std::vector<Stimulus> m_Stimulus;   // update에서 소비하는 trigger
 
+    // 패닉 자극원 - TODO : 여러개 만들고 싶으면 확장 해야한다
+    DirectX::XMINT3 m_PanicCell{ -1, -1, -1 };
+
     void UpdateAgro();
     void PropagateAgro(float dt);
     void UpdateDeagro(const DirectX::XMINT3& playerCell, float dt);
