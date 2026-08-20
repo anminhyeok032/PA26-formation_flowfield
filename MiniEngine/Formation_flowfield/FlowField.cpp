@@ -6,12 +6,6 @@
 #include "TextRenderer.h"       // Text
 #include "GameInput.h"
 
-// model load
-#include "glTF.h"
-#include "Renderer.h"
-#include "Model.h"
-#include "ModelLoader.h"
-
 #include "Display.h"
 #include "GraphicsCore.h"
 #include "RootSignature.h"

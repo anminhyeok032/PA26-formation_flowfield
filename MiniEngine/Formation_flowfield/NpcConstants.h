@@ -75,9 +75,9 @@ constexpr float		WANDER_PAUSE_MAX_SEC	= 3.0f;
 constexpr float     LOST_STUCK_GIVEUP_SEC   = 5.0f;     // 복귀중 이 이상 막히면 거점으로 삼아버림
 
 // ------ 패닉 상태 -------
-constexpr int   FIRE_RADIUS_CELLS  = 5;        // 화염 자극 반경.
+constexpr int   FIRE_RADIUS_CELLS  = 10;        // 화염 자극 반경.
 constexpr int   PANIC_ESCAPE_DIST = FIRE_RADIUS_CELLS;   // 이 거리만큼 멀어지면 패닉 해제
-constexpr float PANIC_STUCK_GIVEUP_SEC = 2.0f;  // 더 멀어질 수 없을 때(구석/벽에 몰림) 포기 시간
+constexpr float PANIC_STUCK_GIVEUP_SEC = 1.0f;  // 더 멀어질 수 없을 때(구석/벽에 몰림) 포기 시간
 
 
 
