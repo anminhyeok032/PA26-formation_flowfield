@@ -589,62 +589,63 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
                             SetNpcState(i, NPC_STATE_IDLE);
                         }
 
-                    break;
-                }
-                case NPC_STATE_CHASE:
-                {
-                    if (m_Move.active[i])
-                    {
-                        // near없으면 자동으로 far
-                        m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, m_NearField.get(), i, dt, m_Group.isChasing);
+                        break;
                     }
-                    break;
-                }
-
-                case NPC_STATE_PANIC:
-                {
-                    if (m_PanicCell.x < 0) break;
-
-                    // 자극원에서 멀어지는 이웃 하나 - 성공 시 거리 증가
-                    const bool moved = m_MovementSolver.AdvanceFleeCell(*m_Grid, i, m_PanicCell);
-
-                    // 막힌 시간만 누적
-                    if (moved)  m_Move.blockedTime[i] = 0.0f;
-                    else        m_Move.blockedTime[i] += dt;
-
-                    const int dx = m_Move.currCell[i].x - m_PanicCell.x;
-                    const int dz = m_Move.currCell[i].z - m_PanicCell.z;
-                    const bool escaped =
-                        (dx * dx + dz * dz >= PANIC_ESCAPE_DIST * PANIC_ESCAPE_DIST);
-
-                    // 탈출했거나, 더 멀어질 수 없어 포기
-                    if (escaped || m_Move.blockedTime[i] >= PANIC_STUCK_GIVEUP_SEC)
+                    case NPC_STATE_CHASE:
                     {
-                        // 도망친 자리가 플레이어 어그로 반경 안이면 곧바로 재AGRO
-                        bool reAgro = false;
-                        if (playerValid)
+                        if (m_Move.active[i])
                         {
-                            const int pdx = m_Move.currCell[i].x - playerCell.x;
-                            const int pdz = m_Move.currCell[i].z - playerCell.z;
-                            reAgro = (pdx * pdx + pdz * pdz
-                                <= AGRO_RADIUS_CELLS * AGRO_RADIUS_CELLS);
+                            // near없으면 자동으로 far
+                            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, m_NearField.get(), i, dt, m_Group.isChasing);
                         }
-                        SetNpcState(i, reAgro ? NPC_STATE_CHASE : NPC_STATE_LOST);
+                        break;
                     }
-                    break;
-                }
 
-                default:
-                    break;
+                    case NPC_STATE_PANIC:
+                    {
+                        if (m_PanicCell.x < 0) break;
+
+                        // 자극원에서 멀어지는 이웃 하나 - 성공 시 거리 증가
+                        const bool moved = m_MovementSolver.AdvanceFleeCell(*m_Grid, i, m_PanicCell);
+
+                        // 막힌 시간만 누적
+                        if (moved)  m_Move.blockedTime[i] = 0.0f;
+                        else        m_Move.blockedTime[i] += dt;
+
+                        const int dx = m_Move.currCell[i].x - m_PanicCell.x;
+                        const int dz = m_Move.currCell[i].z - m_PanicCell.z;
+                        const bool escaped =
+                            (dx * dx + dz * dz >= PANIC_ESCAPE_DIST * PANIC_ESCAPE_DIST);
+
+                        // 탈출했거나, 더 멀어질 수 없어 포기
+                        if (escaped || m_Move.blockedTime[i] >= PANIC_STUCK_GIVEUP_SEC)
+                        {
+                            // 도망친 자리가 플레이어 어그로 반경 안이면 곧바로 재AGRO
+                            bool reAgro = false;
+                            if (playerValid)
+                            {
+                                const int pdx = m_Move.currCell[i].x - playerCell.x;
+                                const int pdz = m_Move.currCell[i].z - playerCell.z;
+                                reAgro = (pdx * pdx + pdz * pdz
+                                    <= AGRO_RADIUS_CELLS * AGRO_RADIUS_CELLS);
+                            }
+                            SetNpcState(i, reAgro ? NPC_STATE_CHASE : NPC_STATE_LOST);
+                        }
+                        break;
+                    }
+
+                    default:
+                        break;
+                    }
                 }
-            }
-            // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
-            else
-            {
-                const float step = NPC_SPEED * dt;
-                if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
-                else                       m_Move.position[i] += Math::Normalize(delta) * step;
-                anyMoved = true;
+                // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
+                else
+                {
+                    const float step = NPC_SPEED * dt;
+                    if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
+                    else                       m_Move.position[i] += Math::Normalize(delta) * step;
+                    anyMoved = true;
+                }
             }
         }
     }
