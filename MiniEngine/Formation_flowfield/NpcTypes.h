@@ -118,7 +118,9 @@ struct Stimulus
 {
     DirectX::XMINT3 cell{ -1, -1, -1 };
     int     radiusCells = 0;
-    uint8_t targetState = NPC_STATE_ALERTED;        // trigger 유발 state
+    uint8_t targetState = NPC_STATE_ALERTED;    // trigger 유발 state
+   
+    uint8_t requiredFlag = NSF_AGRO_TARGET;     // 패닉 플래그
 };
 
 // 어그로 전파 범위 및 해제 판정 단위

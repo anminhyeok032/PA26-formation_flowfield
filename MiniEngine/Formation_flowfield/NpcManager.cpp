@@ -589,30 +589,66 @@ void NpcManager::Update(float dt, const DirectX::XMINT3& playerCell, bool player
                             SetNpcState(i, NPC_STATE_IDLE);
                         }
 
-                        break;
-                    }
-                    case NPC_STATE_CHASE:
-                        if (m_Move.active[i])
-                        {
-                            // near없으면 자동으로 far
-                            m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, m_NearField.get(), i, dt, m_Group.isChasing);
-                        }
-                        break;
-                    default:
-                        break;
-                    }
+                    break;
                 }
-                // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
-                else
+                case NPC_STATE_CHASE:
                 {
-                    const float step = NPC_SPEED * dt;
-                    if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
-                    else                       m_Move.position[i] += Math::Normalize(delta) * step;
-                    anyMoved = true;
+                    if (m_Move.active[i])
+                    {
+                        // near없으면 자동으로 far
+                        m_MovementSolver.AdvanceCell(*m_Grid, m_Leaves, m_NearField.get(), i, dt, m_Group.isChasing);
+                    }
+                    break;
                 }
+
+                case NPC_STATE_PANIC:
+                {
+                    if (m_PanicCell.x < 0) break;
+
+                    // 자극원에서 멀어지는 이웃 하나 - 성공 시 거리 증가
+                    const bool moved = m_MovementSolver.AdvanceFleeCell(*m_Grid, i, m_PanicCell);
+
+                    // 막힌 시간만 누적
+                    if (moved)  m_Move.blockedTime[i] = 0.0f;
+                    else        m_Move.blockedTime[i] += dt;
+
+                    const int dx = m_Move.currCell[i].x - m_PanicCell.x;
+                    const int dz = m_Move.currCell[i].z - m_PanicCell.z;
+                    const bool escaped =
+                        (dx * dx + dz * dz >= PANIC_ESCAPE_DIST * PANIC_ESCAPE_DIST);
+
+                    // 탈출했거나, 더 멀어질 수 없어 포기
+                    if (escaped || m_Move.blockedTime[i] >= PANIC_STUCK_GIVEUP_SEC)
+                    {
+                        // 도망친 자리가 플레이어 어그로 반경 안이면 곧바로 재AGRO
+                        bool reAgro = false;
+                        if (playerValid)
+                        {
+                            const int pdx = m_Move.currCell[i].x - playerCell.x;
+                            const int pdz = m_Move.currCell[i].z - playerCell.z;
+                            reAgro = (pdx * pdx + pdz * pdz
+                                <= AGRO_RADIUS_CELLS * AGRO_RADIUS_CELLS);
+                        }
+                        SetNpcState(i, reAgro ? NPC_STATE_CHASE : NPC_STATE_LOST);
+                    }
+                    break;
+                }
+
+                default:
+                    break;
+                }
+            }
+            // --- 4-2. 위치 보간 (상태 무관 - 모든 이동이 셀 스냅 + 보간) ---
+            else
+            {
+                const float step = NPC_SPEED * dt;
+                if (step * step >= distSq) m_Move.position[i] = m_Move.targetWorldPos[i];
+                else                       m_Move.position[i] += Math::Normalize(delta) * step;
+                anyMoved = true;
             }
         }
     }
+
     
     if (anyMoved || m_VisualDirty)
     { 
@@ -769,12 +805,13 @@ void NpcManager::UpdateAgro()
                 stim.cell.z < group.aabbMin.z - R || stim.cell.z > group.aabbMax.z + R)
                 continue;
 
+            int affected = 0;
             for (int i : group.members)
             {
                 // 이미 각성한 개체는 건드리지 않는다.
                 // CHASE/ALERTED를 다시 ALERTED로 덮으면 propagationTimer가 매 프레임
                 // 리셋되어 PROPAGATION_DELAY를 영원히 못 채우고 그 자리에 굳는다
-                if (!StateHas(m_Move.state[i], NSF_AGRO_TARGET)) continue;
+                if (!StateHas(m_Move.state[i], stim.requiredFlag)) continue;
 
                 const auto& c = m_Move.currCell[i];
                 if (c.x < 0) continue;
@@ -783,7 +820,10 @@ void NpcManager::UpdateAgro()
                 if (dx * dx + dz * dz > R2) continue;
 
                 SetNpcState(i, stim.targetState);
+                ++affected;
             }
+            if (affected > 0 && stim.targetState == NPC_STATE_PANIC)
+                m_PanicCell = stim.cell;
         }
     }
     m_Stimulus.clear();

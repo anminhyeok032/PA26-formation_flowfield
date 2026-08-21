@@ -28,6 +28,8 @@ public:
     bool AdvanceReturnCell(const VoxelGrid& grid, size_t i,
         const DirectX::XMINT3& anchor);
 
+    // 자극원에서 멀어지는 이웃 하나 - AdvanceReturnCell의 부호 반전 버전
+    bool AdvanceFleeCell(const VoxelGrid& grid, size_t i, const DirectX::XMINT3& from);
 
 private:
     void SnapToTargetCell(size_t i);                                // 이동

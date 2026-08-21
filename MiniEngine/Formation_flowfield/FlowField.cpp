@@ -6,12 +6,6 @@
 #include "TextRenderer.h"       // Text
 #include "GameInput.h"
 
-// model load
-#include "glTF.h"
-#include "Renderer.h"
-#include "Model.h"
-#include "ModelLoader.h"
-
 #include "Display.h"
 #include "GraphicsCore.h"
 #include "RootSignature.h"
@@ -375,56 +369,74 @@ void FlowField::OnEditModeChanged()
 
 void FlowField::BuildAgroRing(const DirectX::XMINT3& pc)
 {
-    m_RingInstances.clear();
+    m_AgroRingInstances.clear();
+    // 어그로/해제는 반경이 커서(25/50) 채우면 인스턴스가 각각 12.5배/25배로 뛴다.
+    // 경계 위치만 알면 되는 용도라 고리로 유지한다.
+    AppendDisc(m_AgroRingInstances, pc, AGRO_RADIUS_CELLS, kColorAgroRing, false);
+    AppendDisc(m_AgroRingInstances, pc, DEAGRO_RADIUS_CELLS, kColorDeagroRing, false);
+    PushOverlayInstances();
+}
 
+void FlowField::BuildFireRing(const DirectX::XMINT3& cell)
+{
+    m_FireRingInstances.clear();
+    // 화염은 "이 범위가 불탄다"는 면적 자체가 정보라 채운다.
+    // 반경 12라 약 450~900개 수준 - 어그로 링(157)의 3~6배지만 감당 가능하다.
+    AppendDisc(m_FireRingInstances, cell, FIRE_RADIUS_CELLS, kColorAgroRing, true);
+    PushOverlayInstances();
+}
+
+void FlowField::PushOverlayInstances()
+{
+    std::vector<PreviewRenderer::InstanceData> merged;
+    merged.reserve(m_AgroRingInstances.size() + m_FireRingInstances.size());
+    merged.insert(merged.end(), m_AgroRingInstances.begin(), m_AgroRingInstances.end());
+    merged.insert(merged.end(), m_FireRingInstances.begin(), m_FireRingInstances.end());
+    PreviewRenderer::UpdateOverlayInstances(merged);
+}
+
+void FlowField::AppendDisc(std::vector<PreviewRenderer::InstanceData>& out,
+    const DirectX::XMINT3& center, int R, uint32_t colorType, bool filled) const
+{
     const float cellSize = m_VoxelGrid.GetCellSize();
-    const int radii[2] = { AGRO_RADIUS_CELLS, DEAGRO_RADIUS_CELLS };
-    const uint32_t cols[2] = { kColorAgroRing, kColorDeagroRing };
+    const int outer = R * R;
 
-    for (int r = 0; r < 2; ++r)
+    // filled면 안쪽 컷을 없애 원판 전체를 채운다.
+    // -1은 d2 == 0(중심 셀)도 통과시키기 위한 값 - 0 이상 조건이면 중심이 빠진다.
+    const int inner = filled ? -1 : (R - 1) * (R - 1);
+
+    for (int dz = -R; dz <= R; ++dz)
     {
-        const int R = radii[r];
-        const int outer = R * R;
-        const int inner = (R - 1) * (R - 1);
-
-        for (int dz = -R; dz <= R; ++dz)
+        for (int dx = -R; dx <= R; ++dx)
         {
-            for (int dx = -R; dx <= R; ++dx)
+            const int d2 = dx * dx + dz * dz;
+            if (d2 > outer || d2 < inner) continue;
+
+            const int cx = center.x + dx, cz = center.z + dz;
+            if (cx < 0 || cx >= m_VoxelGrid.GetSizeX()) continue;
+            if (cz < 0 || cz >= m_VoxelGrid.GetSizeZ()) continue;
+
+            // 그 컬럼의 모든 표면 위에 하나씩
+            // 동굴 입구라면 바닥 표면과 천장 위 표면 둘 다 잡혀 양쪽에 그려짐
+            VoxelGrid::SurfaceSpan surf = m_VoxelGrid.GetSurfaceYList(cx, cz);
+            for (int k = 0; k < surf.count; ++k)
             {
-                const int d2 = dx * dx + dz * dz;
-                if (d2 > outer || d2 < inner) continue;   // 두께 1셀 고리
+                const int y = surf.data[k] + 1;   // 표면 바로 위 (정의상 항상 Empty)
+                if (!m_VoxelGrid.IsInBounds(cx, y, cz)) continue;
 
-                const int cx = pc.x + dx, cz = pc.z + dz;
-                if (cx < 0 || cx >= m_VoxelGrid.GetSizeX()) continue;
-                if (cz < 0 || cz >= m_VoxelGrid.GetSizeZ()) continue;
+                Math::Vector3 w = m_VoxelGrid.GetWorldPos(cx, y, cz);
 
-                // 그 컬럼의 모든 표면 위에 하나씩
-                // 동굴 입구라면 바닥 표면과 천장 위 표면 둘 다 잡혀 양쪽에 링이 그려짐
-                VoxelGrid::SurfaceSpan surf = m_VoxelGrid.GetSurfaceYList(cx, cz);
-                for (int k = 0; k < surf.count; ++k)
-                {
-                    const int y = surf.data[k] + 1;   // 표면 바로 위 (정의상 항상 Empty)
-                    if (!m_VoxelGrid.IsInBounds(cx, y, cz)) continue;
-
-                    Math::Vector3 w = m_VoxelGrid.GetWorldPos(cx, y, cz);
-
-                    PreviewRenderer::InstanceData inst{};
-                    inst.position[0] = w.GetX();
-                    inst.position[1] = w.GetY();
-                    inst.position[2] = w.GetZ();
-                    inst.scale = cellSize * 0.88f;   // 셀보다 살짝 작게 - 좁은 틈에 박힌 박스는 주변 불투명 복셀에 가려져 검사 x
-                    inst.colorType = cols[r];
-                    m_RingInstances.push_back(inst);
-                }
+                PreviewRenderer::InstanceData inst{};
+                inst.position[0] = w.GetX();
+                inst.position[1] = w.GetY();
+                inst.position[2] = w.GetZ();
+                inst.scale = cellSize * 0.88f;   // 셀보다 살짝 작게 - 좁은 틈에 박힌 박스는 주변 불투명 복셀에 가려져 검사 x
+                inst.colorType = colorType;
+                out.push_back(inst);
             }
         }
     }
-
-    PreviewRenderer::UpdateOverlayInstances(m_RingInstances);
-    m_RingBuiltAtCell = pc;
 }
-
-
 
 
 //-------------------------------------
@@ -468,6 +480,21 @@ void FlowField::Update(float dt)
         }
         OnEditModeChanged();
     }
+    if (GameInput::IsFirstPressed(GameInput::kKey_4))
+    {
+        const auto& pick = PickVoxel();
+        Stimulus s;
+        s.cell = pick.cell;
+        s.radiusCells = FIRE_RADIUS_CELLS;
+        s.targetState = NPC_STATE_PANIC;
+        s.requiredFlag = NSF_PANICKABLE;
+
+        m_Npc.PushStimulus(s);
+
+        BuildFireRing(pick.cell);
+        m_FireRingTimer = kFireRingShowSec;
+    }
+
     // 카메라 갱신
     if (m_EditMode == EditMode::PlayerFollow)
     {
@@ -519,6 +546,17 @@ void FlowField::Update(float dt)
     if (m_Npc.ConsumeGroupArrived())
     {
         m_Debug.OnGroupArrived();
+    }
+    // 화염 링 시각화
+    if (m_FireRingTimer > 0.0f)
+    {
+        m_FireRingTimer -= dt;
+        if (m_FireRingTimer <= 0.0f)
+        {
+            m_FireRingTimer = 0.0f;
+            m_FireRingInstances.clear();
+            PushOverlayInstances();
+        }
     }
 
     // --- 추격용 플레이어 ---
@@ -578,13 +616,13 @@ void FlowField::Update(float dt)
         m_ShowAgroRing = !m_ShowAgroRing;
         if (!m_ShowAgroRing)
         {
-            m_RingInstances.clear();
-            PreviewRenderer::UpdateOverlayInstances(m_RingInstances);
+            m_AgroRingInstances.clear();
+            PushOverlayInstances();
             m_RingBuiltAtCell = { INT32_MIN, INT32_MIN, INT32_MIN };
         }
         else
         {
-            m_RingBuiltAtCell = { INT32_MIN, INT32_MIN, INT32_MIN };   // 다음 프레임에 재생성
+            m_RingBuiltAtCell = { INT32_MIN, INT32_MIN, INT32_MIN };
         }
     }
 }

@@ -22,9 +22,9 @@ namespace NpcRenderer
 
     // colorType 규약
     //   0~3 : NPC_STATE_* 와 동일
-    //   4   : 휴면 그룹 (상태가 아니라 파티션 속성이라 별도 값)
+    //   6   : 휴면 그룹 (상태가 아니라 파티션 속성이라 별도 값)
     //   5+  : 상태와 무관한 특수 색
-    static constexpr uint32_t kNpcColorDormant = 4;
+    static constexpr uint32_t kNpcColorDormant  = 6;
     static constexpr uint32_t kNpcColorSelected = 5;
     static constexpr uint32_t kNpcColorPlayer   = 10;
     static constexpr uint32_t kNpcColorAgroRing = 11;

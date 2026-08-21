@@ -31,6 +31,9 @@
 #include "ScopedCpuTimer.h"
 #include "MemoryProbe.h"
 
+// 불 표현 타이머
+static constexpr float kFireRingShowSec = 0.5f;
+
 class FlowField : public GameCore::IGameApp
 {
 public:
@@ -73,10 +76,22 @@ private:
     EditMode m_EditMode = EditMode::GroupMove;
 
     // Agro Range 시각화
-    std::vector<PreviewRenderer::InstanceData> m_RingInstances;
+    std::vector<PreviewRenderer::InstanceData> m_AgroRingInstances;
     DirectX::XMINT3 m_RingBuiltAtCell{ INT32_MIN, INT32_MIN, INT32_MIN };
     bool m_ShowAgroRing = true;
     void BuildAgroRing(const DirectX::XMINT3& pc);
+
+    // Fire Range 시각화
+    std::vector<PreviewRenderer::InstanceData> m_FireRingInstances;
+    float m_FireRingTimer = 0.0f;   // 남은 표시 시간
+    void BuildFireRing(const DirectX::XMINT3& cell);
+
+    void PushOverlayInstances();
+
+    // center 기준 반경 R 영역을 out에
+    void AppendDisc(std::vector<PreviewRenderer::InstanceData>& out,
+        const DirectX::XMINT3& center, int R, uint32_t colorType,
+        bool filled) const;
 
     // 추격용 멤버
     DirectX::XMINT3 m_ChaseCell{ -1, -1, -1 };

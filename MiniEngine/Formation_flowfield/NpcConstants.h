@@ -22,7 +22,8 @@ constexpr uint8_t   NPC_STATE_IDLE      = 0;        // 배회 / 필드 사용 x
 constexpr uint8_t   NPC_STATE_ALERTED   = 1;        // 어그로 판정, 추격 시작 전 / 필드 사용 x
 constexpr uint8_t   NPC_STATE_CHASE     = 2;        // 추격 / 필드 사용 o
 constexpr uint8_t   NPC_STATE_LOST      = 3;        // anchorCell 복귀 / 필드 사용 x
-constexpr int       NPC_STATE_COUNT     = 4;
+constexpr uint8_t   NPC_STATE_PANIC     = 4;        // 화염 자극 - 필드 무시하고 자극원에서 도주
+constexpr int       NPC_STATE_COUNT     = 5;
 
 // 상태가 어느 시스템에 속하는지를 나타내는 술어
 // 각 축의 경계가 서로 다르기 때문에(감지는 IDLE|LOST, 앵커는 ALERTED|CHASE)
@@ -34,15 +35,17 @@ enum NpcStateFlags : uint8_t
     NSF_MASK_ANCHOR     = 1 << 1,   // 회랑 마스크를 잡아당기는가        - MakeRequest / RebuildChaseLeaf / UpdateDeagro
     NSF_FIELD_USER      = 1 << 2,   // FlowField를 구독해 이동하는가     - AdvanceCell
     NSF_PROPAGATABLE    = 1 << 3,   // 그룹 내 전파로 감염되는가         - PropagateAgro
+    NSF_PANICKABLE      = 1 << 4,   // 패닉 전이 가능한가
 };
 
 // 상태 <-> 속성 매핑 테이블
 constexpr uint8_t NPC_STATE_FLAGS[NPC_STATE_COUNT] =
 {
-    /* IDLE    */ NSF_AGRO_TARGET | NSF_PROPAGATABLE,
-    /* ALERTED */ NSF_MASK_ANCHOR,                      // 곧 추격하므로 마스크를 미리 확보
-    /* CHASE   */ NSF_MASK_ANCHOR | NSF_FIELD_USER,
-    /* LOST    */ NSF_AGRO_TARGET | NSF_PROPAGATABLE,   // LOST에서도 전파
+    /* IDLE    */ NSF_AGRO_TARGET | NSF_PROPAGATABLE | NSF_PANICKABLE,
+    /* ALERTED */ NSF_MASK_ANCHOR                    | NSF_PANICKABLE,   // 곧 추격하므로 마스크를 미리 확보
+    /* CHASE   */ NSF_MASK_ANCHOR | NSF_FIELD_USER   | NSF_PANICKABLE,
+    /* LOST    */ NSF_AGRO_TARGET | NSF_PROPAGATABLE | NSF_PANICKABLE,   // LOST에서도 전파
+    /* PANIC   */ NSF_NONE,     // 패닉은 일단 상태 없음
 };
 
 inline bool StateHas(uint8_t state, uint8_t flag)
@@ -70,6 +73,12 @@ constexpr int		WANDER_RADIUS_CELLS		= 6;
 constexpr float		WANDER_PAUSE_MIN_SEC	= 1.0f;
 constexpr float		WANDER_PAUSE_MAX_SEC	= 3.0f;
 constexpr float     LOST_STUCK_GIVEUP_SEC   = 5.0f;     // 복귀중 이 이상 막히면 거점으로 삼아버림
+
+// ------ 패닉 상태 -------
+constexpr int   FIRE_RADIUS_CELLS  = 10;        // 화염 자극 반경.
+constexpr int   PANIC_ESCAPE_DIST = FIRE_RADIUS_CELLS;   // 이 거리만큼 멀어지면 패닉 해제
+constexpr float PANIC_STUCK_GIVEUP_SEC = 1.0f;  // 더 멀어질 수 없을 때(구석/벽에 몰림) 포기 시간
+
 
 
 // ------ 그룹 크기 분포 ------

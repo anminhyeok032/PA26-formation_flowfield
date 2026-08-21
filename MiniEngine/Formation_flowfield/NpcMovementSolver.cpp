@@ -197,6 +197,42 @@ bool NpcMovementSolver::AdvanceReturnCell(const VoxelGrid& grid, size_t i,
     return true;
 }
 
+bool NpcMovementSolver::AdvanceFleeCell(const VoxelGrid& grid, size_t i, const DirectX::XMINT3& from)
+{
+    SnapToTargetCell(i);
+    const DirectX::XMINT3 curr = m_Move.currCell[i];
+
+    const int dx = from.x - curr.x, dz = from.z - curr.z;
+    const int currDistSq = dx * dx + dz * dz;
+
+    m_NeighborScratch.clear();
+    GetWalkableNeighbors(grid, curr, m_NeighborScratch);
+
+    // 자극원에서 가장 멀어지는 이웃. 비교 방향만 AdvanceReturnCell과 반대다.
+    int bestDistSq = currDistSq;
+    const DirectX::XMINT3* best = nullptr;
+    for (const auto& n : m_NeighborScratch)
+    {
+        if (m_Reserve.Find(MakeCellKey(n.pos)) >= 0) continue;
+        if (IsMoveCross(i, curr, n.pos))             continue;
+
+        const int ndx = from.x - n.pos.x, ndz = from.z - n.pos.z;
+        const int d = ndx * ndx + ndz * ndz;
+        if (d > bestDistSq) { bestDistSq = d; best = &n.pos; }
+    }
+
+    // 막힘 - 벽이나 다른 개체에 몰린 상태
+    // PANIC은 타이머로 빠져나가므로 영구 정지 안된다
+    if (best == nullptr)
+    {
+        HoldPosition(i, curr);
+        return false;
+    }
+
+    CommitMove(grid, i, curr, *best);
+    return true;
+}
+
 void NpcMovementSolver::SnapToTargetCell(size_t i)
 {
     m_Move.position[i] = m_Move.targetWorldPos[i];
